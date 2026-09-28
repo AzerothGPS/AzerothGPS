@@ -3350,3 +3350,53 @@ def test_a_stroke_drawn_elsewhere_from_down_in_a_city_is_on_the_continent(nav_en
     # drawn over the city itself: on its level
     ns.GPS.FinishRoad(lua.eval("{ cont = 0, pts = { 1560,250, 1570,270, 1590,280 } }"))
     assert ns.db.tracks[2].continent == 10001
+
+
+@pytest.fixture
+def api(env):
+    lua, ns = env
+    load(lua, ns, "Api.lua")
+    return lua, ns, lua.globals().AzerothGPS
+
+
+def multi(lua, f, *args):
+    """All the values a Lua function returns (lupa keeps only the first)."""
+    t = lua.eval("function(f, ...) return { f(...) } end")(f, *args)
+    return tuple(t[i] for i in range(1, len(t) + 1))
+
+
+def test_public_api_exposes_documented_functions(api):
+    lua, ns, A = api
+    for name in ("PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
+                 "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
+                 "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw"):
+        assert A[name] is not None, name
+    assert A.version == 1
+
+
+def test_public_api_map_to_world_inverts_locate(api):
+    lua, ns, A = api
+    ns.Maps = lua.eval("{ [1411] = { name = 'Durotar', type = 3, continent = 1,"
+                       " bounds = { -1716.67, -7250, 1808.33, -1962.5 } } }")
+    mapID, name, u, v = multi(lua, A.LocateWorld, 1, -568.5, -4436.9)
+    assert mapID == 1411 and name == "Durotar"
+    assert (u, v) == pytest.approx((0.46797, 0.67428), abs=1e-4)
+    x, y, cont = multi(lua, A.MapToWorld, 1411, u, v)
+    assert (x, y, cont) == pytest.approx((-568.5, -4436.9, 1))
+
+
+def test_public_api_world_to_map_and_forced_roads(api):
+    lua, ns, A = api
+    # The initial view: centered on (0, 0), north up, 1 UI unit per yard.
+    dx, dy = multi(lua, A.WorldToMap, 10.0, -5.0)  # 10 yd north, 5 yd east
+    assert (dx, dy) == pytest.approx((5.0, 10.0))
+    assert ns.GPS.ForcedRoadColor() is None
+    A.ShowRoads("sv", True, lua.eval("{ 0, 0, 1 }"))
+    c = ns.GPS.ForcedRoadColor()
+    assert [c[1], c[2], c[3]] == [0, 0, 1]
+    A.ShowRoads("sv", False)
+    assert ns.GPS.ForcedRoadColor() is None
+    A.SetOverlay("sv", lua.eval("function(ctx) end"))
+    assert ns.GPS.overlays["sv"] is not None
+    A.SetOverlay("sv", None)
+    assert ns.GPS.overlays["sv"] is None

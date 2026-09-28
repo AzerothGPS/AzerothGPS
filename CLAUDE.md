@@ -82,6 +82,9 @@ The addon is going public, so every change must keep it policy-safe:
   - `Feedback.lua`: opt-in road and trip data.
   - `Options.lua`: the paged options window and the minimap button.
   - `Config.lua`: slash commands.
+  - `Api.lua`: the public `AzerothGPS` table for companion addons such as
+    AzerothGPS-StreetView (`docs/api.md`): geometry, the cursor's world point, overlays drawn
+    on the map (`G.overlays`), and showing the road network on request (`G.roadOwners`).
   - `Bindings.xml`: the show/hide map key (loaded by the game, not listed in the toc; the
     names and `AzerothGPS_ToggleMap` are in Core.lua, the Set key button in Options.lua).
   - `Data/*.lua`: generated; don't edit by hand.

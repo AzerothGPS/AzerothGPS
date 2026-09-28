@@ -766,6 +766,44 @@ local function AddSeg(ax, ay, bx, by, c, w, a, keep, dotted)
   sg[1], sg[2], sg[3], sg[4], sg[5], sg[6], sg[7], sg[8], sg[9] = ax, ay, bx, by, c, w, a, keep or false, dotted or false
 end
 
+-- Drawing by other addons (the public API, Api.lua). G.overlays[name] = fn(ctx) runs on every
+-- redraw; ctx draws in world yards of the continent in view (ctx.cont) and its lines join the
+-- map's own (clipped, rotated, no fading). G.roadOwners[owner] = { r, g, b }: the road network
+-- is shown, in that color, while anyone asks (the player's own road option wins).
+G.overlays, G.roadOwners = {}, {}
+function G.ForcedRoadColor()
+  for _, c in pairs(G.roadOwners) do return c end
+end
+local ctx = {}
+function ctx.ToScreen(x, y)
+  local dx, dy = Geo.ScreenOffset(ctx.x, ctx.y, x, y)
+  return Geo.Rotate(dx * ctx.scale, dy * ctx.scale, ctx.rot)
+end
+local function Outside(ax, ay, bx, by)
+  local r = ctx.reach
+  return (ax > r and bx > r) or (ax < -r and bx < -r) or (ay > r and by > r) or (ay < -r and by < -r)
+end
+function ctx.Line(x1, y1, x2, y2, color, width, alpha, dotted)
+  local ax, ay = ctx.ToScreen(x1, y1)
+  local bx, by = ctx.ToScreen(x2, y2)
+  if Outside(ax, ay, bx, by) then return end
+  AddSeg(ax, ay, bx, by, color, width or 3, alpha or 1, true, dotted)
+end
+function ctx.Dot(x, y, color, size, alpha) -- a square dot `size` UI units across
+  local sx, sy = ctx.ToScreen(x, y)
+  if Outside(sx, sy, sx, sy) then return end
+  size = size or 6
+  AddSeg(sx - size / 2, sy, sx + size / 2, sy, color, size, alpha or 1, true)
+end
+local function RunOverlays(cx, cy, viewCont, rot, s, half, zoom)
+  if not next(G.overlays) then return end
+  ctx.x, ctx.y, ctx.cont, ctx.rot, ctx.scale, ctx.half, ctx.zoom, ctx.reach = cx, cy, viewCont, rot, s, half, zoom, half * 1.5
+  for name, fn in pairs(G.overlays) do
+    local ok, err = pcall(fn, ctx)
+    if not ok then G.LogError("overlay " .. tostring(name), err) end
+  end
+end
+
 -- Color, thickness and alpha only when they changed (most lines keep theirs frame to frame).
 local function Style(l, c, a, w, textured)
   if l.agpsC ~= c or l.agpsA ~= a then
@@ -1119,8 +1157,11 @@ function G.Update()
   pt = ns.PerfStart()
   segN = 0
   -- (the roads of the continent in view, the player's or another)
-  if st.showRoads and not place then
-    for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], sg[5]) end
+  local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
+  if (st.showRoads or forced) and not place then
+    for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do
+      AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
+    end
   end
   -- walls (blood red): with the roads shown, or the road tools on
   if st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
@@ -1217,6 +1258,7 @@ function G.Update()
       lx, ly = ax, ay
     end
   end
+  RunOverlays(cx, cy, viewCont, rot, s, half, zoom)
   DrawLines(segN, 3, ROAD_COLORS, 0.85)
   ns.PerfEnd("redraw: route (incl. calculation)", pt)
   pt = ns.PerfStart()
@@ -2286,6 +2328,23 @@ function G.PumpSearches()
 end
 
 function G.IsVisible() return frame ~= nil and frame:IsVisible() end
+
+-- For the public API (Api.lua): the frame layers other addons may anchor to, the last drawn
+-- view, and the world point under the mouse pointer (nil unless it's over the map).
+function G.Canvas() return canvas end
+function G.TopLayer() return topLayer end
+function G.ViewState()
+  return view.x, view.y, view.cont, view.rot, view.s, canvas and canvas:GetWidth() / 2 or 0
+end
+function G.CursorWorld()
+  if not canvas or not view.cont or not canvas:IsVisible() or not canvas:IsMouseOver() then return nil end
+  local ox, oy = canvas:GetCenter()
+  if not ox then return nil end
+  local mx, my = GetCursorPosition()
+  local sc = canvas:GetEffectiveScale()
+  local x, y = G.ScreenToWorld(view.x, view.y, mx / sc - ox, my / sc - oy, view.rot, view.s)
+  return x, y, view.cont
+end
 
 -- What the picture depends on, compared with the last redraw (no garbage: values are
 -- kept in `sig`). Returns true when any of it changed.
