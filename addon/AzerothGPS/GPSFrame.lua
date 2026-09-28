@@ -2670,6 +2670,8 @@ function G.Init()
     GameTooltip:Show()
   end)
   import:SetScript("OnLeave", GameTooltip_Hide)
+  -- (for companion addons placing their own buttons: Api.lua MapButton)
+  G.mapButtons = { recenter = recenter, import = import }
 
   -- Map menu (bottom-left): a round button that opens the map type and the map layers.
   local STYLES = {

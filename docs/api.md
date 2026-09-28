@@ -29,6 +29,7 @@ center, +x right and +y up.
 | `MapCanvas()` | the clipped map area |
 | `MapButtonParent()` | a frame above the map for your buttons (anchor inside it) |
 | `MapShown()` | whether the map is visible |
+| `MapButton(name)` | the map's `"recenter"` button (Back to your position; shown only while panned away) or `"import"` button (always shown), to place your buttons around them |
 | `View()` | center x, y, continent, rotation, scale (UI units per yard), half width |
 | `CursorWorld()` | x, y, continent under the mouse pointer; nil unless it's over the map |
 | `WorldToMap(x, y)` | the point's offset from the map's center as drawn now |

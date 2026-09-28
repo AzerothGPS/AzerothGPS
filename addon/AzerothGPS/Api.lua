@@ -50,6 +50,12 @@ end
 function API.MapFrame() return _G.AzerothGPSFrame end
 function API.MapCanvas() return GPS() and GPS().Canvas() end
 function API.MapButtonParent() return GPS() and GPS().TopLayer() end
+-- One of the map's own buttons, to place yours around it: "recenter" (Back to your
+-- position: shown only while the map is panned away from you) or "import" (always shown).
+function API.MapButton(name)
+  local b = GPS() and GPS().mapButtons
+  return b and b[name] or nil
+end
 function API.MapShown() return GPS() and GPS().IsVisible() or false end
 -- The last drawn view: center x, y, continent, rotation (radians), scale (UI units per
 -- yard), half the map's width (UI units).
