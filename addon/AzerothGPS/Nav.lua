@@ -64,7 +64,7 @@ local version = 0 -- bumped when the stops change (cache key for the stretches b
 
 local function Copy(d)
   return { x = d.x, y = d.y, cont = d.cont, name = d.name, icon = d.icon, corpse = d.corpse, questRoute = d.questRoute,
-    tex = d.tex }
+    tex = d.tex, boss = d.boss, enc = d.enc }
 end
 
 -- The stops are saved per character, so /reload and relogging keep the route.
@@ -793,6 +793,71 @@ function N.CityHere()
   return nil
 end
 
+-- Boss kills (a dungeon's boss route: a boss's stop is done when it dies, not when you get
+-- there). Kept per character for the instance they're in: { level, at = time(), npcs = { [npc]
+-- = true } }, started over in another instance or BOSS_KILL_HOURS after the last kill.
+N.BOSS_KILL_HOURS = 3
+N.BOSS_NEAR_YD = 40 -- this close to a boss's stop: "Defeat <boss>"
+
+local function Kills()
+  local cdb = ns.CharDB and ns.db and ns.CharDB()
+  if not cdb then
+    N.kills = N.kills or {}
+    return N.kills
+  end
+  cdb.bossKills = cdb.bossKills or {}
+  return cdb.bossKills
+end
+
+-- The instance level the player is in (GetInstanceInfo's map), or nil.
+function N.CurrentInstance()
+  if not GetInstanceInfo then return nil end
+  local ok, _, kind, _, _, _, _, _, mapID = pcall(GetInstanceInfo)
+  if not ok or (kind ~= "party" and kind ~= "raid") then return nil end
+  return N.InstanceLevel(mapID)
+end
+
+-- The bosses of instance level `lvl` matching a kill: by NPC entry, DungeonEncounter id or
+-- name. Returns how many were marked dead.
+function N.BossKilled(lvl, npc, encounter, name)
+  local info = lvl and ns.Instances and ns.Instances[lvl]
+  if not info then return 0 end
+  local k = Kills()
+  local now = time and time() or 0
+  if k.level ~= lvl or (k.at and now - k.at > N.BOSS_KILL_HOURS * 3600) then
+    k.level, k.npcs = lvl, {}
+  end
+  k.at = now
+  local n = 0
+  for _, b in ipairs(info.bosses or {}) do
+    local hit = (npc and b[2] == npc) or (name and b[1] == name)
+    for _, e in ipairs(encounter and b.enc or {}) do
+      if e == encounter then hit = true end
+    end
+    if hit and not k.npcs[b[2]] then
+      k.npcs[b[2]] = true
+      n = n + 1
+    end
+  end
+  return n
+end
+
+-- Whether boss stop `d` ({ cont = its level, boss = its NPC entry }) is dead.
+function N.BossDead(d)
+  local k = Kills()
+  if not (d.boss and k.level == d.cont and k.npcs) then return false end
+  if k.at and (time and time() or 0) - k.at > N.BOSS_KILL_HOURS * 3600 then return false end
+  return k.npcs[d.boss] == true
+end
+
+-- A creature's NPC entry from its GUID ("Creature-0-server-instance-zone-npc-spawn").
+function N.NpcOf(guid)
+  if type(guid) ~= "string" then return nil end
+  local kind, npc = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+  if kind ~= "Creature" and kind ~= "Vehicle" then return nil end
+  return tonumber(npc)
+end
+
 -- The level of an instance map (Data/Instances.lua: LEVEL_BASE + its MapID, base = the map),
 -- or nil: in a dungeon, the game reports its map as the player's continent.
 local instanceOf
@@ -1491,7 +1556,11 @@ local function CheckArrival(px, py, cont)
       d.spotReached = true -- at the spot, its quests still open: stay (see QuestCheck)
       at = false
     end
-    if not (d.questDone or d.served or at) then break end
+    if d.boss then -- a boss: done when it dies (wherever you are), not by getting there
+      at = false
+      if not d.bossDone and N.BossDead(d) then d.bossDone = true end
+    end
+    if not (d.questDone or d.served or d.bossDone or at) then break end
     if ns.Feedback and not N.arrivedAt then ns.Feedback.Arrived(d) end
     if N.loop and #N.stops > 1 then
       -- a loop: this stop goes to the end, on to the next one
@@ -1581,6 +1650,9 @@ function N.Status(px, py, cont)
   end
   local hint = N.HeightText(px, py, cont)
   if hint then head = head .. "\n" .. hint end
+  if d.boss and cont == d.cont and math.sqrt((d.x - px) ^ 2 + (d.y - py) ^ 2) <= N.BOSS_NEAR_YD then
+    head = string.format("|cffffd100Defeat %s|r\n", d.name or "the boss") .. head
+  end
   return head .. "\n" .. line
 end
 

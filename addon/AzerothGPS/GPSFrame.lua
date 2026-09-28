@@ -198,6 +198,21 @@ local function EdgeWork(cont, g, P, step, x0, x1, y0, y1)
   local function line(ax, ay, bx, by)
     segs[#segs + 1], segs[#segs + 2], segs[#segs + 3], segs[#segs + 4] = ax, ay, bx, by
   end
+  -- the open ground as runs along each sample row: { x, y from, y to, ... } (flat), and the
+  -- rows' width (a dungeon's map fills its floors with them)
+  local fill = {}
+  for i = 0, nx - 1 do
+    local row, x, run = blocked[i], x0 + (i + 0.5) * step, nil
+    for j = 0, ny do
+      local open = j < ny and not row[j]
+      if open and not run then run = j
+      elseif not open and run then
+        fill[#fill + 1], fill[#fill + 2], fill[#fill + 3] = x, y0 + run * step, y0 + j * step
+        run = nil
+      end
+    end
+  end
+  segs.fill, segs.step = fill, step
   -- borders across x (between rows i and i + 1), merged along y; then across y
   for i = 0, nx - 2 do
     local a, b = blocked[i], blocked[i + 1]
@@ -725,6 +740,7 @@ local function ViewCont(cont)
   return browse and browseCont or (free and free.cont) or cont
 end
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
+local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
 
 local function Acquire(i)
   local t = pool[i]
@@ -735,6 +751,44 @@ local function Acquire(i)
     pool[i] = t
   end
   return t
+end
+
+-- A dungeon's map (no art for it): a dark background, its floors filled in (the open runs
+-- G.BlockEdges works out, as thick lines under the roads), or nothing with `edges` nil.
+local floorBg, floorLines = nil, {}
+local FLOOR_BG, FLOOR = { 0.05, 0.045, 0.04, 0.95 }, { 0.36, 0.31, 0.24 }
+function G.DrawFloors(edges, cx, cy, rot, s)
+  local n = 0
+  if edges then
+    if not floorBg then
+      floorBg = tileLayer:CreateTexture(nil, "BACKGROUND")
+      floorBg:SetAllPoints(tileLayer)
+      floorBg:SetColorTexture(FLOOR_BG[1], FLOOR_BG[2], FLOOR_BG[3], FLOOR_BG[4])
+    end
+    floorBg:Show()
+    local fill, w = edges.fill, (edges.step or 2) * s + 1
+    for i = 1, fill and #fill - 2 or 0, 3 do
+      local x = fill[i]
+      local ax, ay = Geo.ScreenOffset(cx, cy, x, fill[i + 1])
+      ax, ay = Geo.Rotate(ax * s, ay * s, rot)
+      local bx, by = Geo.ScreenOffset(cx, cy, x, fill[i + 2])
+      bx, by = Geo.Rotate(bx * s, by * s, rot)
+      n = n + 1
+      local l = floorLines[n]
+      if not l then
+        l = tileLayer:CreateLine(nil, "ARTWORK")
+        l:SetColorTexture(FLOOR[1], FLOOR[2], FLOOR[3], 1)
+        floorLines[n] = l
+      end
+      l:SetThickness(w)
+      l:SetStartPoint("CENTER", tileLayer, ax, ay)
+      l:SetEndPoint("CENTER", tileLayer, bx, by)
+      l:Show()
+    end
+  elseif floorBg then
+    floorBg:Hide()
+  end
+  for i = n + 1, #floorLines do floorLines[i]:Hide() end
 end
 
 local function DrawQuads(quads)
@@ -1166,7 +1220,7 @@ function G.Update()
   end
   G.inside = place and ((room.n ~= "" and room.n or "?") .. " / " .. place[1]) or nil
   if inst and not browse then
-    quads = {}
+    quads = {} -- (its floors: G.DrawFloors, below)
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   elseif browse then
@@ -1186,6 +1240,7 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
+  G.DrawFloors(inst and not browse and G.BlockEdges(inst, cx, cy, zoom) or nil, cx, cy, rot, s)
   ns.PerfEnd("redraw: tiles", pt)
   pt = ns.PerfStart()
   segN = 0
@@ -1668,7 +1723,7 @@ end
 -- Leave free view and follow the player again.
 function G.Follow()
   G.appended = false
-  fromTerrain = nil
+  fromTerrain, openedFrom = nil, nil
   tour = nil
   free = nil
   pending = {}
@@ -1720,7 +1775,7 @@ end
 
 -- Right-click in world-map style: up one level.
 function G.ZoomOut()
-  if not browse and LeaveInstance() then return end
+  if not browse and LeaveOpened() then return end
   local current = browse or G.DisplayMap(C_Map.GetBestMapForUnit("player"))
   if not current or not ns.Maps[current] then return end
   if not browse then
@@ -1788,7 +1843,7 @@ function G.ContinentMap(c)
 end
 
 function G.TerrainZoomOut()
-  if not browse and LeaveInstance() then return end
+  if not browse and LeaveOpened() then return end
   local m = browse and ns.Maps[browse]
   local _, _, cont = Geo.PlayerWorld()
   if not browse then
@@ -1850,15 +1905,25 @@ function G.InteriorCities(cont)
   return list
 end
 
+-- Before opening a city's or a dungeon's map from its icon: the view now, for right-click
+-- to come back to (a zone's or continent's map, or the terrain view). From one opened map to
+-- another, still the first.
+local function RememberView()
+  if view.instance or (free and free.city) then return end
+  openedFrom = { browse = browse, browseZoom = browseZoom, browseCont = browseCont, browseBounds = browseBounds,
+    fromTerrain = fromTerrain, free = free, zoom = S().zoom }
+end
+
 -- A capital picked on a continent's map: the terrain view over the city.
 function G.ShowCity(id)
   local m = ns.Maps[id]
   if not (m and m.bounds) then return end
   local b = m.bounds
+  RememberView()
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   local cx, cy = (b[1] + b[3]) / 2, (b[2] + b[4]) / 2
   local interior = G.CityInterior(id)
-  free = { x = cx, y = cy, rot = 0, cross = true, cont = m.continent, interior = interior }
+  free = { x = cx, y = cy, rot = 0, cross = true, cont = m.continent, interior = interior, city = id }
   if recenter then recenter:Show() end
   elapsed = 1
 end
@@ -1904,6 +1969,7 @@ function G.ShowInstance(lvl)
   local x0, x1, y0, y1
   if P and P.GridBounds then x0, x1, y0, y1 = P.GridBounds(lvl) end
   if not x0 then return end
+  RememberView()
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cross = true, cont = lvl, instance = lvl }
   S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
@@ -1913,6 +1979,7 @@ end
 
 -- Back out of a dungeon's map: the terrain view at entrance `e` ({ cont, x, y, ... }).
 function G.ShowEntrance(e)
+  openedFrom = nil
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   free = { x = e[2], y = e[3], rot = 0, cross = true, cont = e[1] }
   S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, 400))
@@ -1920,10 +1987,27 @@ function G.ShowEntrance(e)
   elapsed = 1
 end
 
--- Right-click in a dungeon's map: out at its (first) entrance.
-local function LeaveInstance()
+-- Right-click in a city's or dungeon's map opened from its icon: back to the view it was
+-- opened from (a zone's map, the terrain view); in a dungeon's the player is in, out at its
+-- (first) entrance.
+local function LeaveOpened()
   local inst = view.instance
-  local info = inst and ns.Instances and ns.Instances[inst]
+  if not (inst or (free and free.city)) then return false end
+  local from = openedFrom
+  if from then
+    openedFrom = nil
+    browse, browseZoom, browseCont, browseBounds = from.browse, from.browseZoom, from.browseCont, from.browseBounds
+    fromTerrain, free = from.fromTerrain, from.free
+    if from.zoom then S().zoom = from.zoom end
+    if recenter then recenter:SetShown(free ~= nil) end
+    elapsed = 1
+    return true
+  end
+  if not inst then -- (a city opened before a /reload: the continent's map, as usual)
+    free.city = nil
+    return false
+  end
+  local info = ns.Instances and ns.Instances[inst]
   local e = info and info.entrances and info.entrances[1]
   if not e then return false end
   G.ShowEntrance(e)
@@ -2481,6 +2565,49 @@ function G.QuestRoute()
   if (c.elsewhere or 0) > 0 then msg = msg .. string.format(" %d in other zones left out.", c.elsewhere) end
   if #c.missing > 0 then msg = msg .. " No location for: " .. table.concat(c.missing, ", ") .. "." end
   ns.Print(msg)
+end
+
+-- The boss route's stops for instance level `lvl`: its bosses in the usual order (those
+-- without one after, by the order they're listed), not the optional ones nor the dead.
+function G.BossStops(lvl)
+  local info = ns.Instances and ns.Instances[lvl]
+  if not info then return {}, 0 end
+  local list, dead = {}, 0
+  for i, b in ipairs(info.bosses or {}) do
+    if not b.optional then
+      if ns.Nav.BossDead({ cont = lvl, boss = b[2] }) then
+        dead = dead + 1
+      else
+        list[#list + 1] = { b = b, key = (b.order or 1000) * 1000 + i }
+      end
+    end
+  end
+  table.sort(list, function(a, c) return a.key < c.key end)
+  local stops = {}
+  for _, e in ipairs(list) do
+    local b = e.b
+    stops[#stops + 1] = { x = b[3], y = b[4], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
+  end
+  return stops, dead
+end
+
+-- The boss route: the dungeon whose map is shown, else the one the player is in.
+function G.BossRoute()
+  local lvl = view.instance or ns.Nav.CurrentInstance()
+  local info = lvl and ns.Instances and ns.Instances[lvl]
+  if not info then
+    ns.Print("Boss route: open a dungeon's map (click its entrance on the map) or go inside one.")
+    return
+  end
+  local stops, dead = G.BossStops(lvl)
+  if #stops == 0 then
+    ns.Print(string.format("Boss route: %s's bosses are all down.", info.name))
+    return
+  end
+  ns.Nav.SetStops(stops, false) -- (the usual order: kept)
+  G.RouteChanged()
+  ns.Print(string.format("Boss route: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
+    info.name, #stops, #stops == 1 and "" or "es", dead > 0 and string.format(" (%d already down)", dead) or ""))
 end
 
 -- Background terrain searches and road data (Router.Pump), ~1 ms a frame (WARM_MS while a
@@ -3059,6 +3186,12 @@ function G.Init()
     { id = "ore", key = "layerOre", icon = "Interface\\Icons\\INV_Ore_Copper_01", label = "Ore", tip = "Ore nodes you know." },
     { id = "city", key = "layerCity", icon = "Interface\\Icons\\INV_Helmet_03", label = "City locations",
       tip = "Places guards pointed out to you (trainers, bank, ...), for all your characters.", defaultOn = true },
+    { id = "bossRoute", icon = "Interface\\Icons\\Ability_DualWield", label = "Boss route",
+      tip = "In a dungeon or raid, or with its map open: a route through its bosses in the usual order (optional ones left out). Each stop is done when its boss dies. Replaces the current route.",
+      action = function()
+        if G.mapMenu then G.mapMenu:Hide() end
+        G.BossRoute()
+      end },
     { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
       tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
     { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
@@ -3097,7 +3230,7 @@ function G.Init()
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
   G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight", offroad = "hidden",
-    city = "hidden", instances = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
+    city = "hidden", instances = "menuUp", bossRoute = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {

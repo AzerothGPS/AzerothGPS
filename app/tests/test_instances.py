@@ -132,6 +132,12 @@ def test_instance_map_view_helpers(inst_env):
         b = inst.bosses[i]
         assert x0 <= b[3] <= x1 and y0 <= b[4] <= y1, b[1]
     assert x0 <= DM_INSIDE[0] <= x1 and y0 <= DM_INSIDE[1] <= y1
+    # its floors filled in on the map (no art for dungeons): runs of open ground, and the outline
+    for lvl in (DM, 20033):  # (Shadowfang Keep: showed nothing but thin lines over the game world)
+        bx0, bx1, by0, by1 = P.GridBounds(lvl)
+        G.ClearEdges()
+        e = G.BlockEdges(lvl, (bx0 + bx1) / 2, (by0 + by1) / 2, max(bx1 - bx0, by1 - by0) / 2)
+        assert len(e) > 400 and len(e.fill) > 300 and e.step <= 4
     # entrance icons per continent, at the continent end of the portal
     ents = G.InstanceEntrances(0)
     dm = [ents[i] for i in range(1, len(ents) + 1) if ents[i].level == DM]
@@ -142,3 +148,42 @@ def test_instance_map_view_helpers(inst_env):
     sm = [ents[i] for i in range(1, len(ents) + 1) if "Scarlet Monastery" in ents[i].name]
     if len(sm) > 1:
         assert any(not e.shared for e in sm) and any(e.shared for e in sm)
+
+
+def test_boss_kills_mark_boss_stops_done(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    N, G = ns.Nav, ns.GPS
+    lua.execute('GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end')
+    lua.execute("time = function() return 1000 end")
+    assert N.CurrentInstance() == DM
+    assert N.NpcOf("Creature-0-5250-36-12-639-00001A2B3C") == 639
+    assert N.NpcOf("Player-5250-0ABCDEF1") is None
+    # the route: the bosses in the usual order, the optional ones left out
+    stops, dead = G.BossStops(DM)
+    names = [stops[i].name for i in range(1, len(stops) + 1)]
+    assert names[0] == "Rhahk'Zor" and names[-1] == "Edwin VanCleef" and dead == 0
+    assert "Miner Johnson" not in names and "Cookie" not in names
+    N.SetStops(stops, True)  # (kept in that order: a dungeon's level)
+    assert N.stops[1].name == "Rhahk'Zor" and N.stops[1].boss == 644
+    rz = boss(ns, DM, "Rhahk'Zor")
+    # standing at the boss doesn't count: it has to die
+    N.Status(rz[3], rz[4], 36)
+    assert N.stops[1].name == "Rhahk'Zor"
+    # its death in the combat log (by NPC entry): on to the next one
+    assert N.BossKilled(DM, 644) == 1
+    N.Status(rz[3], rz[4], 36)
+    assert N.stops[1].name == "Sneed"
+    # ENCOUNTER_END's DungeonEncounter id, from anywhere in the dungeon
+    sneed = boss(ns, DM, "Sneed")
+    assert N.BossKilled(DM, None, sneed.enc[1]) == 1
+    N.Status(*DM_INSIDE, 36)
+    assert N.stops[1].name == "Gilnid"
+    # a new boss route leaves out the dead ones
+    stops, dead = G.BossStops(DM)
+    assert dead == 2 and stops[1].name == "Gilnid"
+    # another instance, or hours later: started over
+    lua.execute("time = function() return 1000 + 4 * 3600 end")
+    assert not N.BossDead(lua.table(cont=DM, boss=644))
+    assert N.BossKilled(WC, None, None, "no such boss") == 0
+    assert not N.BossDead(lua.table(cont=DM, boss=644))

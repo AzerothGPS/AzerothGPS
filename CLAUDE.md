@@ -182,7 +182,16 @@ The addon is going public, so every change must keep it policy-safe:
     instance's map (`G.ShowInstance`: no art here, its floors' outline from
     `G.BlockEdges` at `EDGE_SAMPLES_INSTANCE`, its roads, boss icons numbered in order, the way
     out); right-click or the way-out icon goes back to the entrance (`G.ShowEntrance`). The
-    player inside one gets the same view (`G.InstanceOf`, `view.instance`). Entrances, bosses (the server's encounters
+    player inside one gets the same view (`G.InstanceOf`, `view.instance`). With no map art
+    the frame has no background of its own: `G.DrawFloors` puts a dark one under it and fills
+    the floors (the open runs `BlockEdges` also returns, `edges.fill`). Right-click in a city's
+    or dungeon's map opened from its icon goes back to the view it was opened from
+    (`openedFrom`, `RememberView`). **Boss route** (quick button, `/agps bosses`,
+    `G.BossRoute`/`G.BossStops`): the bosses in `order`, optional and dead ones left out, kept
+    in that order; a stop with `boss` (its NPC entry) is done when it dies, not on arrival
+    (`Nav.BossKilled` from ENCOUNTER_END / BOSS_KILL by DungeonEncounter id or name, and the
+    combat log's UNIT_DIED / PARTY_KILL by NPC entry, registered only inside an instance;
+    kept per character, `BOSS_KILL_HOURS`). Entrances, bosses (the server's encounters
     and rank 3 NPCs, positions from their spawns) come from the CMaNGOS dump under
     `data/thirdparty`; the AreaTrigger and DungeonEncounter layouts this client has are in
     `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into

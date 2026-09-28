@@ -16,6 +16,8 @@ local HELP = {
   "/way [zone] x y [text]   (add a stop; several pasted lines = several stops; with TomTom too)",
   "/agps poi taxi|poi|labels on|off (points of interest on the map)",
   "/agps quests on|off      (your quests' objectives and turn-ins)",
+  "/agps bosses             (in a dungeon or with its map open: a route through its bosses)",
+  "/agps instances on|off   (dungeon and raid entrances on the map)",
   "/agps herbs on|off | ore on|off | nodes on|off  (herbs, ore, or both on the map)",
   "/agps lock | unlock [map|arrow]  (both, or just one; unlocked they can be moved)",
   "/agps reset              (restore default position and settings)",
@@ -87,6 +89,11 @@ SlashCmdList.AZEROTHGPS = function(msg)
     gps.layerHerbs = OnOff(b, gps.layerHerbs)
   elseif a == "ore" then
     gps.layerOre = OnOff(b, gps.layerOre)
+  elseif a == "bosses" then
+    ns.GPS.BossRoute()
+    return
+  elseif a == "instances" then
+    gps.layerInstances = OnOff(b, gps.layerInstances ~= false)
   elseif a == "roads" then
     gps.showRoads = OnOff(b, gps.showRoads)
   elseif a == "walls" then

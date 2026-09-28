@@ -220,9 +220,35 @@ end
 do
   local f = CreateFrame and CreateFrame("Frame")
   if f then
-    for _, ev in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL" }) do pcall(f.RegisterEvent, f, ev) end
+    for _, ev in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_ENTERING_WORLD" }) do
+      pcall(f.RegisterEvent, f, ev)
+    end
+    -- (the combat log only in a dungeon or raid: a boss's death there, for its route's stop)
+    local combatLog = false
     f:SetScript("OnEvent", function(_, ev, ...)
       if not ns.db then return end
+      local N = ns.Nav
+      if ev == "PLAYER_ENTERING_WORLD" then
+        local inside = N and N.CurrentInstance and N.CurrentInstance() ~= nil
+        if inside ~= combatLog then
+          combatLog = inside
+          pcall(inside and f.RegisterEvent or f.UnregisterEvent, f, "COMBAT_LOG_EVENT_UNFILTERED")
+        end
+        return
+      end
+      if ev == "COMBAT_LOG_EVENT_UNFILTERED" then
+        if not (CombatLogGetCurrentEventInfo and N) then return end
+        local ok, _, sub, _, _, _, _, _, guid = pcall(CombatLogGetCurrentEventInfo)
+        if ok and (sub == "UNIT_DIED" or sub == "PARTY_KILL") and not ns.IsSecret(guid) then
+          local npc = N.NpcOf(guid)
+          if npc and N.BossKilled(N.CurrentInstance(), npc) > 0 and ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+        end
+        return
+      end
+      if N and N.BossKilled and (ev == "BOSS_KILL" or (ev == "ENCOUNTER_END" and select(5, ...) == 1)) then
+        local id, name = ...
+        if not ns.IsSecret(id) and N.BossKilled(N.CurrentInstance(), nil, id, name) > 0 and ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+      end
       ns.db.encounterLog = ns.db.encounterLog or {}
       local args = {}
       for i = 1, select("#", ...) do args[#args + 1] = tostring((select(i, ...))) end
