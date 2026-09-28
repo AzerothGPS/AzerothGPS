@@ -1,0 +1,28 @@
+name: Road data
+description: Roads you drew or erased in game, to add to the addon's road network
+title: "Road data: "
+labels: ["road data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping the routes! In game: **Options > Help improve > Copy road data...**, press **Ctrl+C**, and paste it below.
+        It's plain text with numbers only (no character or realm names).
+  - type: input
+    id: zones
+    attributes:
+      label: Zone(s)
+      placeholder: e.g. Tirisfal Glades, Loch Modan
+  - type: textarea
+    id: roads
+    attributes:
+      label: Road data
+      description: The text from "Copy road data..." (starts with "AzerothGPS roads").
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: What did you fix?
+      placeholder: e.g. the road from Brill to the Undercity lift was missing; erased a false road through the lake

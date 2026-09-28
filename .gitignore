@@ -1,0 +1,14 @@
+# Scratch output extracted from the local WoW install. Never commit.
+# (Anchored: must not match addon/AzerothGPS/Data, which ships with the addon.)
+/data/
+
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+node_modules/
+dist/
+ui/dist/
+
+# Game screenshots for the CurseForge page (uploaded there, not kept in the repo)
+/docs/curseforge-images/

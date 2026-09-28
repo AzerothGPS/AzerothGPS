@@ -1,0 +1,6 @@
+<Bindings>
+  <!-- Game menu > Key Bindings > AddOns (or Options > General > Show/hide key). -->
+  <Binding name="AZEROTHGPS_TOGGLE" header="AZEROTHGPS" category="ADDONS">
+    AzerothGPS_ToggleMap()
+  </Binding>
+</Bindings>

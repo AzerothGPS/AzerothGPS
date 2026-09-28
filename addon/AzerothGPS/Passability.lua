@@ -1,0 +1,452 @@
+-- Terrain passability for offroad routing (data: Data/Terrain.lua).
+-- Cells are 0 open, 1 water (swimmable, slower), 2 blocked (too steep / off the map).
+local _, ns = ...
+
+local P = {}
+ns.Passability = P
+
+P.SWIM_COST = 1.5 -- swimming is about 2/3 of run speed
+local TILE = 1600 / 3
+local QUADS = 128 -- terrain quads per tile edge
+
+local ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+local INDEX = {}
+for i = 1, #ALPHABET do INDEX[ALPHABET:byte(i)] = i - 1 end
+local SHORT = 21
+
+local cache = {} -- [grid][row] = { end1, v1, end2, v2, ... }
+
+-- Decode one run-length encoded row (see encode_row in app/azerothgps/roads/terrain.py;
+-- `short`: the longest short run, SHORT unless the grid says (a cave's: 15); `long`: the
+-- digits of a long run's length, 3 unless the grid says (a cave's: 2)).
+local function DecodeRow(text, short, long)
+  short = short or SHORT
+  local runs, pos, i, n = {}, 0, 1, #text
+  while i <= n do
+    local b = text:byte(i)
+    local v, len
+    if b == 95 then -- "_": long run
+      v = text:byte(i + 1) - 48
+      if long == 2 then
+        len = INDEX[text:byte(i + 2)] * 64 + INDEX[text:byte(i + 3)]
+        i = i + 4
+      else
+        len = INDEX[text:byte(i + 2)] * 4096 + INDEX[text:byte(i + 3)] * 64 + INDEX[text:byte(i + 4)]
+        i = i + 5
+      end
+    else
+      local k = INDEX[b]
+      v = math.floor(k / short)
+      len = k % short + 1
+      i = i + 1
+    end
+    pos = pos + len
+    runs[#runs + 1] = pos
+    runs[#runs + 1] = v
+  end
+  return runs
+end
+P.DecodeRow = DecodeRow
+
+-- A grid's rows: a list, or one string of them split by "/" (a cave's), split the first time.
+local function Rows(g)
+  local rows = g.rows
+  if type(rows) == "string" then
+    local list = {}
+    for r in rows:gmatch("[^/]+") do list[#list + 1] = r end
+    g.rows = list
+    rows = list
+  end
+  return rows
+end
+P.Rows = Rows
+
+-- Cell value at (row, col) of grid g (2 outside the grid).
+local function Cell(g, row, col)
+  if row < 1 or row > g.h or col < 1 or col > g.w then return 2 end
+  local rc = cache[g]
+  if not rc then
+    rc = {}
+    cache[g] = rc
+  end
+  local runs = rc[row]
+  if not runs then
+    runs = DecodeRow(Rows(g)[row], g.short, g.long)
+    rc[row] = runs
+  end
+  -- binary search for the run containing col
+  local lo, hi = 1, #runs / 2
+  while lo < hi do
+    local mid = math.floor((lo + hi) / 2)
+    if runs[mid * 2 - 1] < col then lo = mid + 1 else hi = mid end
+  end
+  return runs[lo * 2]
+end
+
+-- Grid cell (col, row) of world (x, y), and a cell's center back in world coordinates.
+local function ToCell(g, x, y)
+  local k = TILE / g.cell
+  return math.floor(((32 - y / TILE) - g.tx0) * k) + 1, math.floor(((32 - x / TILE) - g.ty0) * k) + 1
+end
+
+local function CellCentre(g, col, row)
+  local k = TILE / g.cell
+  return (32 - g.ty0 - (row - 0.5) / k) * TILE, (32 - g.tx0 - (col - 0.5) / k) * TILE
+end
+
+-- Grids laid over a continent's (a city's ruins up top, the caves: ns.CityHalls[cont]), by
+-- area: { keys = the list indexed, n = its length, b = { [bucket] = { grid, ... } } }. Built
+-- again when the list changes.
+local OV_BUCKET = 256
+local ovIndex = {}
+local function OverlayIndex(cont)
+  local keys = ns.CityHalls and ns.CityHalls[cont]
+  if not keys then return nil end
+  local ix = ovIndex[cont]
+  if ix and ix.keys == keys and ix.n == #keys then return ix end
+  ix = { keys = keys, n = #keys, b = {} }
+  for _, key in ipairs(keys) do
+    local o = ns.Terrain and ns.Terrain[key]
+    if o and o.overlay then
+      local x1, y1 = (32 - o.ty0) * TILE, (32 - o.tx0) * TILE -- (its north-west corner: rows run south, columns east)
+      local x0, y0 = x1 - o.h * o.cell, y1 - o.w * o.cell
+      for bx = math.floor(x0 / OV_BUCKET), math.floor(x1 / OV_BUCKET) do
+        for by = math.floor(y0 / OV_BUCKET), math.floor(y1 / OV_BUCKET) do
+          local k = bx * 65536 + by
+          local list = ix.b[k]
+          if not list then
+            list = {}
+            ix.b[k] = list
+          end
+          list[#list + 1] = o
+        end
+      end
+    end
+  end
+  ovIndex[cont] = ix
+  return ix
+end
+
+-- A grid laid over a continent's (a city's ruins up top, a cave: ns.CityHalls[cont]): its
+-- own value at (x, y) and the grid, or nil where none has one (1: the continent's grid).
+-- A cave's (Data/Caves.lua) are 0 open, 2 closed, 3 its floor under walkable ground (open,
+-- up top or down below; its rock there is the continent's grid, 1).
+local function OverlayRaw(cont, x, y)
+  local ix = OverlayIndex(cont)
+  if not ix then return nil end
+  local list = ix.b[math.floor(x / OV_BUCKET) * 65536 + math.floor(y / OV_BUCKET)]
+  if not list then return nil end
+  for _, o in ipairs(list) do
+    local col, row = ToCell(o, x, y)
+    if row >= 1 and row <= o.h and col >= 1 and col <= o.w then
+      local v = Cell(o, row, col)
+      if v ~= 1 then return v, o end
+    end
+  end
+  return nil
+end
+P.OverlayRaw = OverlayRaw
+
+-- An overlay's value at (x, y) (0 open, 2 closed), or nil where the continent's grid holds.
+local function Overlay(cont, x, y)
+  local v = OverlayRaw(cont, x, y)
+  if v == 3 then return 0 end
+  return v
+end
+P.Overlay = Overlay
+
+-- Cell value at world (x, y) on continent `cont` (2 outside the grid).
+function P.At(cont, x, y)
+  local ov = Overlay(cont, x, y)
+  if ov then return ov end
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not g then return 0 end -- no data: treat as open
+  local col, row = ToCell(g, x, y)
+  return Cell(g, row, col)
+end
+
+-- Cost (yards, water weighted) of walking straight from (x1, y1) to (x2, y2), or nil when
+-- the line crosses blocked terrain. Blocked cells within END_SLACK of either end are
+-- ignored: the player (or the road) is evidently standing there.
+P.END_SLACK = 12
+-- A start inside "blocked" terrain (the player is standing there, so it's walkable: the
+-- slope data is too strict on rocky ground) may cross this much of it to open ground; a
+-- stop placed inside it, STOP_SLACK. Ends on open ground keep END_SLACK.
+P.START_SLACK = 60
+P.STOP_SLACK = 40
+-- (A grid with its own `slack`, a city's: its blocked cells are walls and ledges, so only
+-- that much, or up to CITY_INSIDE_SLACK from a start or stop inside them.)
+P.CITY_INSIDE_SLACK = 0 -- (Router starts and stops from the nearest open floor instead)
+function P.SegmentCost(cont, x1, y1, x2, y2, endSlack)
+  local g = ns.Terrain and ns.Terrain[cont]
+  local dx, dy = x2 - x1, y2 - y1
+  local len = math.sqrt(dx * dx + dy * dy)
+  if not g then return len end
+  local step = g.cell / 3 -- fine enough not to skip across the corner of a blocked cell
+  local n = math.max(1, math.ceil(len / step))
+  local water = 0
+  local yards = endSlack or P.END_SLACK
+  if g.slack then yards = endSlack and math.min(endSlack, math.max(g.slack, P.CITY_INSIDE_SLACK)) or g.slack end
+  local slack = len > 0 and yards / len or 1
+  for i = 0, n do
+    local t = i / n
+    local x, y = x1 + dx * t, y1 + dy * t
+    local ov = Overlay(cont, x, y)
+    if ov == 2 and t > 0 and t < 1 then return nil end -- (a city's ruins: its walls are real, no slack)
+    local v = ov
+    if not v then -- (the continent's own grid: the overlay was just asked)
+      local col, row = ToCell(g, x, y)
+      v = Cell(g, row, col)
+    end
+    if v == 2 and t > slack and t < 1 - slack then return nil end
+    if v == 1 then water = water + 1 end
+  end
+  return len + len * (water / (n + 1)) * (P.SWIM_COST - 1)
+end
+
+-- Binary heap keyed on f.
+local function Push(h, node, f)
+  h[#h + 1] = { node, f }
+  local i = #h
+  while i > 1 do
+    local p = math.floor(i / 2)
+    if h[p][2] <= h[i][2] then break end
+    h[p], h[i] = h[i], h[p]
+    i = p
+  end
+end
+
+local function Pop(h)
+  local top = h[1]
+  local last = table.remove(h)
+  if #h > 0 then
+    h[1] = last
+    local i = 1
+    while true do
+      local l, r, m = i * 2, i * 2 + 1, i
+      if h[l] and h[l][2] < h[m][2] then m = l end
+      if h[r] and h[r][2] < h[m][2] then m = r end
+      if m == i then break end
+      h[m], h[i] = h[i], h[m]
+      i = m
+    end
+  end
+  return top
+end
+
+P.PATH_PAD = 50 -- cells searched around the two points' bounding box
+P.PATH_MAX_CELLS = 520 * 520
+-- Cells expanded before giving up (the search runs in the background in slices, so this
+-- only bounds how long a hopeless search, e.g. walled in by a town's terrain, keeps going).
+P.PATH_MAX_EXPANSIONS = 80000
+P.PATH_YIELD_EVERY = 50 -- cells expanded between pauses when run in the background
+
+-- Walkable path from (x1, y1) to (x2, y2) over the grid (8-connected A*, then straightened
+-- with line of sight): cost, { x1, y1, ..., x2, y2 }; nil when there is none nearby.
+function P.FindPath(cont, x1, y1, x2, y2)
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not g then return nil end
+  local c1, r1 = ToCell(g, x1, y1)
+  local c2, r2 = ToCell(g, x2, y2)
+  local pad = P.PATH_PAD
+  local cmin, cmax = math.min(c1, c2) - pad, math.max(c1, c2) + pad
+  local rmin, rmax = math.min(r1, r2) - pad, math.max(r1, r2) + pad
+  local W = cmax - cmin + 1
+  if W * (rmax - rmin + 1) > P.PATH_MAX_CELLS then return nil end
+  local function slack(yd) -- (squared cells; a city's none means none: its walls are real)
+    if g.slack and yd <= 0 then return -1 end
+    return (yd / g.cell + 1) ^ 2
+  end
+  local function yards(inside, far)
+    if g.slack then return inside and math.max(g.slack, P.CITY_INSIDE_SLACK) or g.slack end
+    return inside and far or P.END_SLACK
+  end
+  local slack1 = slack(yards(Cell(g, r1, c1) == 2, P.START_SLACK))
+  local slack2 = slack(yards(Cell(g, r2, c2) == 2, P.STOP_SLACK))
+  local function id(c, r) return (r - rmin) * W + (c - cmin) end
+  local hasOverlay = ns.CityHalls and ns.CityHalls[cont] and true
+  -- (the other faction's guards: their reach costs Router.HOSTILE_FACTOR a step)
+  local Rt = ns.Router
+  local side = Rt and Rt.HostileSide and Rt.HostileSide()
+  local hostileCell = {}
+  local cost0
+  local function hostile(c, r)
+    if not side then return false end
+    local k = id(c, r)
+    local h = hostileCell[k]
+    if h == nil then
+      local hx, hy = CellCentre(g, c, r)
+      h = Rt.HostileAt(cont, hx, hy, side)
+      hostileCell[k] = h
+    end
+    return h
+  end
+  local function cost(c, r) -- step multiplier, or nil if blocked
+    local m = cost0(c, r)
+    if m and hostile(c, r) then m = m * Rt.HOSTILE_FACTOR end
+    return m
+  end
+  function cost0(c, r)
+    if c < cmin or c > cmax or r < rmin or r > rmax then return nil end
+    local v = Cell(g, r, c)
+    if g.overlay and v == 1 then return nil end -- (an overlay grid: not its own there)
+    if hasOverlay then -- (the continent's grid: a ruins' own grid over it where it has one)
+      -- (not a cave's: its tunnels are narrower than these cells, and its roads lead through
+      -- it; a cell's middle on its floor would open a hillside's blocked cell)
+      local ov, o = OverlayRaw(cont, CellCentre(g, c, r))
+      if ov and not o.cave then v = ov end
+    end
+    if v == 2 then
+      if (c - c1) ^ 2 + (r - r1) ^ 2 > slack1 and (c - c2) ^ 2 + (r - r2) ^ 2 > slack2 then return nil end
+      return 1
+    end
+    return v == 1 and P.SWIM_COST or 1
+  end
+  local goal = id(c2, r2)
+  local gs, came, open, closed = { [id(c1, r1)] = 0 }, {}, {}, {}
+  Push(open, id(c1, r1), 0)
+  local SQ2 = math.sqrt(2)
+  local expanded = 0
+  -- Run as a background job (a coroutine, see Router.Pump): hand control back every so
+  -- often so no single frame pays for the whole search.
+  local co, isMain = coroutine.running()
+  local canYield = co ~= nil and not isMain
+  while #open > 0 do
+    local n = Pop(open)[1]
+    if n == goal then break end
+    if not closed[n] then
+      closed[n] = true
+      expanded = expanded + 1
+      if expanded > P.PATH_MAX_EXPANSIONS then return nil end
+      if canYield and expanded % P.PATH_YIELD_EVERY == 0 then coroutine.yield() end
+      local r, c = math.floor(n / W) + rmin, n % W + cmin
+      for dr = -1, 1 do
+        for dc = -1, 1 do
+          if dr ~= 0 or dc ~= 0 then
+            local m = cost(c + dc, r + dr)
+            if m and (dr == 0 or dc == 0 or (cost(c + dc, r) and cost(c, r + dr))) then
+              local nid = id(c + dc, r + dr)
+              local ng = gs[n] + m * ((dr ~= 0 and dc ~= 0) and SQ2 or 1)
+              if not closed[nid] and (gs[nid] == nil or ng < gs[nid]) then
+                gs[nid], came[nid] = ng, n
+                Push(open, nid, ng + math.sqrt((c + dc - c2) ^ 2 + (r + dr - r2) ^ 2))
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  if not gs[goal] then return nil end
+  -- cells back to the start, as world points
+  local cells, cur = {}, goal
+  while cur do
+    table.insert(cells, 1, cur)
+    cur = came[cur]
+  end
+  local pts = {}
+  for i, n in ipairs(cells) do
+    local x, y = CellCentre(g, n % W + cmin, math.floor(n / W) + rmin)
+    if i == 1 then x, y = x1, y1 elseif i == #cells then x, y = x2, y2 end
+    pts[#pts + 1] = { x, y }
+  end
+  -- straighten: from each kept point, go as far along the path as is still in sight (and
+  -- not back into the other faction's guards' reach where the path went round it)
+  -- (the path's yards in their reach so far, from its start: a shortcut may not add any)
+  local hostileSoFar = { 0 }
+  for k = 2, #pts do
+    local n = cells[k]
+    local inside = hostile(n % W + cmin, math.floor(n / W) + rmin)
+    local step = math.sqrt((pts[k][1] - pts[k - 1][1]) ^ 2 + (pts[k][2] - pts[k - 1][2]) ^ 2)
+    hostileSoFar[k] = hostileSoFar[k - 1] + (inside and step or 0)
+  end
+  local function shortcut(i, j)
+    if not P.SegmentCost(cont, pts[i][1], pts[i][2], pts[j][1], pts[j][2], 0) then return false end
+    if side then
+      local h = Rt.HostileYards(cont, pts[i][1], pts[i][2], pts[j][1], pts[j][2], side)
+      if h > hostileSoFar[j] - hostileSoFar[i] + g.cell then return false end
+    end
+    return true
+  end
+  local out, total, i = { x1, y1 }, 0, 1
+  while i < #pts do
+    local j = i + 1
+    while j < #pts and shortcut(i, j + 1) do
+      j = j + 1
+      if canYield and j % 6 == 0 then coroutine.yield() end
+    end
+    local a, b = pts[i], pts[j]
+    total = total + (P.SegmentCost(cont, a[1], a[2], b[1], b[2]) or math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2))
+    out[#out + 1], out[#out + 2] = b[1], b[2]
+    i = j
+  end
+  return total, out
+end
+
+function P.ClearCache()
+  cache, ovIndex = {}, {}
+end
+
+-- Whether (x, y) is hilly ground (Data/Terrain.lua's ns.Hills: open, but a climb): a route
+-- winding there may be taking the slope the easy way.
+function P.Hilly(cont, x, y)
+  local g = ns.Hills and ns.Hills[cont]
+  if not g then return false end
+  local c, r = ToCell(g, x, y)
+  if r < 1 or r > g.h or c < 1 or c > g.w then return false end
+  return Cell(g, r, c) == 1
+end
+
+-- Whether the path (flat points, from index i to j) or the straight line between its ends
+-- is on hilly ground anywhere (checked every `step` yards).
+function P.HillyAlong(cont, pts, i, j, step)
+  if not (ns.Hills and ns.Hills[cont]) then return false end
+  step = step or 10
+  local function line(x1, y1, x2, y2)
+    local n = math.max(1, math.ceil(math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2) / step))
+    for k = 0, n do
+      if P.Hilly(cont, x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n) then return true end
+    end
+    return false
+  end
+  for m = i, j - 1 do
+    if line(pts[2 * m - 1], pts[2 * m], pts[2 * m + 1], pts[2 * m + 2]) then return true end
+  end
+  return line(pts[2 * i - 1], pts[2 * i], pts[2 * j - 1], pts[2 * j])
+end
+
+-- Whether (x, y) is open ground on `cont`'s grid (false without a grid).
+function P.IsOpen(cont, x, y)
+  local ov = Overlay(cont, x, y)
+  if ov then return ov == 0 end
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not g then return false end
+  local c, r = ToCell(g, x, y)
+  local v = Cell(g, r, c)
+  if g.overlay then return v == 0 end -- (an overlay's own: 1 is the continent's, not it)
+  return v ~= 2
+end
+
+-- Decode the terrain rows within `yd` of (x, y) ahead of time (Router.WarmUp, run as a
+-- background job: it pauses every few rows).
+function P.WarmRows(cont, x, y, yd)
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not g then return end
+  local _, r1 = ToCell(g, x - yd, y - yd)
+  local _, r2 = ToCell(g, x + yd, y + yd)
+  local rc = cache[g]
+  if not rc then
+    rc = {}
+    cache[g] = rc
+  end
+  local co, main = coroutine.running()
+  local canYield = co ~= nil and not main
+  local n = 0
+  for row = math.max(1, math.min(r1, r2)), math.min(g.h, math.max(r1, r2)) do
+    if not rc[row] and Rows(g)[row] then
+      rc[row] = DecodeRow(Rows(g)[row], g.short, g.long)
+      n = n + 1
+      if canYield and n % 6 == 0 then coroutine.yield() end
+    end
+  end
+end

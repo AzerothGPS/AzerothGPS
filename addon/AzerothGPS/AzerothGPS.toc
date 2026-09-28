@@ -1,0 +1,38 @@
+## Interface: 16001
+## Title: AzerothGPS
+## Notes: Car-GPS style navigation: a square map with routes and turn-by-turn directions. Display only; never automates anything.
+## Author: AzerothGPS
+## X-License: All Rights Reserved
+## X-Copyright: Copyright (c) 2026 AzerothGPS
+## Version: 1.0.6
+## IconTexture: Interface\AddOns\AzerothGPS\Media\Device
+## SavedVariables: AzerothGPSDB
+
+Core.lua
+Geo.lua
+Data\Minimap.lua
+Data\Maps.lua
+Data\Roads.lua
+Data\Interiors.lua
+Data\Pois.lua
+Data\Terrain.lua
+Data\Transports.lua
+Data\Flights.lua
+Data\Cities.lua
+Data\Caves.lua
+Data\CityPlaces.lua
+Data\Hostile.lua
+Passability.lua
+Router.lua
+Nav.lua
+Turns.lua
+Import.lua
+Layers.lua
+GPSFrame.lua
+Arrow.lua
+Taxi.lua
+Teleports.lua
+Record.lua
+Feedback.lua
+Options.lua
+Config.lua

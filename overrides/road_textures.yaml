@@ -1,0 +1,21 @@
+# Terrain textures that count as road. Reviewed by the user per zone.
+# Matching is on the lowercase listfile path. deny wins over everything;
+# allow adds exact paths that the keywords miss.
+include_keywords:
+  - road
+  - cobble
+  - dirtpath
+  - _path
+  - bridge
+exclude_keywords: []
+allow: []
+# Zones whose roads are painted with a texture that has no "road" in its name. Each was
+# checked against the zone's map art. They also paint other ground more faintly (cracked
+# earth, dirt around the road), so they count only where painted at full strength
+# (STRICT_HIGH / STRICT_LOW in roads/build.py).
+strict:
+  - tileset/desolace/desolacecracks_s.blp  # Desolace
+  - tileset/ironforge/ironforgerock09browncracks_s.blp  # Dun Morogh
+  - tileset/the badlands/badlandssand_s.blp  # Badlands
+  - tileset/winterspring grove/winterspringdirt_s.blp  # Winterspring
+deny: []
