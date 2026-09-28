@@ -358,7 +358,8 @@ end
 -- own value at (x, y) and the grid, or nil where none has one (1: the continent's grid).
 -- A cave's (Data/Caves.lua) are 0 open, 2 closed, 3 its floor under walkable ground (open,
 -- up top or down below; its rock there is the continent's grid, 1).
-local function OverlayRaw(cont, x, y)
+-- (`floors`: past a capital's floors under others (`split`), to the grid of the floor over them.)
+local function OverlayRaw(cont, x, y, floors)
   local ix = OverlayIndex(cont)
   if not ix then return nil end
   local list = ix.b[math.floor(x / OV_BUCKET) * 65536 + math.floor(y / OV_BUCKET)]
@@ -367,7 +368,7 @@ local function OverlayRaw(cont, x, y)
     local col, row = ToCell(o, x, y)
     if row >= 1 and row <= o.h and col >= 1 and col <= o.w then
       local v = Cell(o, row, col)
-      if v ~= 1 then return v, o end
+      if v ~= 1 and not (floors and o.split) then return v, o end
     end
   end
   return nil
@@ -375,8 +376,9 @@ end
 P.OverlayRaw = OverlayRaw
 
 -- An overlay's value at (x, y) (0 open, 2 closed), or nil where the continent's grid holds.
+-- (A capital's floor under another: the one over it, which a straight line there stays on.)
 local function Overlay(cont, x, y)
-  local v = OverlayRaw(cont, x, y)
+  local v = OverlayRaw(cont, x, y, true)
   if v == 3 then return 0 end
   if v == 2 then -- (closed there, unless a wall eraser opened it)
     local g = ns.Terrain and ns.Terrain[cont]
@@ -389,6 +391,21 @@ local function Overlay(cont, x, y)
   return v
 end
 P.Overlay = Overlay
+
+-- Whether any overlay grid lies near the leg (x1, y1)-(x2, y2) (its buckets): its cells are
+-- finer than the continent's, so a leg there is checked every OVERLAY_STEP yards.
+P.OVERLAY_STEP = 0.75
+local function OverlayNear(cont, x1, y1, x2, y2)
+  local ix = OverlayIndex(cont)
+  if not ix then return false end
+  for bx = math.floor(math.min(x1, x2) / OV_BUCKET), math.floor(math.max(x1, x2) / OV_BUCKET) do
+    for by = math.floor(math.min(y1, y2) / OV_BUCKET), math.floor(math.max(y1, y2) / OV_BUCKET) do
+      if ix.b[bx * 65536 + by] then return true end
+    end
+  end
+  return false
+end
+P.OverlayNear = OverlayNear
 
 -- Cell value at world (x, y) on continent `cont` (2 outside the grid).
 function P.At(cont, x, y)
@@ -420,6 +437,7 @@ function P.SegmentCost(cont, x1, y1, x2, y2, endSlack)
   local len = math.sqrt(dx * dx + dy * dy)
   if not g then return len end
   local step = g.cell / 3 -- fine enough not to skip across the corner of a blocked cell
+  if OverlayNear(cont, x1, y1, x2, y2) then step = math.min(step, P.OVERLAY_STEP) end -- (nor an overlay's)
   local n = math.max(1, math.ceil(len / step))
   local water = 0
   local yards = endSlack or P.END_SLACK
@@ -533,7 +551,8 @@ function P.FindPath(cont, x1, y1, x2, y2)
     if hasOverlay then -- (the continent's grid: a ruins' own grid over it where it has one)
       -- (not a cave's: its tunnels are narrower than these cells, and its roads lead through
       -- it; a cell's middle on its floor would open a hillside's blocked cell)
-      local ov, o = OverlayRaw(cont, CellCentre(g, c, r))
+      local cx, cy = CellCentre(g, c, r)
+      local ov, o = OverlayRaw(cont, cx, cy, true)
       if ov and not o.cave then v = ov end
     end
     if v == 2 then

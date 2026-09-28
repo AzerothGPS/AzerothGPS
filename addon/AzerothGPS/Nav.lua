@@ -455,6 +455,14 @@ function N.Indoors()
   return v and true or false
 end
 
+-- The player's height (world z), or nil when unknown: under a capital's floor, whether they're
+-- up on it or down under it (Router.CaveDown).
+function N.PlayerZ()
+  local x, _, _, z = Geo.PlayerWorld()
+  if not x or not z or z == 0 then return nil end
+  return z
+end
+
 local function Stretch(cont, sx, sy, d, walk, opts)
   -- from the player's position: the teleports ready now may start the trip
   local tps = opts.teleports -- the teleports this stretch may start with (AssignTeleports)
@@ -890,7 +898,7 @@ function N.Route(px, py, cont)
   local tps = AssignTeleports(cont, px, py, d, walk)
   local t1 = ns.PerfStart and ns.PerfStart()
   local first = Stretch(cont, px, py, d, walk, { offroad = offroad, transient = true, fixed = { offroad = offroad },
-    teleports = tps, indoors = N.Indoors() })
+    teleports = tps, indoors = N.Indoors(), z = N.PlayerZ() })
   if t1 then ns.PerfEnd("route calculation: next stop", t1) end
   N.route = nil
   if first then
@@ -1671,8 +1679,9 @@ function N.SafeDrop()
 end
 
 -- Offroad shortcuts go off down in an underground city (there's no way through its walls
--- but its streets), and back on after, unless the player set them while there. Kept per
--- character, so a reload or logging in there picks up where it was.
+-- but its streets), and in a capital with streets of its own (Data/Capitals.lua), and back on
+-- after, unless the player set them while there. Kept per character, so a reload or logging
+-- in there picks up where it was.
 local function OffroadChanged(text)
   if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(text, 1, 0.82, 0) end
   if ns.Print then ns.Print(text) end
@@ -1694,16 +1703,23 @@ function N.CityOffroad()
   local city = N.CityHere()
   if city == false then return end -- (loading: wait until the game says where we are)
   -- (up top in its ruins too: the game reports the city's map there)
-  if not city then
-    local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  local name = city and ns.CityLevels[city].name
+  local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  if not city and map then
     for id, l in pairs(ns.CityLevels) do
-      if map and l.map == map then city = id end
+      if l.map == map then city, name = id, l.name end
+    end
+    -- (a capital at ground level, Data/Capitals.lua: its streets are the way through it too)
+    for _, list in pairs(ns.Capitals or {}) do
+      for _, c in ipairs(list) do
+        if c[3] == map then city, name = c[2], c[1] end
+      end
     end
   end
   local cdb = ns.CharDB()
   local st = cdb.cityOffroad
   if city then
-    local name = ns.CityLevels[city].name or "the city"
+    name = name or "the city"
     if not st then
       cdb.cityOffroad = { was = gps.offroad and true or false, name = name }
       if gps.offroad then

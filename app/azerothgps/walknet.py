@@ -76,7 +76,8 @@ def _raster_tri(pts, W, H):
 
 
 def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: int | None = None,
-          ground=None, ground_reach: float = 24.0, prune: float = 12.0, fill: int = 0, log=print) -> dict:
+          ground=None, ground_reach: float = 24.0, prune: float = 12.0, fill: int = 0, top_reached: bool = False,
+          road_pieces: bool = False, ground_under: bool = False, log=print) -> dict:
     """The walk network of a model's faces.
 
     floors: [(xy triangle [(x, y)] * 3, vertex heights (3), outline_only)] -- outline_only:
@@ -84,6 +85,11 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
     walls: [((zlo, zhi), xy triangle)]; liquids: [(xy polygon, surface height)];
     z0, nb: the height bands (a yard each) from z0 (default: the floors' range);
     ground(xs, ys) -> (height, walkable) arrays: the continent's ground (for a cave's mouth).
+    top_reached: with `ground`, each cell's top floor reached on foot is its level (a city's
+      bridges and ramps over its streets), not the lowest (a cave's floor under its arches).
+    road_pieces: stairs start only from pieces of the grid with roads (see there).
+    ground_under: the ground under the model counts too where it has no floor about the
+      ground's height (a city gate's arch overhead), not only outside it.
     """
     from scipy import ndimage
     from skimage.morphology import closing, disk, remove_small_holes, remove_small_objects, skeletonize
@@ -226,7 +232,17 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
         gx = (32 - ty0 - (rows + 0.5) / k) * TILE
         gy = (32 - tx0 - (cols + 0.5) / k) * TILE
         gh, gok = ground(gx, gy)
-        cand = gok & np.isfinite(gh) & ~(model | has) & ~liquid
+        if ground_under:
+            # (a city's gate: its arch or the mountain over it is no floor at the ground's
+            # height; only one about there keeps the ground out)
+            gb0 = np.clip(np.nan_to_num(gh - Z0, nan=-1).astype(int), 0, NB - 1)
+            near_floor = np.zeros((H, W), bool)
+            for off in range(-int(LEDGE), int(HEAD) + 1):
+                bb = np.clip(gb0 + off, 0, NB - 1)
+                near_floor |= np.take_along_axis(bands, bb[None], 0)[0]
+            cand = gok & np.isfinite(gh) & ~near_floor & ~liquid
+        else:
+            cand = gok & np.isfinite(gh) & ~(model | has) & ~liquid
         gb = np.where(cand, np.clip((gh - Z0).astype(int), 0, NB - 1), -1)
         cand &= (gh > Z0) & (gh < Z0 + NB - 1)
         dist = np.full((H, W), np.inf)
@@ -349,7 +365,10 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
         anyr = reached.any(axis=0)
         log(f"  {label}: {int((has & ~anyr).sum())} cells of floor not reached from the mouth")
         bands = reached
-        topb = np.where(anyr, np.argmax(reached, axis=0), -1)
+        if top_reached:
+            topb = np.where(anyr, NB - 1 - np.argmax(reached[::-1], axis=0), -1)
+        else:
+            topb = np.where(anyr, np.argmax(reached, axis=0), -1)
         top = np.where(anyr, Z0 + topb + 0.5, -1e4)
         has = anyr
         walk &= anyr
@@ -435,7 +454,18 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
     R = int(math.ceil(LEDGE * math.sqrt(2)))
     best: dict = {}  # (band, row, col) -> (yards, piece, parent)
     heap = []
+    # (`road_pieces`: only pieces with roads start a stair; the floor of those without, a
+    # spiral ramp's turns cut into bits by the ones over them, is just floor on the way)
+    with_roads = None
+    if road_pieces:
+        with_roads = set()
+        for x, y in g.nodes.values():
+            r_, c_ = int(cellxy(x, y)[1]), int(cellxy(x, y)[0])
+            if 0 <= r_ < H and 0 <= c_ < W and piece[r_, c_]:
+                with_roads.add(int(piece[r_, c_]))
     for pr, pc_ in np.argwhere(walk):
+        if with_roads is not None and int(piece[pr, pc_]) not in with_roads:
+            continue
         node = (int(topb[pr, pc_]), int(pr), int(pc_))
         best[node] = (0.0, int(piece[pr, pc_]), None)
     for node in best:
@@ -492,21 +522,55 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
                 if d[i] <= most:
                     cands.append((float(d[i]), eid, int(i)))
         cands.sort()
-        for dd, eid, i in cands:
-            e = g.edges.get(eid)
-            if e is None or not clear((x, y), tuple(e.pts[i]), is_open):
-                continue
+
+        def split_at(eid, i):
+            e = g.edges[eid]
             if i == 0:
-                return dd, e.a
+                return e.a
             if i == len(e.pts) - 1:
-                return dd, e.b
+                return e.b
             nid = g.add_node(tuple(e.pts[i]))
             node_piece[nid] = pc
             g.remove_edge(eid)
             g.add_edge(e.a, nid, e.pts[: i + 1], e.source)
             g.add_edge(nid, e.b, e.pts[i:], e.source)
-            return dd, nid
-        return math.inf, None
+            return nid
+
+        for dd, eid, i in cands:
+            e = g.edges.get(eid)
+            if e is None or not clear((x, y), tuple(e.pts[i]), is_open):
+                continue
+            return dd, split_at(eid, i), []
+        if road_pieces:
+            # (none in a straight line: the way over the piece's floor to its nearest road, a
+            # spiral ramp's top onto the tower's platform)
+            at = {}
+            for eid, e in g.edges.items():
+                if e.source == "terrain" and node_piece.get(e.a) == pc:
+                    for i, q in enumerate(e.pts):
+                        at.setdefault(world_to_px(*q), (eid, i))
+            r0, c0 = world_to_px(x, y)
+            dist_, prev, todo = {(r0, c0): 0.0}, {}, [(0.0, r0, c0)]
+            while todo:
+                d, r, c = heapq.heappop(todo)
+                if d > dist_[(r, c)]:
+                    continue
+                if (r, c) in at:
+                    eid, i = at[(r, c)]
+                    via = []
+                    q = (r, c)
+                    while q in prev:
+                        q = prev[q]
+                        via.append(px_to_world(*q))
+                    return d, split_at(eid, i), via[::-1][1:]
+                for dr_, dc in NEIGH8:
+                    r2, c2 = r + dr_, c + dc
+                    nd = d + CELL * math.hypot(dr_, dc)
+                    if 0 <= r2 < H and 0 <= c2 < W and walk[r2, c2] and piece[r2, c2] == pc and nd <= most \
+                            and nd < dist_.get((r2, c2), math.inf):
+                        dist_[(r2, c2)], prev[(r2, c2)] = nd, (r, c)
+                        heapq.heappush(todo, (nd, r2, c2))
+        return math.inf, None, []
 
     meets.sort()
     taken: list = []
@@ -521,13 +585,17 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
             continue
         cells_ = chain(na)[::-1] + chain(nb_)
         path = [px_to_world(pr, pc_) for _, pr, pc_ in cells_]
-        ends = [reach_node(x, y, pc, STAIR_REACH)[1] for (x, y), pc in ((path[0], pa), (path[-1], pb))]
+        reached = [reach_node(x, y, pc, STAIR_REACH) for (x, y), pc in ((path[0], pa), (path[-1], pb))]
+        ends = [r_[1] for r_ in reached]
         if None in ends or ends[0] == ends[1]:
             continue
         taken.append((key, mx, my))
-        eid = g.add_edge(ends[0], ends[1], [path[0]] + path + [path[-1]], source="stair")
+        va, vb = reached[0][2][::-1], reached[1][2]  # (over the floor to the roads, when not straight)
+        eid = g.add_edge(ends[0], ends[1], [path[0]] + va + path + vb + [path[-1]], source="stair")
         zs = [Z0 + b + 0.5 for b, _, _ in cells_]
-        stair_z[eid] = [zs[0]] + zs + [zs[-1]]
+        za = [float(height_at(*q) or zs[0]) for q in va]
+        zb = [float(height_at(*q) or zs[-1]) for q in vb]
+        stair_z[eid] = [zs[0]] + za + zs + zb + [zs[-1]]
         nstairs += 1
     log(f"  {label}: {nstairs} stairs between levels")
 
@@ -551,8 +619,8 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
         if any(k_[0] == (pa, pb) and math.hypot(ux - k_[1], uy - k_[2]) < DROP_APART for k_ in kept):
             continue
         ends = [reach_node(x, y, pc, DROP_REACH) for (x, y), pc in (((ux, uy), pa), ((lx, ly), pb))]
-        if ends[0][0] > DROP_REACH or ends[1][0] > DROP_REACH or ends[0][1] == ends[1][1]:
-            continue
+        if ends[0][0] > DROP_REACH or ends[1][0] > DROP_REACH or ends[0][1] == ends[1][1] or ends[0][2] or ends[1][2]:
+            continue  # (in a straight line only)
         kept.append(((pa, pb), ux, uy))
         na, nb_ = ends[0][1], ends[1][1]
         g.add_edge(na, nb_, [g.nodes[na], (ux, uy), (lx, ly), g.nodes[nb_]], source=f"drop:{h:.0f}")

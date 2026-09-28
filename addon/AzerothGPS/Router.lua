@@ -141,7 +141,7 @@ function R.JoinOnto(nodes, edges, nRoads, base, joins)
       if co and not main then coroutine.yield() end
     end
     local e = edges[ei]
-    for i = 5, #e - 3, 2 do
+    for i = 5, e[4] == 3 and 0 or #e - 3, 2 do -- (not onto a drop off a ledge: source 3)
       local ax, ay, bx, by = e[i], e[i + 1], e[i + 2], e[i + 3]
       for kx = math.floor((math.min(ax, bx) - R.JOIN_SNAP) / JOIN_BUCKET), math.floor((math.max(ax, bx) + R.JOIN_SNAP) / JOIN_BUCKET) do
         for ky = math.floor((math.min(ay, by) - R.JOIN_SNAP) / JOIN_BUCKET), math.floor((math.max(ay, by) + R.JOIN_SNAP) / JOIN_BUCKET) do
@@ -734,9 +734,13 @@ function BuildGraph(cont)
     if not (Pass and Pass.Overlay) then return false end
     for i = 5, #e - 3, 2 do
       local x1, y1, x2, y2 = e[i], e[i + 1], e[i + 2], e[i + 3]
-      local n = math.max(1, math.floor(math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)))
-      for k = 0, n do
-        if Pass.Overlay(cont, x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n) == 2 then return true end
+      if not Pass.OverlayNear or Pass.OverlayNear(cont, x1, y1, x2, y2) then -- (no grid there: nothing to cross)
+        local n = math.max(1, math.floor(math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)))
+        for k = 0, n do
+          -- (a city's walls: not a cave's rock, which is under the land)
+          local v, o = Pass.OverlayRaw(cont, x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n, true)
+          if v == 2 and not o.cave then return true end
+        end
       end
     end
     return false
@@ -1312,11 +1316,16 @@ end
 
 -- Whether (x, y) is down in a cave (Data/Caves.lua): over one's own cells; over its floor
 -- under walkable ground, when the player's spot, only when `indoors` (IsIndoors) says so
--- (a stop there is taken to be down in it).
-function R.CaveDown(cont, x, y, indoors)
+-- (a stop there is taken to be down in it). A capital's floor under another (Data/Capitals.lua,
+-- `split`: a height between the two) goes by the player's height `z` instead, when known.
+function R.CaveDown(cont, x, y, indoors, z)
   local P = ns.Passability
   local v, o = P.OverlayRaw(cont, x, y)
   if v == nil or not (o and o.cave) then return false end
+  if v == 3 and o.split then
+    if z then return z < o.split end
+    return true
+  end
   if v == 3 and indoors ~= nil then return indoors end
   return true
 end
@@ -1343,6 +1352,14 @@ function R.CaveLevel(g, cont, list, down, wayIn, x, y)
     return out[1] and out
   end
   return keep(list) or (x and keep(R.NearestEdgesAll(cont, x, y))) or list
+end
+
+-- Whether (x, y) is on a capital's own cells (Data/Capitals.lua: its grid over the continent's).
+function R.CapitalAt(cont, x, y)
+  local P = ns.Passability
+  if not (P and P.OverlayRaw) then return false end
+  local v, o = P.OverlayRaw(cont, x, y)
+  return v ~= nil and o ~= nil and o.capital == true
 end
 
 -- The ways out of the cave a spot is down in (its roads outside it: out of its mouths and on
@@ -1756,9 +1773,9 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local ts = R.NearestEdges(cont, tx, ty)
   -- the caves (Data/Caves.lua): in one, on by its roads; outside, not onto them, but for a
   -- way in to a cave at the other end. Over a mine under walkable ground the player may be
-  -- up top: opts.indoors, from IsIndoors, tells.
+  -- up top: opts.indoors, from IsIndoors, tells (under a capital's floor, opts.z: their height).
   if g.cave and next(g.cave) and Pass and Pass.OverlayRaw then
-    local sDown, tDown = R.CaveDown(cont, sx, sy, opts and opts.indoors), R.CaveDown(cont, tx, ty)
+    local sDown, tDown = R.CaveDown(cont, sx, sy, opts and opts.indoors, opts and opts.z), R.CaveDown(cont, tx, ty)
     -- (the ways out of the cave at the other end, however far: a cave with no land road
     -- near its mouth is reached across the land to it)
     local sWays = tDown and not sDown and R.CaveWaysOut(g, cont, ts, sx, sy)
@@ -1805,13 +1822,17 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     local d = Dist(x1, y1, x2, y2)
     local c, path = d, nil
     if Pass then c = SegCost(cont, x1, y1, x2, y2) end
+    -- (in a capital no walk around: the terrain grid's cells are coarser than its streets,
+    -- and blind to its floors over each other; a leg there is straight, its walls real)
+    local capital = not c and (R.CapitalAt(cont, x1, y1) or R.CapitalAt(cont, x2, y2))
+    if capital then walk = false end
     if not c and walk and Pass and Pass.FindPath then
       local searching
       c, path, searching = Walk(cont, x1, y1, x2, y2, opts and opts.transient and x1 == sx and y1 == sy)
       if searching then pending = true end
     end
     -- (blocked in a straight line: walked around it once searched, if the route takes it)
-    local pieces = { { OFF, x1, y1, x2, y2, gap = not c and not cityPenalty or nil } }
+    local pieces = { { OFF, x1, y1, x2, y2, gap = not c and not cityPenalty and not capital or nil } }
     if path then
       pieces = {}
       for i = 1, #path - 2, 2 do pieces[#pieces + 1] = { OFF, path[i], path[i + 1], path[i + 2], path[i + 3] } end
@@ -1988,8 +2009,10 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
         if b.cost == nil then
           local c = Pass and Pass.SegmentCost(cont, x, y, mx, my)
           b.open = c ~= nil
-          -- (to or from a cave's roads only over open ground: not through the mountain)
+          -- (to or from a cave's roads only over open ground: not through the mountain; nor in a
+          -- capital, where what's closed between two roads is a wall or a level up or down)
           if not b.open and g.caveNode and (g.caveNode[n] or g.caveNode[m]) then b.shut = true end
+          if not b.open and (R.CapitalAt(cont, x, y) or R.CapitalAt(cont, mx, my)) then b.shut = true end
           if not b.open and Pass and Pass.CrossesWall and Pass.CrossesWall(cont, x, y, mx, my) then b.shut = true end
           b.cost = ((c or b[2] * blockedPenalty(x, y, mx, my)) + HostileExtra(cont, x, y, mx, my)) * R.OFFROAD_PENALTY
         end

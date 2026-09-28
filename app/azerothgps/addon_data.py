@@ -365,11 +365,12 @@ def generate(cd: ClientData, addon_dir: Path) -> list[Path]:
     from .roads.terrain import terrain_lua
     from .cities import cities_lua
     from .caves import caves_lua
+    from .capitals import capitals_lua
 
     for name, text in (("Minimap.lua", minimap_lua(cd)), ("Maps.lua", zone_art_lua(cd)), ("Interiors.lua", interiors),
                        ("Pois.lua", pois_lua(cd)), ("Terrain.lua", terrain_lua(cd)),
                        ("Transports.lua", transports_lua(cd)), ("Flights.lua", flights_lua(cd)),
-                       ("Cities.lua", cities_lua(cd)), ("Caves.lua", caves_lua(cd))):
+                       ("Cities.lua", cities_lua(cd)), ("Caves.lua", caves_lua(cd)), ("Capitals.lua", capitals_lua(cd))):
         p = data / name
         p.write_text(text, encoding="utf-8", newline="\n")
         written.append(p)

@@ -101,14 +101,12 @@ The addon is going public, so every change must keep it policy-safe:
     continent's there; `Passability.Overlay`) and roads merged into the continent's
     (`ns.RoadOverlays`; continent roads through its walls are dropped). Check changes with a
     3D walk of routes over the heights, not only the 2D grid.
-<<<<<<< HEAD
   - `Data/Hostile.lua` (`app/azerothgps/hostile.py`, from the NPC data under
     `data/thirdparty` and the client's FactionTemplate): each faction's guards as circles
     (A: dangerous to Alliance players). Routes pay `Router.HOSTILE_FACTOR` per yard in the
     other faction's reach (road edges, off-road legs, node links, and the terrain search
     in `Passability.FindPath`), so they go around their towns; option "Avoid the other
     faction's towns" (`avoidHostile`).
-=======
   - `Data/Caves.lua` (`app/azerothgps/caves.py`, the WMO floor code shared with Undercity in
     `walknet.py`): caves, mines, dens and tunnels on continents 0 and 1 (minor-dungeon WMOs placed
     in the ADTs), merged into the continent's level. Each gets a grid over the continent's
@@ -126,7 +124,35 @@ The addon is going public, so every change must keep it policy-safe:
     spot over a cave (its flat reference walk can't judge them).
     `agps caves` renders each one into `data/debug/caves/` with `summary.txt` (covered and
     skipped); `--write` writes the file.
->>>>>>> worktree-agent-a6ab588642b691005
+  - `Data/Capitals.lua` (`app/azerothgps/capitals.py`, `CAPITALS`: each city's models (MODF
+    ids), gates, check spots): capitals at ground level, whose streets are city models (no road
+    textures), merged into the continent's level like the caves. Each gets a grid over the
+    continent's (`ns.Terrain["capital_<name>"]`, `overlay = true`, `capital = true`: 0 open, 1
+    the continent's, 2 closed) from the floors reached on foot from the ground at its gates,
+    the top one per cell (bridges, ramps and tower tops over the streets); stairs and spiral
+    ramps between levels are found in 3D (`walknet.build(road_pieces=True)`), and its roads are
+    one `ns.RoadOverlays[cont]` entry joined onto the land's road at the gates. Floors under
+    the grid's (a street under a bridge, the Cleft of Shadow under the Drag, a hall's ground
+    floor) are levels of their own, laid over it like a cave's (`_under<n>` grids, `cave =
+    true`, `split` = a height between the two: `Router.CaveDown` takes the player as down
+    under when lower (`opts.z`, `Nav.PlayerZ`); a stop there is down, except within 8 yd of
+    a flight master or dock, `capitals.up_top_spots`), with their own roads (a `cave` entry,
+    no gap links). A straight line (`Passability.Overlay`) goes by the floor over them. A city
+    under a mountain (Ironforge, `indoor`) is also written like a cave (its floor under walkable
+    land 3, its rock there the continent's; `IsIndoors` tells). A city on its own ground
+    (Thunder Bluff's mesas, Darnassus: `ground_above`) takes that ground in too; its gates'
+    ways to the land's roads may not cross blocked ground (`join_blocked`), and a lift
+    (`lifts`: Thunder Bluff's from Mulgore, shafts from the cmangos DB's "Mesa Elevator") is a
+    road from the city's road up top down onto the land's road at its foot, its length
+    counting the wait and the ride (`LIFT_SECONDS`). In a
+    capital, legs off the roads are straight (no terrain walk: its grid is coarser than the
+    streets and blind to levels), gap links through closed cells are shut, and offroad mode
+    goes off there (`Nav.CityOffroad`); `route-check` leaves out trips from or to a capital's
+    own cells (its flat walk can't judge levels and lifts). `agps capitals` renders each (floors under others
+    purple, their roads cyan) into `data/debug/capitals/` with `summary.txt`; `--write` writes
+    the file, `--check` routes from outside the gate to every place (CityPlaces, the check's
+    own, each named area of the models) and walks the routes in 3D over the floors
+    (`capitals.walk_3d`; "!" marks a jump between levels or a long last leg).
   - `Data/CityPlaces.lua`: capitals' service locations (map %), shown once a guard in that
     city has been talked to (`Layers.RevealCity`, account-wide); a stop still comes from
     asking a guard.
@@ -158,6 +184,7 @@ agps perf              # read /agps debug perf timings (saved on /reload)
 agps feedback          # export opt-in shared roads and trips to data/feedback/
 agps route-check        # routing on random trips in every zone; flags detours and cliff cuts
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
+agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps watch-roads       # on every /reload: roads drawn in game go into overrides/ and the data, then install
 agps import-shared <file>  # roads and walls players copied from the share page ("Copy map data...") into the data
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)

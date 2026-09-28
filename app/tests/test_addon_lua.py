@@ -1412,7 +1412,8 @@ def test_corpse_run_puts_your_body_first(nav_env):
 
 def undercity_env(nav_env):
     lua, ns = nav_env
-    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "Data/Caves.lua")  # (as the toc: the caves too)
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "Data/Caves.lua",
+         "Data/Capitals.lua")  # (as the toc: the caves and capitals too)
     ns.Router.Reset()
     ns.Router.SYNC_WALKS = True
     lua.execute("""
@@ -1809,6 +1810,190 @@ def test_cave_roads_join_the_land_roads_at_their_mouths(caves_env):
             links = g.adj[j]
             tied += any(links[i][1] <= base or links[i][1] > last for i in range(1, len(links) + 1))
         assert tied >= 0.95 * len(extra.joins), (cont, tied, len(extra.joins))
+
+
+# ---- Capitals at ground level (Data/Capitals.lua) --------------------------------------------
+
+def capitals_world(lua, ns, capitals=True):
+    load(lua, ns, "Data/Maps.lua", "Data/CityPlaces.lua", "Data/Roads.lua", "Data/Terrain.lua", "Data/Caves.lua",
+         *(("Data/Capitals.lua",) if capitals else ()), "Passability.lua", "Router.lua")
+    ns.Router.Reset()
+    ns.Router.SYNC_WALKS = True
+    ns.Router.WARM = False
+    ns.Passability.ClearCache()
+    return lua, ns
+
+
+@pytest.fixture
+def capitals_env(env):
+    return capitals_world(*env)
+
+
+def city_places(ns, ui_map):
+    """A capital's places (Data/CityPlaces.lua, map %) in world yards: [(name, x, y)]."""
+    c, b = ns.CityPlaces[ui_map], ns.Maps[ui_map].bounds
+    minX, minY, maxX, maxY = (b[i] for i in range(1, 5))
+    return [(c[i][3], maxX - c[i][2] / 100 * (maxX - minX), maxY - c[i][1] / 100 * (maxY - minY))
+            for i in range(1, len(c) + 1)]
+
+
+def check_capital_route(ns, cont, r):
+    """(share of the route on roads, yards of off-road legs through the capital's closed cells,
+    the last leg's yards)."""
+    P = ns.Passability
+    pts, kinds = route_pts(r)
+    road = closed = 0.0
+    for i, k in enumerate(kinds):
+        (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+        d = math.hypot(x2 - x1, y2 - y1)
+        road += d if k == 0 else 0
+        if k == 1:
+            n = max(1, int(d))
+            closed += sum(d / (n + 1) for s in range(n + 1)
+                          if P.Overlay(cont, x1 + (x2 - x1) * s / n, y1 + (y2 - y1) * s / n) == 2)
+    last = math.hypot(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
+    return road / r.length, closed, last
+
+
+ORGRIMMAR_OUTSIDE = (1310.0, -4388.0)  # (on Durotar's road, outside the front gate)
+
+
+def test_route_into_orgrimmar_follows_its_streets(capitals_env):
+    # From Durotar's road outside the gate to the bank: in at the gate, along the city's own
+    # roads (no line straight through its walls; before, it had no roads in there at all)
+    lua, ns = capitals_env
+    bank = next((x, y) for n, x, y in city_places(ns, 1454) if n == "Orgrimmar Bank")
+    r = ns.Router.Route(1, *ORGRIMMAR_OUTSIDE, *bank, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.8 and closed < 5 and last < 20
+    assert r.length < 2.2 * math.dist(ORGRIMMAR_OUTSIDE, bank)
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, (1352.0, -4372.0)) for p in pts) < 25  # (through the gate)
+
+
+def test_orgrimmar_places_are_reached_on_its_roads(capitals_env):
+    # Every service a guard points out, from outside the gate: mostly on the city's roads,
+    # the last stretch short, and never a long way through its walls
+    lua, ns = capitals_env
+    for name, x, y in city_places(ns, 1454):
+        r = ns.Router.Route(1, *ORGRIMMAR_OUTSIDE, x, y, lua.table(offroad=False))
+        share, closed, last = check_capital_route(ns, 1, r)
+        assert share > 0.75 and closed < 40 and last < 45 and r.length < 2500, (name, share, closed, last, r.length)
+
+
+def test_orgrimmar_flight_master_up_its_tower(capitals_env):
+    # The wind rider master is up on a tower, reached by the ramp winding round it: the route
+    # climbs it (it isn't a straight line up from the street at its foot)
+    lua, ns = capitals_env
+    fm = (1677.6, -4315.7)
+    r = ns.Router.Route(1, *ORGRIMMAR_OUTSIDE, *fm, lua.table(offroad=False))
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, (1675.0, -4336.0)) for p in pts) < 8  # (on the ramp round the tower)
+    assert math.dist(pts[-2], fm) < 12
+
+
+def test_orgrimmar_cleft_of_shadow_is_down_under_the_drag(capitals_env):
+    # The warlock trainer is down in the Cleft of Shadow, under the Drag: a stop there is on the
+    # floor under (its own roads), the player up on the Drag isn't (their height tells)
+    lua, ns = capitals_env
+    R = ns.Router
+    wl = next((x, y) for n, x, y in city_places(ns, 1454) if n == "Orgrimmar Warlock Trainer")
+    under = (1788.0, -4388.0)  # (a spot with the Cleft's floor at about -17, the Drag's at 37)
+    assert R.CaveDown(1, *under) and R.CaveDown(1, *under, None, -16.0) and not R.CaveDown(1, *under, None, 37.0)
+    r = R.Route(1, *ORGRIMMAR_OUTSIDE, *wl, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.8 and last < 10
+
+
+IRONFORGE_OUTSIDE = (-5100.0, -741.0)  # (on Dun Morogh's road below the gates)
+
+
+@pytest.mark.parametrize("name,spot", [("the Great Forge", (-4763.0, -1108.0)), ("the Deeprun Tram", (-4838.0, -1318.0)),
+                                       ("the gryphon master", (-4821.8, -1155.4)), ("the Mystic Ward", (-4661.0, -954.0)),
+                                       ("the Vault", (-4888.0, -995.0)), ("the Military Ward", (-4976.0, -1208.0))])
+def test_route_into_ironforge_follows_its_halls(capitals_env, name, spot):
+    # From Dun Morogh's road in at the gates and along the city's halls round the Great Forge
+    lua, ns = capitals_env
+    r = ns.Router.Route(0, *IRONFORGE_OUTSIDE, *spot, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 0, r)
+    assert share > 0.85 and closed < 5 and last < 40, (name, share, closed, last)
+    assert r.length < 2.5 * math.dist(IRONFORGE_OUTSIDE, spot), (name, r.length)
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, (-5030.0, -835.0)) for p in pts) < 20  # (in by the gates)
+
+
+STORMWIND_OUTSIDE = (-9120.0, 397.0)  # (on Elwynn's road before the bridge to the gate)
+
+
+@pytest.mark.parametrize("name,spot", [("the Trade District", (-8832.0, 625.0)), ("Cathedral Square", (-8618.0, 776.0)),
+                                       ("the gryphon master", (-8832.8, 478.6)), ("the Dwarven District", (-8407.0, 573.0)),
+                                       ("Stormwind Keep", (-8438.0, 399.0)), ("the Mage Quarter", (-8947.0, 858.0))])
+def test_route_into_stormwind_follows_its_streets(capitals_env, name, spot):
+    # In at the gate past the Valley of Heroes, along the city's streets and over its canals'
+    # bridges (not straight through its walls and houses)
+    lua, ns = capitals_env
+    r = ns.Router.Route(0, *STORMWIND_OUTSIDE, *spot, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 0, r)
+    assert share > 0.85 and closed < 5 and last < 25, (name, share, closed, last)
+    assert r.length < 2.5 * math.dist(STORMWIND_OUTSIDE, spot), (name, r.length)
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, (-9016.0, 474.0)) for p in pts) < 30  # (through the Valley of Heroes)
+
+
+THUNDER_BLUFF_BELOW = (-1334.0, 176.0)  # (on Mulgore's road at the foot of the west lifts)
+
+
+def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
+    # From Mulgore up to the bank: up a lift (the mesas' cliffs are no way up), then along the
+    # mesa's roads
+    lua, ns = capitals_env
+    bank = next((x, y) for n, x, y in city_places(ns, 1456) if n == "Thunder Bluff Bank")
+    r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, *bank, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.85 and closed < 5 and last < 15
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, q) for p in pts for q in ((-1286.2, 189.7), (-1308.4, 185.3))) < 12  # (the lift)
+
+
+def test_thunder_bluff_places_are_reached_on_its_roads(capitals_env):
+    # Every service a guard points out, from the lifts' foot: on the mesas' roads and their
+    # bridges, never a long way through the chasms between the mesas or their tents
+    lua, ns = capitals_env
+    for name, x, y in city_places(ns, 1456):
+        r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, x, y, lua.table(offroad=False))
+        share, closed, last = check_capital_route(ns, 1, r)
+        assert share > 0.75 and closed < 10 and last < 25 and r.length < 1200, (name, share, closed, last, r.length)
+
+
+DARNASSUS_OUTSIDE = (9986.0, 1864.0)  # (on Teldrassil's road below the south gate)
+
+
+@pytest.mark.parametrize("name,spot", [("Craftsmen's Terrace", (10143.0, 2317.0)), ("the Temple of the Moon", (9622.0, 2522.0)),
+                                       ("Tradesmen's Terrace", (9812.0, 2252.0)), ("Warrior's Terrace", (9950.0, 2316.7))])
+def test_route_into_darnassus_follows_its_paths(capitals_env, name, spot):
+    lua, ns = capitals_env
+    r = ns.Router.Route(1, *DARNASSUS_OUTSIDE, *spot, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.85 and closed < 5 and last < 25, (name, share, closed, last)
+    assert r.length < 2.5 * math.dist(DARNASSUS_OUTSIDE, spot), (name, r.length)
+
+
+def test_capitals_leave_routes_elsewhere_unchanged(env):
+    # Trips nowhere near a capital route the same with the capitals loaded.
+    trips = [(0, (2250.0, 250.0), (1841.0, 236.0)), (1, (1100.0, -4400.0), (850.0, -4450.0)),
+             (1, (-2350.0, -350.0), (-2100.0, -500.0)), (1, (-84.0, -4743.0), (-62.0, -4229.0)),
+             (0, (-9460.0, 60.0), (-9100.0, -200.0))]
+    lua, ns = env
+    capitals_world(lua, ns)
+    got = [route_pts(ns.Router.Route(c, *a, *b, lua.table(offroad=o))) for c, a, b in trips for o in (False, True)]
+    lua2 = lupa.LuaRuntime()
+    lua2.execute(PRELUDE)
+    ns2 = lua2.table()
+    ns2.IsSecret = lua2.eval("function(v) return false end")
+    load(lua2, ns2, "Geo.lua")
+    capitals_world(lua2, ns2, capitals=False)
+    want = [route_pts(ns2.Router.Route(c, *a, *b, lua2.table(offroad=o))) for c, a, b in trips for o in (False, True)]
+    assert got == want
 
 
 def test_add_and_remove_stops_on_an_active_route(nav_env):

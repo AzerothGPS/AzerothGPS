@@ -10,7 +10,8 @@ allows (Passability's grid search with generous limits: the best the data knows)
 
 Trips from or to a spot over a cave (Data/Caves.lua) are left out: such a spot is down in the
 cave, which the flat reference walk can't judge (the caves have their own checks: `agps caves`
-and the tests).
+and the tests); so are trips from or to a capital's own cells (Data/Capitals.lua: levels over
+each other, lifts up its mesas; `agps capitals --check` walks those routes in 3D).
 
 Writes data/debug/route-check/report.json (every flagged trip, worst first) and prints a
 table per zone. Flagged trips can be turned into regression tests in app/tests.
@@ -42,7 +43,7 @@ def _runtime():
     ns.db = lua.eval("{}")
     loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
     for name in ("Geo.lua", "GPSFrame.lua", "Data/Maps.lua", "Data/Roads.lua", "Data/Terrain.lua", "Data/Caves.lua",
-                 "Passability.lua", "Router.lua"):
+                 "Data/Capitals.lua", "Passability.lua", "Router.lua"):
         loader((ADDON_DIR / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
     ns.Router.SYNC_WALKS = True
     return lua, ns
@@ -58,10 +59,12 @@ GRID_WRONG_YD = 40.0  # blocked cells this close to a road that runs over blocke
 
 
 def _in_cave(P, cont, x, y) -> bool:
-    """Whether (x, y) is over one of the caves' own cells (Data/Caves.lua)."""
+    """Whether (x, y) is over one of the caves' own cells (Data/Caves.lua), or a capital's
+    (Data/Capitals.lua: its levels, lifts and mesas are more than the flat walk can judge;
+    `agps capitals --check` walks its routes in 3D instead)."""
     r = P.OverlayRaw(cont, x, y) if P.OverlayRaw else None
     v, grid = r if isinstance(r, tuple) else (r, None)
-    return v is not None and grid is not None and bool(grid.cave)
+    return v is not None and grid is not None and bool(grid.cave or grid.capital)
 
 
 def _blocked_run(P, cont, pts, kinds, start, stop) -> float:
