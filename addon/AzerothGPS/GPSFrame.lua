@@ -1929,8 +1929,12 @@ local function SearchIndex()
     end
   end
   for _, t in ipairs(ns.Transports or {}) do
-    add(t[9], t[8] .. " dock", t[1], t[2], t[3])
-    add(t[10], t[8] .. " dock", t[4], t[5], t[6])
+    if t[8] == "portal" then -- (a dungeon's or raid's way in, Data/Instances.lua: its end on the continent)
+      add(t[10], "Instance entrance", t[1], t[2], t[3])
+    else
+      add(t[9], t[8] .. " dock", t[1], t[2], t[3])
+      add(t[10], t[8] .. " dock", t[4], t[5], t[6])
+    end
   end
   searchIndex = list
   return list

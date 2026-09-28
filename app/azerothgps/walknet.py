@@ -38,6 +38,7 @@ DROP_REACH = 15.0  # yards: a drop's top and bottom this near their levels' road
 STAIR_REACH = 30.0  # yards: a stair's ends this near their levels' roads (in a straight line on the floor)
 STAIR_MAX = 80.0  # yards: the longest way a stair between levels is looked for
 STAIR_APART = 30.0  # yards: stairs between the same two levels at least this far apart
+SEED_REACH = 8.0  # yards: a spot walked from starts on a floor this near it (height and across)
 NEIGH8 = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
 
 
@@ -77,7 +78,8 @@ def _raster_tri(pts, W, H):
 
 def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: int | None = None,
           ground=None, ground_reach: float = 24.0, prune: float = 12.0, fill: int = 0, top_reached: bool = False,
-          road_pieces: bool = False, ground_under: bool = False, log=print) -> dict:
+          road_pieces: bool = False, ground_under: bool = False, seeds=None, stair_max: float = STAIR_MAX,
+          log=print) -> dict:
     """The walk network of a model's faces.
 
     floors: [(xy triangle [(x, y)] * 3, vertex heights (3), outline_only)] -- outline_only:
@@ -90,6 +92,9 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
     road_pieces: stairs start only from pieces of the grid with roads (see there).
     ground_under: the ground under the model counts too where it has no floor about the
       ground's height (a city gate's arch overhead), not only outside it.
+    seeds: [(x, y, z)]: spots walked from (an instance's entrance, its bosses): only the floors
+      reached on foot from them (and from the ground at a mouth) are kept, as for a cave.
+    stair_max: the longest way (yards) a stair between levels is looked for.
     """
     from scipy import ndimage
     from skimage.morphology import closing, disk, remove_small_holes, remove_small_objects, skeletonize
@@ -338,7 +343,7 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
             wall3[b0:b1 + 1, r0:r1, c0:c1] |= hit
             nwall += 1
     log(f"  {label}: {nwall} wall faces")
-    if ground is not None and ground_cells.any():
+    if (ground is not None and ground_cells.any()) or seeds:
         # a cave: only the floors reached on foot from the ground at its mouth (steps of up to
         # a ledge's height, not through walls), and in each cell the lowest of them: the way
         # is on the cave's floor, under its arches and the rock over its mouth, not on them
@@ -351,6 +356,23 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
             if free[b, r, c]:
                 reached[b, r, c] = True
                 todo.append((b, int(r), int(c)))
+        nseed = 0
+        for sx, sy, sz in seeds or ():
+            # (the floor nearest the spot's height, within a few yards around it)
+            c0, r0 = (int(v) for v in cellxy(sx, sy))
+            best_ = None
+            for r in range(max(r0 - 2, 0), min(r0 + 3, H)):
+                for c in range(max(c0 - 2, 0), min(c0 + 3, W)):
+                    for b in np.nonzero(free[:, r, c])[0]:
+                        d = abs(Z0 + b + 0.5 - sz) + CELL * math.hypot(r - r0, c - c0)
+                        if d <= SEED_REACH and (best_ is None or d < best_[0]):
+                            best_ = (d, int(b), r, c)
+            if best_ is not None and not reached[best_[1], best_[2], best_[3]]:
+                reached[best_[1], best_[2], best_[3]] = True
+                todo.append(best_[1:])
+                nseed += 1
+        if seeds:
+            log(f"  {label}: walked from {nseed} of {len(seeds)} spots")
         while todo:
             b, r, c = todo.pop()
             for dr_, dc in NEIGH8:
@@ -491,7 +513,7 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
                     meets.append((d + step + other[0], pc, other[1], node, (b1, r1, c1)))
                     continue
                 nd = d + step
-                if nd <= STAIR_MAX and (other is None or nd < other[0]):
+                if nd <= stair_max and (other is None or nd < other[0]):
                     best[(b1, r1, c1)] = (nd, pc, node)
                     heapq.heappush(heap, (nd, (b1, r1, c1)))
 
@@ -577,7 +599,7 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
     stair_z: dict = {}  # a stair's heights along it (its points'), for simplifying it in 3D
     nstairs = 0
     for cost, pa, pb, na, nb_ in meets:
-        if cost > STAIR_MAX:
+        if cost > stair_max:
             break
         key = (min(pa, pb), max(pa, pb))
         mx, my = px_to_world(na[1], na[2])
@@ -742,10 +764,11 @@ def simplify_3d(pts: list, zs: list, eps: float, floor_at) -> list:
     return rec(0, len(pts) - 1)
 
 
-def model_faces(cd, wmo: int, slope: float, groups=None):
+def model_faces(cd, wmo: int, slope: float, groups=None, liquid_kinds: bool = False):
     """A model's faces in its own frame: floors (group, centroid z, triangle) and walls
     (group, (zmin, zmax), triangle), by the face's slope; and its liquids (group, local
-    (x0, y0, x1, y1), surface z). `groups`: only these."""
+    (x0, y0, x1, y1), surface z; `liquid_kinds`: and the tile's kind, 0 water, 1 ocean,
+    2 magma, 3 slime). `groups`: only these."""
     from . import interiors as I
     from .extract import adt
 
@@ -807,6 +830,9 @@ def model_faces(cd, wmo: int, slope: float, groups=None):
                                 continue
                             h = (hs[j * xv + i] + hs[j * xv + i + 1] + hs[(j + 1) * xv + i] + hs[(j + 1) * xv + i + 1]) / 4
                             x0, y0 = cx + i * T, cy + j * T
-                            liquids.append((gi, (x0, y0, x0 + T, y0 + T), h))
+                            if liquid_kinds:
+                                liquids.append((gi, (x0, y0, x0 + T, y0 + T), h, data[tbase + j * xt + i] & 0x0F))
+                            else:
+                                liquids.append((gi, (x0, y0, x0 + T, y0 + T), h))
             break
     return floors, walls, liquids

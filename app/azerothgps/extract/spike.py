@@ -63,7 +63,10 @@ class ClientData:
     def table(self, name: str) -> list[dict]:
         if name not in self._tables:
             fid = self.listfile.id(f"dbfilesclient/{name.lower()}.db2")
-            self._tables[name] = read_db2(self.casc.read(fid, zero_encrypted=True), self.dbd_dir / f"{name}.dbd")
+            dbd = self.dbd_dir / f"{name}.dbd"
+            if not dbd.exists():  # (a few tables' layouts for this client, written by hand: extract/dbd/)
+                dbd = Path(__file__).parent / "dbd" / f"{name}.dbd"
+            self._tables[name] = read_db2(self.casc.read(fid, zero_encrypted=True), dbd)
         return self._tables[name]
 
     def name(self, fid: int | str) -> str:

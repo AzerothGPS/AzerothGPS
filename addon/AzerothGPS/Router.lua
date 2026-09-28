@@ -702,6 +702,29 @@ do
   for i = 1, #chars do PACK[chars:byte(i)] = i - 1 end
 end
 
+-- A road with packed points (e[5] a string: from node a, each point the last one moved by
+-- whole yards, two characters each way; see caves.pack_points) as a plain one; `n` its nodes,
+-- `base` added to its node numbers.
+local function Unpacked(e, n, base)
+  base = base or 0
+  local c = { e[1] + base, e[2] + base }
+  if type(e[5]) ~= "string" then
+    for j = 3, #e do c[j] = e[j] end
+    return c
+  end
+  c[3], c[4] = e[3], e[4]
+  local x, y = n[e[1] * 2 - 1], n[e[1] * 2]
+  c[5], c[6] = x, y
+  local s = e[5]
+  for i = 1, #s - 3, 4 do
+    local b1, b2, b3, b4 = s:byte(i, i + 3)
+    x = x + PACK[b1] * 64 + PACK[b2] - 2048
+    y = y + PACK[b3] * 64 + PACK[b4] - 2048
+    c[#c + 1], c[#c + 2] = x, y
+  end
+  return c
+end
+
 local BuildGraph
 local HostileSide
 local function Graph(cont)
@@ -718,6 +741,10 @@ function BuildGraph(cont)
   if not roads then
     graphs[cont] = false
     return nil
+  end
+  if roads.e[1] and type(roads.e[1][5]) == "string" then
+    -- (an instance's roads, Data/Instances.lua: packed; unpacked once, in place)
+    for i, e in ipairs(roads.e) do roads.e[i] = Unpacked(e, roads.n) end
   end
   local nodes, edges = roads.n, roads.e
   local P0, P1 = ns.PerfStart or function() end, ns.PerfEnd or function() end
@@ -772,23 +799,7 @@ function BuildGraph(cont)
     local roadsEnd = #e2
     for k, e in ipairs(extra.e) do
       Breathe(k, 200)
-      local c = { e[1] + base, e[2] + base }
-      if type(e[5]) == "string" then
-        -- (packed: from node a, each point the last one moved by whole yards, two
-        -- characters each way; see caves.pack_points)
-        c[3], c[4] = e[3], e[4]
-        local x, y = extra.n[e[1] * 2 - 1], extra.n[e[1] * 2]
-        c[5], c[6] = x, y
-        local s = e[5]
-        for i = 1, #s - 3, 4 do
-          local b1, b2, b3, b4 = s:byte(i, i + 3)
-          x = x + PACK[b1] * 64 + PACK[b2] - 2048
-          y = y + PACK[b3] * 64 + PACK[b4] - 2048
-          c[#c + 1], c[#c + 2] = x, y
-        end
-      else
-        for j = 3, #e do c[j] = e[j] end
-      end
+      local c = Unpacked(e, extra.n, base)
       e2[#e2 + 1] = c
       if extra.drops and extra.drops[k] then dropOf[c] = extra.drops[k] end
       if extra.cave then caveOf[c] = true end

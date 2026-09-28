@@ -184,6 +184,43 @@ def cmd_capitals(args) -> int:
     return 0
 
 
+def cmd_instances(args) -> int:
+    """Dungeons and raids: build them, render each (data/debug/instances/) with summary.txt
+    (covered and skipped), with --write Data/Instances.lua, with --check the routes from the
+    entrance to every boss walked in 3D."""
+    from .instances import build_all, check_routes, instances_lua, render_debug
+
+    cd = _client(args)
+    out = DATA / "debug" / "instances"
+    logs: list = []
+
+    def log(s):
+        print(s)
+        logs.append(s)
+
+    report: list = []
+    built = build_all(cd, DATA, log=log, only=args.only, report=report)
+    for inst, u in built:
+        render_debug(inst, u, out)
+    text = instances_lua(cd, built, log=log) if (args.write or args.check) else None
+    if args.write:
+        if args.only:
+            print("--write builds every instance: run it without --only")
+            return 1
+        p = ADDON_DIR / "Data" / "Instances.lua"
+        p.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {p} ({p.stat().st_size // 1024} KB)")
+    if args.check:  # (the routes over the data just built)
+        log("-- routes from the entrance to each boss (the addon's routing, 3D walk over the floors):")
+        check_routes(built, log=log, text=text)
+    lines = [f"{status:8s} {inst.name} ({inst.map_id}{', raid' if inst.raid else ''}): {why}"
+             for inst, status, why in sorted(report, key=lambda r: (r[1], r[0].raid, r[0].map_id))]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "summary.txt").write_text("\n".join(lines + ["", "-- log:"] + logs) + "\n", encoding="utf-8")
+    print(f"{len(built)} instances built, {len(report) - len(built)} skipped; renders and summary.txt in {out}")
+    return 0
+
+
 def cmd_install_addon(args) -> int:
     import shutil
 
@@ -347,6 +384,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--check", action="store_true",
                     help="route from outside each gate to its places over the data and walk them in 3D")
     sp.set_defaults(fn=cmd_capitals)
+
+    sp = sub.add_parser("instances", help="build the dungeons' and raids' levels; renders in data/debug/instances/")
+    client_args(sp)
+    sp.add_argument("--only", nargs="+", help="only instances whose name contains one of these (or with this MapID)")
+    sp.add_argument("--write", action="store_true", help="also write Data/Instances.lua (gen-addon-data writes it too)")
+    sp.add_argument("--check", action="store_true",
+                    help="route from each entrance to every boss over the data and walk the routes in 3D")
+    sp.set_defaults(fn=cmd_instances)
 
     sp = sub.add_parser("extract", help="extract map art, bounds, POIs, area grid (+ roads) into data/")
     client_args(sp)

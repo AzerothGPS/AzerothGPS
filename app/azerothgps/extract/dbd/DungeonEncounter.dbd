@@ -1,0 +1,26 @@
+COLUMNS
+string Name_lang
+int ID
+int MapID
+int F3
+int F4
+int F5
+int F6
+int F7
+int F8
+int F9
+int F10
+
+LAYOUT 35863DC4
+COMMENT written by hand for client 1.60.1 from the file's own field sizes
+Name_lang
+$id$ID<32>
+MapID<16>
+F3<32>
+F4<32>
+F5<32>
+F6<32>
+F7<32>
+F8<32>
+F9<32>
+F10<32>

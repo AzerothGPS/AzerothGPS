@@ -156,6 +156,32 @@ The addon is going public, so every change must keep it policy-safe:
     the file, `--check` routes from outside the gate to every place (CityPlaces, the check's
     own, each named area of the models) and walks the routes in 3D over the floors
     (`capitals.walk_3d`; "!" marks a jump between levels or a long last leg).
+  - `Data/Instances.lua` (`app/azerothgps/instances.py`): dungeons and raids, each instance map
+    (the client's Map rows with InstanceType 1 or 2) a level of its own like Undercity's:
+    **level id = 20000 + its MapID** (the Deadmines, map 36: 20036), in the instance's own world
+    coordinates (what the game reports inside). `ns.CityLevels[level]` has `base` = the MapID and
+    `instance = true` (`Nav.InstanceLevel`: the game reporting that map as the continent puts the
+    player on the level), and the usual `ns.Terrain` (0 open, 1 water to swim, 2 closed; a
+    cave's compact rows), `ns.Roads` (points packed like the caves'; `Router.BuildGraph` unpacks
+    them), `ns.RoadDrops` and `ns.CityHeights` (rows as runs, `runs = true`) per level. Built by
+    `walknet.build` from the global WMO in the map's WDT (a WDT placement has no map offset:
+    world X = -z, Y = -x) or the dungeon WMOs its NPCs stand in (ADT maps), with their terrain
+    walked from the models' mouths near the NPCs (`GROUND_NEAR`); only floors reached on foot
+    from the entrance or a boss are kept (`seeds`); spiral stairs are looked for further
+    (`stair_max`); water deep enough to swim is a floor
+    at its surface, magma and slime close what's under them. `ns.Instances[level]`: name, map,
+    raid, entrances, bosses (name, NPC entry, x, y, z, `enc` = DungeonEncounter IDs, `order` /
+    `optional` from `app/azerothgps/data/instance_bosses.json`). Each entrance is a portal in
+    `ns.Transports` (kind "portal": continent end where the server's exit teleport puts you,
+    else the client's ghost entrance `Map.Corpse`; instance end where its entering teleport puts
+    you), so a trip from outside walks to the portal (into a cave or capital when it's in one),
+    rides it, and goes on over the instance's roads. Entrances, bosses (the server's encounters
+    and rank 3 NPCs, positions from their spawns) come from the CMaNGOS dump under
+    `data/thirdparty`; the AreaTrigger and DungeonEncounter layouts this client has are in
+    `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into
+    `data/debug/instances/` with `summary.txt` (covered, skipped and why); `--write` writes the
+    file; `--check` routes from the entrance to every boss and walks the routes in 3D ("!": a
+    jump between levels, a long last leg, yards through closed cells).
   - `Data/CityPlaces.lua`: capitals' service locations (map %), shown once a guard in that
     city has been talked to (`Layers.RevealCity`, account-wide); a stop still comes from
     asking a guard.
@@ -188,6 +214,7 @@ agps feedback          # export opt-in shared roads and trips to data/feedback/
 agps route-check        # routing on random trips in every zone; flags detours and cliff cuts
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
+agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)
 agps watch-roads       # on every /reload: roads drawn in game go into overrides/ and the data, then install
 agps import-shared <file>  # roads and walls players copied from the share page ("Copy map data...") into the data
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
