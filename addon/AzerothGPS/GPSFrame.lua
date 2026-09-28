@@ -2894,10 +2894,10 @@ function G.Init()
       if shown then out[#out + 1] = t end
       base[t.id] = i
     end
-    -- (Undo sits right above the road tools)
+    -- (the wall tools right above the road tools, and Undo above both)
     local function key(t)
-      if t.id == "roadUndo" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.5 end
-      if t.id == "wallTools" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.7 end
+      if t.id == "roadUndo" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.7 end
+      if t.id == "wallTools" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.5 end
       return rank[t.id] or 1000 + base[t.id]
     end
     table.sort(out, function(a, b) return key(a) < key(b) end)
