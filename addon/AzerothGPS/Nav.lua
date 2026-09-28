@@ -92,8 +92,9 @@ end
 function N.KeepCityOrder()
   local gps = ns.settings and ns.settings.gps
   if not gps or gps.cityKeepOrder == false or not ns.CityLevels then return false end
+  -- (the quest route button's stops are always put in the fastest order, in cities too)
   for _, s in ipairs(N.stops) do
-    if s.cont and ns.CityLevels[s.cont] then return true end
+    if s.cont and ns.CityLevels[s.cont] and not s.questRoute then return true end
   end
   return false
 end

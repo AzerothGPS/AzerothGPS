@@ -3014,3 +3014,14 @@ def test_zone_of_a_city_is_the_zone_around_it(env):
     L = ns.Layers
     assert L.ZoneOf(ids["Undercity"]) == ids["Tirisfal Glades"]
     assert L.ZoneOf(ids["Durotar"]) == ids["Durotar"]
+
+
+def test_quest_route_stops_in_a_city_still_go_in_the_fastest_order(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Cities.lua")
+    ns.settings = lua.eval("{ gps = { fastestOrder = true, cityKeepOrder = true } }")
+    N = ns.Nav
+    N.stops = lua.eval("{ { x = 1480, y = 280, cont = 10001 }, { x = 1590, y = 204, cont = 10001 } }")
+    assert N.KeepCityOrder()  # placed by hand: your order
+    N.stops = lua.eval("{ { x = 1480, y = 280, cont = 10001, questRoute = true }, { x = 1590, y = 204, cont = 10001, questRoute = true } }")
+    assert not N.KeepCityOrder()  # the quest route: fastest
