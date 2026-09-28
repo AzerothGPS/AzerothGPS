@@ -542,8 +542,8 @@ function G.InteriorLabels(place, wmo, room)
   return out
 end
 
-function G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
-  local quads = {}
+function G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half, anyGroup, quads)
+  quads = quads or {}
   local s = half / zoom
   local theta = place[5]
   local c, sn = math.cos(theta), math.sin(theta)
@@ -552,7 +552,7 @@ function G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   local groups = {}
   local zlo, zhi = room[3] - Z_SLACK, room[6] + Z_SLACK
   for _, g in ipairs(wmo.groups) do
-    if g == room or (g["in"] and g[6] >= zlo and g[3] <= zhi) then groups[#groups + 1] = g end
+    if g == room or ((anyGroup or g["in"]) and g[6] >= zlo and g[3] <= zhi) then groups[#groups + 1] = g end
   end
   table.sort(groups, function(a, b) return a[6] < b[6] end) -- higher floors drawn last
   for layer, g in ipairs(groups) do
@@ -568,6 +568,29 @@ function G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
         quads[#quads + 1] = { fid, dx, dy, w / 2 * s + 0.5, h / 2 * s + 0.5, texRot, 0, 1, 0, 1, math.min(layer, 7) }
       end
     end
+  end
+  return quads
+end
+
+-- A dungeon's map from the game's own minimap art of its models (Data/Instances.lua:
+-- ns.Interiors[its map id]): the player's floor while they're in it and the view is on them
+-- (px, py, pz given; found like a building's room), else every floor, the higher ones over the
+-- lower. Quads (none: no art for it, the floors' outline instead).
+local ALL_FLOORS = { 0, 0, -1e9, 0, 0, 1e9 }
+function G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, px, py, pz)
+  local lvl = ns.CityLevels and ns.CityLevels[inst]
+  local mapID = lvl and lvl.base
+  local list = mapID and ns.Interiors and ns.Interiors[mapID]
+  if not list then return {} end
+  if px then
+    local place, wmo, room = G.FindInterior(px, py, pz, mapID, GetMinimapZoneText and GetMinimapZoneText(),
+      IsIndoors and IsIndoors())
+    if place then return G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half, true) end
+  end
+  local quads = {}
+  for _, p in ipairs(list) do
+    local w = ns.WMOs[p[1]]
+    if w then G.LayoutInterior(cx, cy, p, w, ALL_FLOORS, rot, zoom, half, true, quads) end
   end
   return quads
 end
@@ -753,19 +776,20 @@ local function Acquire(i)
   return t
 end
 
--- A dungeon's map (no art for it): a dark background, its floors filled in (the open runs
--- G.BlockEdges works out, as thick lines under the roads), or nothing with `edges` nil.
+-- A dungeon's map (`on`): a dark background (the frame has none of its own: map art always
+-- covers it), and with `edges` its floors filled in (the open runs G.BlockEdges works out, as
+-- thick lines under the game's minimap art of it and the roads).
 local floorBg, floorLines = nil, {}
 local FLOOR_BG, FLOOR = { 0.05, 0.045, 0.04, 0.95 }, { 0.36, 0.31, 0.24 }
-function G.DrawFloors(edges, cx, cy, rot, s)
+function G.DrawFloors(on, edges, cx, cy, rot, s)
   local n = 0
-  if edges then
-    if not floorBg then
-      floorBg = tileLayer:CreateTexture(nil, "BACKGROUND")
-      floorBg:SetAllPoints(tileLayer)
-      floorBg:SetColorTexture(FLOOR_BG[1], FLOOR_BG[2], FLOOR_BG[3], FLOOR_BG[4])
-    end
-    floorBg:Show()
+  if on and not floorBg then
+    floorBg = tileLayer:CreateTexture(nil, "BACKGROUND")
+    floorBg:SetAllPoints(tileLayer)
+    floorBg:SetColorTexture(FLOOR_BG[1], FLOOR_BG[2], FLOOR_BG[3], FLOOR_BG[4])
+  end
+  if floorBg then floorBg:SetShown(on and true or false) end
+  if on and edges then
     local fill, w = edges.fill, (edges.step or 2) * s + 1
     for i = 1, fill and #fill - 2 or 0, 3 do
       local x = fill[i]
@@ -776,7 +800,7 @@ function G.DrawFloors(edges, cx, cy, rot, s)
       n = n + 1
       local l = floorLines[n]
       if not l then
-        l = tileLayer:CreateLine(nil, "ARTWORK")
+        l = tileLayer:CreateLine(nil, "ARTWORK", nil, -8) -- (under the art)
         l:SetColorTexture(FLOOR[1], FLOOR[2], FLOOR[3], 1)
         floorLines[n] = l
       end
@@ -785,8 +809,6 @@ function G.DrawFloors(edges, cx, cy, rot, s)
       l:SetEndPoint("CENTER", tileLayer, bx, by)
       l:Show()
     end
-  elseif floorBg then
-    floorBg:Hide()
   end
   for i = n + 1, #floorLines do floorLines[i]:Hide() end
 end
@@ -1219,8 +1241,12 @@ function G.Update()
     place, wmo, room = free.interior[1], free.interior[2], free.interior[3]
   end
   G.inside = place and ((room.n ~= "" and room.n or "?") .. " / " .. place[1]) or nil
+  local instArt = false
   if inst and not browse then
-    quads = {} -- (its floors: G.DrawFloors, below)
+    -- the game's minimap art of its models; none: its floors' outline (G.DrawFloors, below)
+    local mine = here and onMe
+    quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, mine and px or nil, py, pz)
+    instArt = #quads > 0
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   elseif browse then
@@ -1240,7 +1266,9 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
-  G.DrawFloors(inst and not browse and G.BlockEdges(inst, cx, cy, zoom) or nil, cx, cy, rot, s)
+  -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
+  -- still show where you can walk)
+  G.DrawFloors(inst and not browse, inst and not browse and G.BlockEdges(inst, cx, cy, zoom) or nil, cx, cy, rot, s)
   ns.PerfEnd("redraw: tiles", pt)
   pt = ns.PerfStart()
   segN = 0
@@ -1252,8 +1280,8 @@ function G.Update()
     end
   end
   -- walls (blood red): with the roads shown, or the road tools on
-  if inst then -- a dungeon's map: its floors' outline (and walls drawn in it)
-    for _, sg in ipairs(G.LayoutWalls(cx, cy, inst, rot, zoom, half, true)) do
+  if inst then -- a dungeon's map: its floors' outline where there's no art (and walls drawn in it)
+    for _, sg in ipairs(G.LayoutWalls(cx, cy, inst, rot, zoom, half, not instArt)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], sg.edge and 8 or 7, sg.edge and 2 or 3)
     end
   elseif st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
@@ -1996,8 +2024,13 @@ local function LeaveOpened()
   local from = openedFrom
   if from then
     openedFrom = nil
-    browse, browseZoom, browseCont, browseBounds = from.browse, from.browseZoom, from.browseCont, from.browseBounds
+    browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
+    if from.browse and ns.Maps and ns.Maps[from.browse] then
+      G.Browse(from.browse, from.browseCont) -- (its bounds; saved over a /reload without them)
+      browseZoom = from.browseZoom or browseZoom
+    end
     fromTerrain, free = from.fromTerrain, from.free
+    if free and free.city and not free.interior then free.interior = G.CityInterior(free.city) end
     if from.zoom then S().zoom = from.zoom end
     if recenter then recenter:SetShown(free ~= nil) end
     elapsed = 1
@@ -3935,10 +3968,19 @@ function G.UpdateZoneHover()
 end
 
 -- The panned view (nil while following the player), to come back to after a /reload.
+-- (a view's free look, plain: no interior map tables)
+local function PlainFree(f)
+  return f and { x = f.x, y = f.y, rot = f.rot, cross = f.cross, cont = f.cont, city = f.city } or nil
+end
+
 function G.SaveView()
   if not free then return nil end
-  return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont,
+  local from = openedFrom
+  return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont, city = free.city,
     browse = browse, browseZoom = browseZoom, browseCont = browseCont, fromTerrain = fromTerrain,
+    -- (the view a city's or dungeon's map was opened from: right-click still goes back there)
+    from = from and { browse = from.browse, browseZoom = from.browseZoom, browseCont = from.browseCont,
+      fromTerrain = from.fromTerrain, zoom = from.zoom, free = PlainFree(from.free) } or nil,
     who = UnitGUID and UnitGUID("player"), t = time() }
 end
 
@@ -3952,7 +3994,9 @@ function G.RestoreView(v)
   else
     browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
   end
-  free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont }
+  free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont, city = v.city,
+    interior = v.city and G.CityInterior(v.city) or nil }
+  openedFrom = v.from
   if recenter then recenter:Show() end
   elapsed = 1
 end

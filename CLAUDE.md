@@ -182,9 +182,14 @@ The addon is going public, so every change must keep it policy-safe:
     instance's map (`G.ShowInstance`: no art here, its floors' outline from
     `G.BlockEdges` at `EDGE_SAMPLES_INSTANCE`, its roads, boss icons numbered in order, the way
     out); right-click or the way-out icon goes back to the entrance (`G.ShowEntrance`). The
-    player inside one gets the same view (`G.InstanceOf`, `view.instance`). With no map art
-    the frame has no background of its own: `G.DrawFloors` puts a dark one under it and fills
-    the floors (the open runs `BlockEdges` also returns, `edges.fill`). Right-click in a city's
+    player inside one gets the same view (`G.InstanceOf`, `view.instance`). Its art is the
+    game's own minimap images of its models (the WMO interior maps, as buildings'), written to
+    the end of `Instances.lua` as `ns.WMOs` / `ns.Interiors[map id]` (`interiors.build_places`
+    over the instance's models, `places_lua`): `G.LayoutInstanceArt` draws every floor (higher
+    over lower), or the player's floor while they're in it (`G.FindInterior` by height). The
+    frame has no background of its own: `G.DrawFloors` puts a dark one under a dungeon's map,
+    and where it has no art fills its floors (the open runs `BlockEdges` also returns,
+    `edges.fill`) and outlines them. Right-click in a city's
     or dungeon's map opened from its icon goes back to the view it was opened from
     (`openedFrom`, `RememberView`). **Boss route** (quick button, `/agps bosses`,
     `G.BossRoute`/`G.BossStops`): the bosses in `order`, optional and dead ones left out, kept

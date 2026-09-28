@@ -187,3 +187,31 @@ def test_boss_kills_mark_boss_stops_done(inst_env):
     assert not N.BossDead(lua.table(cont=DM, boss=644))
     assert N.BossKilled(WC, None, None, "no such boss") == 0
     assert not N.BossDead(lua.table(cont=DM, boss=644))
+
+
+def test_instance_maps_use_the_games_minimap_art(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "Data/Interiors.lua", "Data/Instances.lua", "GPSFrame.lua")  # (Interiors.lua first, as the toc)
+    G, P = ns.GPS, ns.Passability
+    lua.execute("GetMinimapZoneText = function() return '' end IsIndoors = function() return true end")
+    with_art = []
+    for lvl in sorted(int(k) for k in ns.Instances.keys()):
+        mid = ns.CityLevels[lvl].base
+        places = ns.Interiors[mid]
+        if not places:
+            continue
+        with_art.append(ns.Instances[lvl].name)
+        # its models' art lies over its walk grid (same coordinates)
+        x0, x1, y0, y1 = P.GridBounds(lvl)
+        over = [places[i] for i in range(1, len(places) + 1)
+                if places[i][8] >= x0 and places[i][6] <= x1 and places[i][9] >= y0 and places[i][7] <= y1]
+        assert over, ns.Instances[lvl].name
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        zoom = max(x1 - x0, y1 - y0) / 2
+        assert len(G.LayoutInstanceArt(cx, cy, lvl, 0, zoom, 200)) > 0, ns.Instances[lvl].name
+    assert "Shadowfang Keep" in with_art and "Deadmines" in with_art and len(with_art) >= 20
+    # in it: the player's floor only (VanCleef's ship), fewer images than every floor
+    x0, x1, y0, y1 = P.GridBounds(DM)
+    every = len(G.LayoutInstanceArt(VANCLEEF[0], VANCLEEF[1], DM, 0, 150, 200))
+    mine = len(G.LayoutInstanceArt(VANCLEEF[0], VANCLEEF[1], DM, 0, 150, 200, VANCLEEF[0], VANCLEEF[1], 40.0))
+    assert 0 < mine <= every

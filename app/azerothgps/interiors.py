@@ -159,6 +159,12 @@ def minimap_sets(cd: ClientData) -> dict[str, MinimapSet]:
 def build(cd: ClientData, continents=None, log=print) -> dict:
     if continents is None:
         from .extract.pipeline import CONTINENTS as continents  # the shared list
+    return build_places(cd, ((c, placements(cd, c)) for c in continents), log=log)
+
+
+def build_places(cd: ClientData, by_map, log=print) -> dict:
+    """The interior maps of placed WMOs: `by_map` = (map id, [Placement, ...]) pairs (a
+    continent's ADT placements, or a dungeon's models). {"wmos": ..., "places": ...}"""
     sets = minimap_sets(cd)
     by_wmo: dict[int, MinimapSet] = {s.source_wmo: s for s in sets.values()}
     fp_index: dict[tuple, int] = {}
@@ -175,8 +181,7 @@ def build(cd: ClientData, continents=None, log=print) -> dict:
     sizes: dict[int, tuple[int, int]] = {}
     out_wmos: dict[int, dict] = {}  # placed WMO fid -> {groups...}
     out_places: list[dict] = []
-    for cont in continents:
-        pl = placements(cd, cont)
+    for cont, pl in by_map:
         used = 0
         for p in pl:
             if p.tilt > MAX_TILT_DEG:
@@ -205,8 +210,33 @@ def build(cd: ClientData, continents=None, log=print) -> dict:
                 out_places.append({"cont": cont, "wmo": p.wmo, "x": p.x, "y": p.y, "z": p.z,
                                    "yaw": math.radians((p.yaw + 180.0) % 360.0), "bounds": p.bounds})
                 used += 1
-        log(f"  interiors: continent {cont}: {used} placed buildings with interior maps")
+        log(f"  interiors: map {cont}: {used} placed buildings with interior maps")
     return {"wmos": {k: v for k, v in out_wmos.items() if v}, "places": out_places}
+
+
+def places_lua(doc: dict) -> list[str]:
+    """A dungeon's interior maps, added to Interiors.lua's (loaded before): its WMOs' groups
+    and where they're placed, keyed by its map id (what the game reports inside)."""
+    out = []
+    for wfid in sorted(doc["wmos"]):
+        w = doc["wmos"][wfid]
+        out.append(f"ns.WMOs[{wfid}] = ns.WMOs[{wfid}] or {{ groups = {{")
+        for g in w["groups"]:
+            bb = ",".join(f"{v:.1f}" for v in g["bbox"])
+            bl = ",".join("{%d,%d,%d,%d,%d}" % b for b in g["blocks"])
+            name = g["name"].replace("\\", "\\\\").replace('"', '\\"')
+            indoor = "true" if g["flags"] & 0x2000 else "false"
+            out.append(f'  {{{bb}, n = "{name}", ["in"] = {indoor}, blocks = {{{bl}}}}},')
+        out.append("} }")
+    for cont in sorted({p["cont"] for p in doc["places"]}):
+        out.append(f"ns.Interiors[{cont}] = {{")
+        for p in doc["places"]:
+            if p["cont"] == cont:
+                b = p["bounds"]
+                out.append(f"  {{{p['wmo']},{p['x']:.2f},{p['y']:.2f},{p['z']:.2f},{p['yaw']:.5f},"
+                           f"{b[0]:.1f},{b[1]:.1f},{b[2]:.1f},{b[3]:.1f}}},")
+        out.append("}")
+    return out
 
 
 def interiors_lua(cd: ClientData, doc: dict) -> str:

@@ -616,6 +616,13 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
             place = zone_name(cd, c, x, y, zcache) or inst.name
             out.append(f"ns.Transports[#ns.Transports + 1] = {{ {c}, {x:.1f}, {y:.1f}, {L}, {ix:.1f}, {iy:.1f}, "
                        f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(inst.name)}, \"portal\" }}")
+    # the game's own minimap art of each instance's models (its map in the addon; the floors'
+    # outline where there's none), like the buildings' in Interiors.lua, keyed by its map id
+    out.append("-- ns.WMOs / ns.Interiors[map id]: the instances' interior maps (Interiors.lua's format)")
+    out.append("ns.WMOs = ns.WMOs or {}")
+    out.append("ns.Interiors = ns.Interiors or {}")
+    art = I.build_places(cd, ((inst.map_id, u["placements"]) for inst, u in built), log=log)
+    out.extend(I.places_lua(art))
     return "\n".join(out) + "\n"
 
 
