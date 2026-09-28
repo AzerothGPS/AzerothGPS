@@ -1,0 +1,2029 @@
+{
+  "Ragefire Chasm": {
+    "map_hint": "Ragefire Chasm",
+    "order": [
+      {
+        "boss": "Oggleflint",
+        "optional": false,
+        "wing": null,
+        "note": "First path to the right from the entrance."
+      },
+      {
+        "boss": "Taragaman the Hungerer",
+        "optional": false,
+        "wing": null,
+        "note": "Middle of the lava lake area."
+      },
+      {
+        "boss": "Jergosh the Invoker",
+        "optional": false,
+        "wing": null,
+        "note": "Near the far end."
+      },
+      {
+        "boss": "Bazzalan",
+        "optional": false,
+        "wing": null,
+        "note": "Upper walkway at the far end, above Jergosh."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Ragefire_Chasm_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/ragefire-chasm/"
+    ]
+  },
+  "Wailing Caverns": {
+    "map_hint": "Wailing Caverns",
+    "order": [
+      {
+        "boss": "Lady Anacondra",
+        "optional": false,
+        "wing": null,
+        "note": "One of the four Fanglords."
+      },
+      {
+        "boss": "Kresh",
+        "optional": true,
+        "wing": null,
+        "note": "Turtle in the river; not hostile until attacked."
+      },
+      {
+        "boss": "Lord Cobrahn",
+        "optional": false,
+        "wing": null,
+        "note": "Fanglord."
+      },
+      {
+        "boss": "Lord Pythas",
+        "optional": false,
+        "wing": null,
+        "note": "Fanglord."
+      },
+      {
+        "boss": "Deviate Faerie Dragon",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn; not always present."
+      },
+      {
+        "boss": "Skum",
+        "optional": true,
+        "wing": null,
+        "note": "In the water before Serpentis."
+      },
+      {
+        "boss": "Lord Serpentis",
+        "optional": false,
+        "wing": null,
+        "note": "Fanglord; the last of the four."
+      },
+      {
+        "boss": "Verdan the Everliving",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Mutanus the Devourer",
+        "optional": false,
+        "wing": null,
+        "note": "Appears during the Disciple of Naralex escort, after all four Fanglords are dead."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Wailing_Caverns",
+      "https://www.warcrafttavern.com/wow-classic/guides/wailing-caverns/",
+      "https://almarsguides.com/wow/instances/classic/WailingCaverns/",
+      "https://wowhandbook.com/zones/dungeons/wailing-caverns/"
+    ]
+  },
+  "The Deadmines": {
+    "map_hint": "The Deadmines",
+    "order": [
+      {
+        "boss": "Rhahk'Zor",
+        "optional": false,
+        "wing": null,
+        "note": "First boss; guards the first door."
+      },
+      {
+        "boss": "Miner Johnson",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn past Rhahk'Zor's door."
+      },
+      {
+        "boss": "Sneed's Shredder",
+        "optional": false,
+        "wing": null,
+        "note": "Sneed climbs out when the shredder dies; kill both.",
+        "npcs": [
+          "Sneed's Shredder",
+          "Sneed"
+        ]
+      },
+      {
+        "boss": "Gilnid",
+        "optional": false,
+        "wing": null,
+        "note": "Goblin foundry."
+      },
+      {
+        "boss": "Mr. Smite",
+        "optional": false,
+        "wing": null,
+        "note": "Ironclad Cove, on the way to the ship."
+      },
+      {
+        "boss": "Captain Greenskin",
+        "optional": false,
+        "wing": null,
+        "note": "On the ship."
+      },
+      {
+        "boss": "Edwin VanCleef",
+        "optional": false,
+        "wing": null,
+        "note": "Ship's top cabin; final boss."
+      },
+      {
+        "boss": "Cookie",
+        "optional": true,
+        "wing": null,
+        "note": "By the ship, usually killed on the way out."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Deadmines_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/deadmines/",
+      "https://almarsguides.com/wow/instances/classic/Deadmines/"
+    ]
+  },
+  "Shadowfang Keep": {
+    "map_hint": "Shadowfang Keep",
+    "order": [
+      {
+        "boss": "Rethilgore",
+        "optional": false,
+        "wing": null,
+        "note": "First boss, near the start."
+      },
+      {
+        "boss": "Razorclaw the Butcher",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Baron Silverlaine",
+        "optional": false,
+        "wing": null,
+        "note": "Often skipped."
+      },
+      {
+        "boss": "Commander Springvale",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Odo the Blindwatcher",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Deathsworn Captain",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn; not always present."
+      },
+      {
+        "boss": "Fenrus the Devourer",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Wolf Master Nandos",
+        "optional": false,
+        "wing": null,
+        "note": "Guards the door to Arugal."
+      },
+      {
+        "boss": "Archmage Arugal",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Shadowfang_Keep_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/shadowfang-keep/",
+      "https://almarsguides.com/wow/instances/classic/ShadowfangKeep/"
+    ]
+  },
+  "Blackfathom Deeps": {
+    "map_hint": "Blackfathom Deeps",
+    "order": [
+      {
+        "boss": "Ghamoo-ra",
+        "optional": false,
+        "wing": null,
+        "note": "First boss."
+      },
+      {
+        "boss": "Lady Sarevess",
+        "optional": false,
+        "wing": null,
+        "note": "Side cavern reached through an underwater tunnel."
+      },
+      {
+        "boss": "Gelihast",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Lorgus Jett",
+        "optional": false,
+        "wing": null,
+        "note": "Can spawn in several places."
+      },
+      {
+        "boss": "Baron Aquanis",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned from the Fathom Stone (Horde quest)."
+      },
+      {
+        "boss": "Old Serra'kis",
+        "optional": true,
+        "wing": null,
+        "note": "Swims underwater; sources differ on whether before or after Kelris."
+      },
+      {
+        "boss": "Twilight Lord Kelris",
+        "optional": false,
+        "wing": null,
+        "note": "Moonshrine Sanctum; light the fires after to open the way on."
+      },
+      {
+        "boss": "Aku'mai",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Blackfathom_Deeps_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/blackfathom-deeps/",
+      "https://almarsguides.com/wow/instances/classic/BlackfathomDepths/"
+    ]
+  },
+  "The Stockade": {
+    "map_hint": "The Stockade",
+    "order": [
+      {
+        "boss": "Targorr the Dread",
+        "optional": false,
+        "wing": null,
+        "note": "Spawn point varies."
+      },
+      {
+        "boss": "Kam Deepfury",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Hamhock",
+        "optional": false,
+        "wing": null,
+        "note": "Before Bazil Thredd."
+      },
+      {
+        "boss": "Bazil Thredd",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Dextren Ward",
+        "optional": false,
+        "wing": null,
+        "note": "In the opposite wing from Bazil Thredd."
+      },
+      {
+        "boss": "Bruegal Ironknuckle",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn; not always present."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Stormwind_Stockade_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/stockade/",
+      "https://almarsguides.com/wow/instances/classic/TheStockades/"
+    ]
+  },
+  "Gnomeregan": {
+    "map_hint": "Gnomeregan",
+    "order": [
+      {
+        "boss": "Grubbis",
+        "optional": true,
+        "wing": null,
+        "note": "Front entrance; comes during the Emi Shortfuse event, with Chomper.",
+        "npcs": [
+          "Grubbis",
+          "Chomper"
+        ]
+      },
+      {
+        "boss": "Viscous Fallout",
+        "optional": true,
+        "wing": null,
+        "note": "Large side room; often skipped."
+      },
+      {
+        "boss": "Electrocutioner 6000",
+        "optional": false,
+        "wing": null,
+        "note": "Drops the Workshop Key (back door)."
+      },
+      {
+        "boss": "Crowd Pummeler 9-60",
+        "optional": false,
+        "wing": null,
+        "note": "Easy to walk past by accident."
+      },
+      {
+        "boss": "Dark Iron Ambassador",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn; not always present."
+      },
+      {
+        "boss": "Mekgineer Thermaplugg",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Gnomeregan_(instance)",
+      "https://www.warcrafttavern.com/wow-classic/guides/gnomeregan/",
+      "https://almarsguides.com/wow/instances/classic/Gnomeregan/"
+    ]
+  },
+  "Razorfen Kraul": {
+    "map_hint": "Razorfen Kraul",
+    "order": [
+      {
+        "boss": "Roogug",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Aggem Thorncurse",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Death Speaker Jargba",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Overlord Ramtusk",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Earthcaller Halmgar",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Agathelos the Raging",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Blind Hunter",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Charlga Razorflank",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Razorfen_Kraul_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/razorfen-kraul/",
+      "https://almarsguides.com/wow/instances/classic/RazorfenKraul/"
+    ]
+  },
+  "Scarlet Monastery": {
+    "map_hint": "Scarlet Monastery",
+    "order": [
+      {
+        "boss": "Interrogator Vishas",
+        "optional": false,
+        "wing": "Graveyard",
+        "note": ""
+      },
+      {
+        "boss": "Azshir the Sleepless",
+        "optional": true,
+        "wing": "Graveyard",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Fallen Champion",
+        "optional": true,
+        "wing": "Graveyard",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Ironspine",
+        "optional": true,
+        "wing": "Graveyard",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Bloodmage Thalnos",
+        "optional": false,
+        "wing": "Graveyard",
+        "note": "End of the wing."
+      },
+      {
+        "boss": "Houndmaster Loksey",
+        "optional": false,
+        "wing": "Library",
+        "note": ""
+      },
+      {
+        "boss": "Arcanist Doan",
+        "optional": false,
+        "wing": "Library",
+        "note": "End of the wing."
+      },
+      {
+        "boss": "Herod",
+        "optional": false,
+        "wing": "Armory",
+        "note": "End of the wing; the wing's only boss."
+      },
+      {
+        "boss": "Scarlet Commander Mograine",
+        "optional": false,
+        "wing": "Cathedral",
+        "note": "At the altar at the end of the cathedral."
+      },
+      {
+        "boss": "High Inquisitor Whitemane",
+        "optional": false,
+        "wing": "Cathedral",
+        "note": "Joins the fight after Mograine falls."
+      },
+      {
+        "boss": "High Inquisitor Fairbanks",
+        "optional": true,
+        "wing": "Cathedral",
+        "note": "Secret room behind the altar, opened with a torch."
+      }
+    ],
+    "sources": [
+      "https://www.warcrafttavern.com/wow-classic/guides/scarlet-monastery/",
+      "https://warcraft.wiki.gg/wiki/High_Inquisitor_Fairbanks",
+      "https://almarsguides.com/wow/instances/classic/SMGraveyard/",
+      "https://almarsguides.com/wow/instances/classic/SMCathedral/"
+    ]
+  },
+  "Razorfen Downs": {
+    "map_hint": "Razorfen Downs",
+    "order": [
+      {
+        "boss": "Tuten'kash",
+        "optional": false,
+        "wing": null,
+        "note": "Summoned with the gong."
+      },
+      {
+        "boss": "Plaguemaw the Rotting",
+        "optional": true,
+        "wing": null,
+        "note": "Comes during the idol event (escort quest)."
+      },
+      {
+        "boss": "Mordresh Fire Eye",
+        "optional": false,
+        "wing": null,
+        "note": "On the bone pile."
+      },
+      {
+        "boss": "Glutton",
+        "optional": false,
+        "wing": null,
+        "note": "Start of the Spiral of Thorns."
+      },
+      {
+        "boss": "Ragglesnout",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Amnennar the Coldbringer",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Razorfen_Downs_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/razorfen-downs/",
+      "https://almarsguides.com/wow/instances/classic/RazorfenDowns/"
+    ]
+  },
+  "Uldaman": {
+    "map_hint": "Uldaman",
+    "order": [
+      {
+        "boss": "Baelog",
+        "optional": false,
+        "wing": null,
+        "note": "The Lost Dwarves, fought together.",
+        "npcs": [
+          "Baelog",
+          "Olaf",
+          "Eric \"The Swift\""
+        ]
+      },
+      {
+        "boss": "Revelosh",
+        "optional": false,
+        "wing": null,
+        "note": "Drops an item needed to summon Ironaya."
+      },
+      {
+        "boss": "Ironaya",
+        "optional": false,
+        "wing": null,
+        "note": "Map Chamber."
+      },
+      {
+        "boss": "Obsidian Sentinel",
+        "optional": false,
+        "wing": null,
+        "note": "By the side (back door) entrance."
+      },
+      {
+        "boss": "Ancient Stone Keeper",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Galgann Firehammer",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Grimlok",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Archaedas",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss, in the deepest chamber."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Uldaman",
+      "https://www.warcrafttavern.com/wow-classic/guides/uldaman/",
+      "https://almarsguides.com/wow/instances/classic/Uldaman/"
+    ]
+  },
+  "Zul'Farrak": {
+    "map_hint": "Zul'Farrak",
+    "order": [
+      {
+        "boss": "Zerillis",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Theka the Martyr",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Antu'sul",
+        "optional": false,
+        "wing": null,
+        "note": "In a cave off Theka's area."
+      },
+      {
+        "boss": "Witch Doctor Zum'rah",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Shadowpriest Sezz'ziz",
+        "optional": false,
+        "wing": null,
+        "note": "Pyramid stairs event, with Nekrum.",
+        "npcs": [
+          "Shadowpriest Sezz'ziz",
+          "Nekrum Gutchewer"
+        ]
+      },
+      {
+        "boss": "Sergeant Bly",
+        "optional": false,
+        "wing": null,
+        "note": "Freed during the stairs event; turns hostile after.",
+        "npcs": [
+          "Sergeant Bly",
+          "Raven",
+          "Oro Eyegouge",
+          "Murta Grimgut"
+        ]
+      },
+      {
+        "boss": "Chief Ukorz Sandscalp",
+        "optional": false,
+        "wing": null,
+        "note": "With Ruuzlu, behind the door Weegli opens.",
+        "npcs": [
+          "Chief Ukorz Sandscalp",
+          "Ruuzlu"
+        ]
+      },
+      {
+        "boss": "Hydromancer Velratha",
+        "optional": false,
+        "wing": null,
+        "note": "By the sacred pool."
+      },
+      {
+        "boss": "Gahz'rilla",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned at the pool with the Mallet of Zul'Farrak."
+      },
+      {
+        "boss": "Dustwraith",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Sandarr Dunereaver",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Zul%27Farrak",
+      "https://www.warcrafttavern.com/wow-classic/guides/zulfarrak/",
+      "https://almarsguides.com/wow/instances/classic/Zulfarrak/"
+    ]
+  },
+  "Maraudon": {
+    "map_hint": "Maraudon",
+    "order": [
+      {
+        "boss": "Noxxion",
+        "optional": false,
+        "wing": "Orange",
+        "note": "Foulspore Cavern."
+      },
+      {
+        "boss": "Razorlash",
+        "optional": false,
+        "wing": "Orange",
+        "note": "Foulspore Cavern."
+      },
+      {
+        "boss": "Lord Vyletongue",
+        "optional": false,
+        "wing": "Purple",
+        "note": "Wicked Grotto."
+      },
+      {
+        "boss": "Meshlok the Harvester",
+        "optional": true,
+        "wing": "Poison Falls",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Celebras the Cursed",
+        "optional": false,
+        "wing": "Poison Falls",
+        "note": "Where the orange and purple sides meet."
+      },
+      {
+        "boss": "Landslide",
+        "optional": false,
+        "wing": "Inner",
+        "note": "Earth Song Falls."
+      },
+      {
+        "boss": "Rotgrip",
+        "optional": false,
+        "wing": "Inner",
+        "note": "In the water below Princess Theradras."
+      },
+      {
+        "boss": "Tinkerer Gizlock",
+        "optional": false,
+        "wing": "Inner",
+        "note": "Sources differ on where he stands."
+      },
+      {
+        "boss": "Princess Theradras",
+        "optional": false,
+        "wing": "Inner",
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Maraudon",
+      "https://www.warcrafttavern.com/wow-classic/guides/maraudon/",
+      "https://almarsguides.com/wow/instances/classic/Maraudon/",
+      "https://almarsguides.com/wow/instances/classic/MaraudonOrange/",
+      "https://almarsguides.com/wow/instances/classic/MaraudonPurple/",
+      "https://wowhandbook.com/zones/dungeons/maraudon/",
+      "https://mmonster.co/wow-forever/guides/dungeons/maraudon"
+    ]
+  },
+  "Sunken Temple": {
+    "map_hint": "The Temple of Atal'Hakkar",
+    "order": [
+      {
+        "boss": "Atal'alarion",
+        "optional": true,
+        "wing": null,
+        "note": "Lower level; summoned by the statue puzzle."
+      },
+      {
+        "boss": "Gasher",
+        "optional": false,
+        "wing": null,
+        "note": "One of six trolls on the upper ring, any order; all six open the way to Jammal'an."
+      },
+      {
+        "boss": "Loro",
+        "optional": false,
+        "wing": null,
+        "note": "Upper ring troll."
+      },
+      {
+        "boss": "Hukku",
+        "optional": false,
+        "wing": null,
+        "note": "Upper ring troll."
+      },
+      {
+        "boss": "Zolo",
+        "optional": false,
+        "wing": null,
+        "note": "Upper ring troll."
+      },
+      {
+        "boss": "Mijan",
+        "optional": false,
+        "wing": null,
+        "note": "Upper ring troll."
+      },
+      {
+        "boss": "Zul'Lor",
+        "optional": false,
+        "wing": null,
+        "note": "Upper ring troll."
+      },
+      {
+        "boss": "Jammal'an the Prophet",
+        "optional": false,
+        "wing": null,
+        "note": "With Ogom the Wretched.",
+        "npcs": [
+          "Jammal'an the Prophet",
+          "Ogom the Wretched"
+        ]
+      },
+      {
+        "boss": "Dreamscythe",
+        "optional": false,
+        "wing": null,
+        "note": "Dragon pair, with Weaver.",
+        "npcs": [
+          "Dreamscythe",
+          "Weaver"
+        ]
+      },
+      {
+        "boss": "Avatar of Hakkar",
+        "optional": true,
+        "wing": null,
+        "note": "Summoning event (quest)."
+      },
+      {
+        "boss": "Morphaz",
+        "optional": false,
+        "wing": null,
+        "note": "Dragon pair, with Hazzas.",
+        "npcs": [
+          "Morphaz",
+          "Hazzas"
+        ]
+      },
+      {
+        "boss": "Shade of Eranikus",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Sunken_Temple",
+      "https://www.warcrafttavern.com/wow-classic/guides/temple-of-atalhakkar/",
+      "https://almarsguides.com/wow/instances/classic/SunkenTemple/"
+    ]
+  },
+  "Blackrock Depths": {
+    "map_hint": "Blackrock Depths",
+    "order": [
+      {
+        "boss": "Lord Roccor",
+        "optional": false,
+        "wing": null,
+        "note": "Near the entrance."
+      },
+      {
+        "boss": "High Interrogator Gerstahn",
+        "optional": false,
+        "wing": null,
+        "note": "Detention Block."
+      },
+      {
+        "boss": "Houndmaster Grebmar",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Ring of Law",
+        "optional": false,
+        "wing": null,
+        "note": "Arena; one boss at random.",
+        "npcs": [
+          "Anub'shiah",
+          "Eviscerator",
+          "Gorosh the Dervish",
+          "Grizzle",
+          "Hedrum the Creeper",
+          "Ok'thor the Breaker"
+        ]
+      },
+      {
+        "boss": "Pyromancer Loregrain",
+        "optional": false,
+        "wing": null,
+        "note": "Shrine of Thaurissan."
+      },
+      {
+        "boss": "Warder Stilgiss",
+        "optional": true,
+        "wing": null,
+        "note": "The Black Vault, with Verek.",
+        "npcs": [
+          "Warder Stilgiss",
+          "Verek"
+        ]
+      },
+      {
+        "boss": "Watchman Doomgrip",
+        "optional": true,
+        "wing": null,
+        "note": "The Black Vault, after the relic coffers."
+      },
+      {
+        "boss": "Fineous Darkvire",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Lord Incendius",
+        "optional": false,
+        "wing": null,
+        "note": "The Black Anvil."
+      },
+      {
+        "boss": "Bael'Gar",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "General Angerforge",
+        "optional": false,
+        "wing": null,
+        "note": "West Garrison."
+      },
+      {
+        "boss": "Golem Lord Argelmach",
+        "optional": false,
+        "wing": null,
+        "note": "The Manufactory."
+      },
+      {
+        "boss": "Hurley Blackbreath",
+        "optional": true,
+        "wing": "Grim Guzzler",
+        "note": "Appears after the ale kegs are taken."
+      },
+      {
+        "boss": "Ribbly Screwspigot",
+        "optional": true,
+        "wing": "Grim Guzzler",
+        "note": ""
+      },
+      {
+        "boss": "Plugger Spazzring",
+        "optional": true,
+        "wing": "Grim Guzzler",
+        "note": ""
+      },
+      {
+        "boss": "Phalanx",
+        "optional": false,
+        "wing": "Grim Guzzler",
+        "note": ""
+      },
+      {
+        "boss": "Ambassador Flamelash",
+        "optional": false,
+        "wing": null,
+        "note": "Chamber of Enchantment."
+      },
+      {
+        "boss": "Panzor the Invincible",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Doom'rel",
+        "optional": false,
+        "wing": null,
+        "note": "The Seven, in the Summoners' Tomb; one after another.",
+        "npcs": [
+          "Anger'rel",
+          "Seeth'rel",
+          "Dope'rel",
+          "Gloom'rel",
+          "Vile'rel",
+          "Hate'rel",
+          "Doom'rel"
+        ]
+      },
+      {
+        "boss": "Magmus",
+        "optional": false,
+        "wing": null,
+        "note": "The Iron Hall."
+      },
+      {
+        "boss": "Emperor Dagran Thaurissan",
+        "optional": false,
+        "wing": null,
+        "note": "Imperial Seat; final boss, with Princess Moira Bronzebeard."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Blackrock_Depths",
+      "https://www.warcrafttavern.com/wow-classic/guides/blackrock-depths/",
+      "https://almarsguides.com/wow/instances/classic/BlackrockDepths/"
+    ]
+  },
+  "Lower Blackrock Spire": {
+    "map_hint": "Blackrock Spire",
+    "order": [
+      {
+        "boss": "Burning Felguard",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Spirestone Butcher",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Spirestone Battle Lord",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Spirestone Lord Magus",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Highlord Omokk",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Shadow Hunter Vosh'gajin",
+        "optional": false,
+        "wing": null,
+        "note": "Tazz'Alor."
+      },
+      {
+        "boss": "War Master Voone",
+        "optional": false,
+        "wing": null,
+        "note": "Tazz'Alor."
+      },
+      {
+        "boss": "Mor Grayhoof",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "Bannok Grimaxe",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Mother Smolderweb",
+        "optional": false,
+        "wing": null,
+        "note": "Skitterweb Tunnels (side branch)."
+      },
+      {
+        "boss": "Crystal Fang",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn in the spider tunnels."
+      },
+      {
+        "boss": "Urok Doomhowl",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "Quartermaster Zigris",
+        "optional": false,
+        "wing": null,
+        "note": "The Storehouse; often skipped."
+      },
+      {
+        "boss": "Halycon",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Gizrul the Slavener",
+        "optional": false,
+        "wing": null,
+        "note": "Comes after Halycon dies."
+      },
+      {
+        "boss": "Ghok Bashguud",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Overlord Wyrmthalak",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Lower_Blackrock_Spire",
+      "https://www.warcrafttavern.com/wow-classic/guides/lower-blackrock-spire/",
+      "https://almarsguides.com/wow/instances/classic/LowerBlackrockSpire/"
+    ]
+  },
+  "Upper Blackrock Spire": {
+    "map_hint": "Blackrock Spire",
+    "order": [
+      {
+        "boss": "Pyroguard Emberseer",
+        "optional": false,
+        "wing": null,
+        "note": "First boss."
+      },
+      {
+        "boss": "Solakar Flamewreath",
+        "optional": true,
+        "wing": null,
+        "note": "The Rookery; egg event."
+      },
+      {
+        "boss": "Jed Runewatcher",
+        "optional": true,
+        "wing": null,
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Goraluk Anvilcrack",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Warchief Rend Blackhand",
+        "optional": false,
+        "wing": null,
+        "note": "Blackrock Stadium; waves, then Gyth, then Rend.",
+        "npcs": [
+          "Gyth",
+          "Warchief Rend Blackhand"
+        ]
+      },
+      {
+        "boss": "The Beast",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Lord Valthalak",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "General Drakkisath",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Upper_Blackrock_Spire_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/upper-blackrock-spire/",
+      "https://almarsguides.com/wow/instances/classic/UpperBlackrockSpire/"
+    ]
+  },
+  "Dire Maul": {
+    "map_hint": "Dire Maul",
+    "order": [
+      {
+        "boss": "Pusillin",
+        "optional": false,
+        "wing": "East",
+        "note": "Chase him through the first area."
+      },
+      {
+        "boss": "Zevrim Thornhoof",
+        "optional": false,
+        "wing": "East",
+        "note": ""
+      },
+      {
+        "boss": "Hydrospawn",
+        "optional": false,
+        "wing": "East",
+        "note": ""
+      },
+      {
+        "boss": "Lethtendris",
+        "optional": false,
+        "wing": "East",
+        "note": "With Pimgib.",
+        "npcs": [
+          "Lethtendris",
+          "Pimgib"
+        ]
+      },
+      {
+        "boss": "Alzzin the Wildshaper",
+        "optional": false,
+        "wing": "East",
+        "note": "Final boss of the wing."
+      },
+      {
+        "boss": "Isalien",
+        "optional": true,
+        "wing": "East",
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "Tendris Warpwood",
+        "optional": false,
+        "wing": "West",
+        "note": ""
+      },
+      {
+        "boss": "Illyanna Ravenoak",
+        "optional": false,
+        "wing": "West",
+        "note": "With Ferra.",
+        "npcs": [
+          "Illyanna Ravenoak",
+          "Ferra"
+        ]
+      },
+      {
+        "boss": "Tsu'zee",
+        "optional": true,
+        "wing": "West",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Magister Kalendris",
+        "optional": false,
+        "wing": "West",
+        "note": ""
+      },
+      {
+        "boss": "Immol'thar",
+        "optional": false,
+        "wing": "West",
+        "note": "Attackable once the pylons are down."
+      },
+      {
+        "boss": "Prince Tortheldrin",
+        "optional": false,
+        "wing": "West",
+        "note": "Final boss of the wing."
+      },
+      {
+        "boss": "Lord Hel'nurath",
+        "optional": true,
+        "wing": "West",
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "Guard Mol'dar",
+        "optional": false,
+        "wing": "North",
+        "note": ""
+      },
+      {
+        "boss": "Stomper Kreeg",
+        "optional": false,
+        "wing": "North",
+        "note": ""
+      },
+      {
+        "boss": "Guard Fengus",
+        "optional": false,
+        "wing": "North",
+        "note": ""
+      },
+      {
+        "boss": "Guard Slip'kik",
+        "optional": false,
+        "wing": "North",
+        "note": ""
+      },
+      {
+        "boss": "Captain Kromcrush",
+        "optional": false,
+        "wing": "North",
+        "note": ""
+      },
+      {
+        "boss": "King Gordok",
+        "optional": false,
+        "wing": "North",
+        "note": "With Cho'Rush the Observer; final boss of the wing.",
+        "npcs": [
+          "King Gordok",
+          "Cho'Rush the Observer"
+        ]
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Dire_Maul",
+      "https://www.warcrafttavern.com/wow-classic/guides/dire-maul/",
+      "https://almarsguides.com/wow/instances/classic/DiremaulEast/",
+      "https://almarsguides.com/wow/instances/classic/DiremaulWest/",
+      "https://almarsguides.com/wow/instances/classic/DiremaulNorth/"
+    ]
+  },
+  "Scholomance": {
+    "map_hint": "Scholomance",
+    "order": [
+      {
+        "boss": "Kirtonos the Herald",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned (quest) on the balcony of the Chamber of Summoning."
+      },
+      {
+        "boss": "Jandice Barov",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Rattlegore",
+        "optional": false,
+        "wing": null,
+        "note": "The Great Ossuary."
+      },
+      {
+        "boss": "Kormok",
+        "optional": true,
+        "wing": null,
+        "note": "Summoned (quest)."
+      },
+      {
+        "boss": "Marduk Blackpool",
+        "optional": false,
+        "wing": null,
+        "note": "The Viewing Room, with Vectus.",
+        "npcs": [
+          "Marduk Blackpool",
+          "Vectus"
+        ]
+      },
+      {
+        "boss": "Ras Frostwhisper",
+        "optional": false,
+        "wing": null,
+        "note": "The Laboratory."
+      },
+      {
+        "boss": "Instructor Malicia",
+        "optional": false,
+        "wing": null,
+        "note": "One of six rooms around the Headmaster's Study; any order."
+      },
+      {
+        "boss": "Doctor Theolen Krastinov",
+        "optional": false,
+        "wing": null,
+        "note": "One of the six rooms."
+      },
+      {
+        "boss": "Lorekeeper Polkelt",
+        "optional": false,
+        "wing": null,
+        "note": "One of the six rooms."
+      },
+      {
+        "boss": "The Ravenian",
+        "optional": false,
+        "wing": null,
+        "note": "One of the six rooms."
+      },
+      {
+        "boss": "Lord Alexei Barov",
+        "optional": false,
+        "wing": null,
+        "note": "One of the six rooms."
+      },
+      {
+        "boss": "Lady Illucia Barov",
+        "optional": false,
+        "wing": null,
+        "note": "One of the six rooms."
+      },
+      {
+        "boss": "Darkmaster Gandling",
+        "optional": false,
+        "wing": null,
+        "note": "Headmaster's Study; appears after the six rooms."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Scholomance_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/scholomance/",
+      "https://almarsguides.com/wow/instances/classic/Scholomance/"
+    ]
+  },
+  "Stratholme": {
+    "map_hint": "Stratholme",
+    "order": [
+      {
+        "boss": "Skul",
+        "optional": true,
+        "wing": "Live",
+        "note": "Rare spawn near the main gate."
+      },
+      {
+        "boss": "The Unforgiven",
+        "optional": false,
+        "wing": "Live",
+        "note": "Market Row."
+      },
+      {
+        "boss": "Hearthsinger Forresten",
+        "optional": true,
+        "wing": "Live",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Postmaster Malown",
+        "optional": true,
+        "wing": "Live",
+        "note": "Appears after opening the third mailbox."
+      },
+      {
+        "boss": "Timmy the Cruel",
+        "optional": false,
+        "wing": "Live",
+        "note": "Crusaders' Square."
+      },
+      {
+        "boss": "Malor the Zealous",
+        "optional": true,
+        "wing": "Live",
+        "note": "Scarlet Bastion."
+      },
+      {
+        "boss": "Crimson Hammersmith",
+        "optional": true,
+        "wing": "Live",
+        "note": "Appears when the plans on the floor are taken."
+      },
+      {
+        "boss": "Cannon Master Willey",
+        "optional": false,
+        "wing": "Live",
+        "note": ""
+      },
+      {
+        "boss": "Archivist Galford",
+        "optional": false,
+        "wing": "Live",
+        "note": "Library before the last hall."
+      },
+      {
+        "boss": "Balnazzar",
+        "optional": false,
+        "wing": "Live",
+        "note": "Grand Crusader Dathrohan, who turns into Balnazzar; final boss.",
+        "npcs": [
+          "Grand Crusader Dathrohan",
+          "Balnazzar"
+        ]
+      },
+      {
+        "boss": "Jarien",
+        "optional": true,
+        "wing": "Live",
+        "note": "Summoned (quest) in Balnazzar's hall, with Sothos.",
+        "npcs": [
+          "Jarien",
+          "Sothos"
+        ]
+      },
+      {
+        "boss": "Stonespine",
+        "optional": true,
+        "wing": "Undead",
+        "note": "Rare spawn."
+      },
+      {
+        "boss": "Nerub'enkan",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Ziggurat; the three ziggurats can go in any order."
+      },
+      {
+        "boss": "Baroness Anastari",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Ziggurat."
+      },
+      {
+        "boss": "Maleki the Pallid",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Ziggurat."
+      },
+      {
+        "boss": "Magistrate Barthilas",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Runs to the gate before Ramstein when the party comes in the service entrance."
+      },
+      {
+        "boss": "Ramstein the Gorger",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Slaughter Square."
+      },
+      {
+        "boss": "Black Guard Swordsmith",
+        "optional": true,
+        "wing": "Undead",
+        "note": "Appears when the plans on the floor are taken."
+      },
+      {
+        "boss": "Baron Rivendare",
+        "optional": false,
+        "wing": "Undead",
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Stratholme_(Classic)",
+      "https://warcraft.wiki.gg/wiki/Magistrate_Barthilas",
+      "https://www.warcrafttavern.com/wow-classic/guides/stratholme-living/",
+      "https://www.warcrafttavern.com/wow-classic/guides/stratholme-undead/",
+      "https://almarsguides.com/wow/instances/classic/StratholmeLiving/",
+      "https://almarsguides.com/wow/instances/classic/StratholmeUndead/"
+    ]
+  },
+  "Zul'Gurub": {
+    "map_hint": "Zul'Gurub",
+    "order": [
+      {
+        "boss": "High Priestess Jeklik",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "High Priest Venoxis",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "High Priestess Mar'li",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Bloodlord Mandokir",
+        "optional": true,
+        "wing": null,
+        "note": "With Ohgan.",
+        "npcs": [
+          "Bloodlord Mandokir",
+          "Ohgan"
+        ]
+      },
+      {
+        "boss": "Edge of Madness",
+        "optional": true,
+        "wing": null,
+        "note": "One boss, which changes over time.",
+        "npcs": [
+          "Gri'lek",
+          "Hazza'rah",
+          "Renataki",
+          "Wushoolay"
+        ]
+      },
+      {
+        "boss": "High Priest Thekal",
+        "optional": false,
+        "wing": null,
+        "note": "",
+        "npcs": [
+          "High Priest Thekal",
+          "Zealot Lor'Khan",
+          "Zealot Zath"
+        ]
+      },
+      {
+        "boss": "Gahz'ranka",
+        "optional": true,
+        "wing": null,
+        "note": "Fished up at the water."
+      },
+      {
+        "boss": "High Priestess Arlokk",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Jin'do the Hexxer",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Hakkar",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss (Hakkar the Soulflayer)."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Zul%27Gurub_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/zg/"
+    ]
+  },
+  "Molten Core": {
+    "map_hint": "Molten Core",
+    "order": [
+      {
+        "boss": "Lucifron",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Magmadar",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Gehennas",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Garr",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Baron Geddon",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Shazzrah",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Sulfuron Harbinger",
+        "optional": false,
+        "wing": null,
+        "note": "Some groups kill Golemagg first."
+      },
+      {
+        "boss": "Golemagg the Incinerator",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Majordomo Executus",
+        "optional": false,
+        "wing": null,
+        "note": "Appears once the runes are doused."
+      },
+      {
+        "boss": "Ragnaros",
+        "optional": false,
+        "wing": null,
+        "note": "Summoned through Majordomo; final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Molten_Core",
+      "https://almarsguides.com/wow/instances/classic/MoltenCore/",
+      "https://www.warcrafttavern.com/wow-classic/guides/mc/"
+    ]
+  },
+  "Onyxia's Lair": {
+    "map_hint": "Onyxia's Lair",
+    "order": [
+      {
+        "boss": "Onyxia",
+        "optional": false,
+        "wing": null,
+        "note": "The only boss, in the big cave at the end."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Onyxia%27s_Lair"
+    ]
+  },
+  "Blackwing Lair": {
+    "map_hint": "Blackwing Lair",
+    "order": [
+      {
+        "boss": "Razorgore the Untamed",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Vaelastrasz the Corrupt",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Broodlord Lashlayer",
+        "optional": false,
+        "wing": null,
+        "note": "After the suppression room."
+      },
+      {
+        "boss": "Firemaw",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Ebonroc",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Flamegor",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Chromaggus",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Nefarian",
+        "optional": false,
+        "wing": null,
+        "note": "Started by talking to Lord Victor Nefarius; final boss."
+      }
+    ],
+    "sources": [
+      "https://www.warcrafttavern.com/wow-classic/guides/bwl/",
+      "https://warcraft.wiki.gg/wiki/Blackwing_Lair"
+    ]
+  },
+  "Ruins of Ahn'Qiraj": {
+    "map_hint": "Ruins of Ahn'Qiraj",
+    "order": [
+      {
+        "boss": "Kurinnaxx",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "General Rajaxx",
+        "optional": false,
+        "wing": null,
+        "note": "Waves, then Rajaxx."
+      },
+      {
+        "boss": "Moam",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Buru the Gorger",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Ayamiss the Hunter",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Ossirian the Unscarred",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://www.warcrafttavern.com/wow-classic/guides/ruins-of-ahnqiraj-aq20/",
+      "https://warcraft.wiki.gg/wiki/Ruins_of_Ahn%27Qiraj"
+    ]
+  },
+  "Temple of Ahn'Qiraj": {
+    "map_hint": "Ahn'Qiraj",
+    "order": [
+      {
+        "boss": "The Prophet Skeram",
+        "optional": false,
+        "wing": null,
+        "note": "Above ground, near the entrance."
+      },
+      {
+        "boss": "Vem",
+        "optional": true,
+        "wing": null,
+        "note": "Silithid Royalty (Bug Trio).",
+        "npcs": [
+          "Vem",
+          "Lord Kri",
+          "Princess Yauj"
+        ]
+      },
+      {
+        "boss": "Battleguard Sartura",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Fankriss the Unyielding",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Viscidus",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Princess Huhuran",
+        "optional": false,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "Emperor Vek'lor",
+        "optional": false,
+        "wing": null,
+        "note": "Twin Emperors.",
+        "npcs": [
+          "Emperor Vek'lor",
+          "Emperor Vek'nilash"
+        ]
+      },
+      {
+        "boss": "Ouro",
+        "optional": true,
+        "wing": null,
+        "note": ""
+      },
+      {
+        "boss": "C'Thun",
+        "optional": false,
+        "wing": null,
+        "note": "Final boss; the Eye of C'Thun first.",
+        "npcs": [
+          "Eye of C'Thun",
+          "C'Thun"
+        ]
+      }
+    ],
+    "sources": [
+      "https://www.warcrafttavern.com/wow-classic/guides/temple-of-ahnqiraj-aq40/",
+      "https://warcraft.wiki.gg/wiki/Temple_of_Ahn%27Qiraj"
+    ]
+  },
+  "Naxxramas": {
+    "map_hint": "Naxxramas",
+    "order": [
+      {
+        "boss": "Patchwerk",
+        "optional": false,
+        "wing": "Construct Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Grobbulus",
+        "optional": false,
+        "wing": "Construct Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Gluth",
+        "optional": false,
+        "wing": "Construct Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Thaddius",
+        "optional": false,
+        "wing": "Construct Quarter",
+        "note": "",
+        "npcs": [
+          "Stalagg",
+          "Feugen",
+          "Thaddius"
+        ]
+      },
+      {
+        "boss": "Noth the Plaguebringer",
+        "optional": false,
+        "wing": "Plague Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Heigan the Unclean",
+        "optional": false,
+        "wing": "Plague Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Loatheb",
+        "optional": false,
+        "wing": "Plague Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Anub'Rekhan",
+        "optional": false,
+        "wing": "Arachnid Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Grand Widow Faerlina",
+        "optional": false,
+        "wing": "Arachnid Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Maexxna",
+        "optional": false,
+        "wing": "Arachnid Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Instructor Razuvious",
+        "optional": false,
+        "wing": "Military Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Gothik the Harvester",
+        "optional": false,
+        "wing": "Military Quarter",
+        "note": ""
+      },
+      {
+        "boss": "Highlord Mograine",
+        "optional": false,
+        "wing": "Military Quarter",
+        "note": "The Four Horsemen.",
+        "npcs": [
+          "Thane Korth'azz",
+          "Lady Blaumeux",
+          "Highlord Mograine",
+          "Sir Zeliek"
+        ]
+      },
+      {
+        "boss": "Sapphiron",
+        "optional": false,
+        "wing": "Frostwyrm Lair",
+        "note": "Opens after the four quarters."
+      },
+      {
+        "boss": "Kel'Thuzad",
+        "optional": false,
+        "wing": "Frostwyrm Lair",
+        "note": "Final boss."
+      }
+    ],
+    "sources": [
+      "https://warcraft.wiki.gg/wiki/Naxxramas_(Classic)",
+      "https://www.warcrafttavern.com/wow-classic/guides/naxxramas/",
+      "https://wowpedia.fandom.com/wiki/Naxxramas_(Classic)"
+    ]
+  }
+}
