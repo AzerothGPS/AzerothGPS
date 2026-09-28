@@ -64,7 +64,11 @@ The addon is going public, so every change must keep it policy-safe:
   - `Teleports.lua`: hearthstone, Astral Recall and class teleports ready right now.
   - `Record.lua`: the player's road fixes, drawn on the map with the road tools (Options >
     Road tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
-    right-drag erases, middle-drag pans, until toggled off; `G.FinishRoad`), saved in
+    right-drag erases (a loop: everything inside), Shift+left-drag draws a wall, Shift+right-
+    drag erases walls, middle-drag pans, until toggled off; `G.FinishRoad`). Walls (op
+    "wall"/"unwall"; shipped as `ns.Walls` in Roads.lua) are handled in Passability
+    (`WallLines`, `CrossesWall`, wall cells closed on the grid): nothing walks through them;
+    roads and flights ignore them. Saved in
     `ns.db.tracks` on the player's level (`continent` 10001 in Undercity). Routes use them at
     once (`Router.WithTracks`: a drawn road's stretches along an existing road are that road,
     its ends join a road within 25 yd; an erase cuts out the road under it). Drawn roads are

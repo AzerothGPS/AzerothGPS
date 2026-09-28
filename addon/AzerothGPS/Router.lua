@@ -19,6 +19,7 @@ R.OFFROAD_LINKS = 24 -- offroad mode: straight links tried from start/destinatio
 R.OFFROAD_LINK_MAX = 3000 -- yards
 R.OFFROAD_TIE = 1.02 -- offroad mode: open ground costs a hair more, so roads win ties
 R.BLOCKED_PENALTY = 12 -- a leg the terrain data calls blocked, when nothing better exists
+R.WALL_PENALTY = 200 -- ... through a wall drawn with the road tools (only when there's no other way at all)
 R.HOSTILE_FACTOR = 20 -- a yard within reach of the other faction's guards (Data/Hostile.lua) costs this many
 R.HOSTILE_STEP = 5 -- yards between the points checked along a leg
 R.CITY_BLOCKED_PENALTY = 200 -- the same in a city (its grid's walls are real walls)
@@ -344,7 +345,8 @@ function R.WithTracks(roads, tracks, cont)
   local shipped = ns.RoadTracksIn or {}
   for _, t in ipairs(tracks or {}) do
     local pts = t.pts
-    if t.continent == cont and pts and #pts >= 4 and not shipped[t.time or -1] then
+    -- (walls aren't roads: Passability has them)
+    if t.continent == cont and pts and #pts >= 4 and not shipped[t.time or -1] and t.op ~= "wall" and t.op ~= "unwall" then
       if t.op == "remove" then
         if t.area then cut({ pts }, 0, false, true) else cut({ pts }, R.TRACK_REMOVE_YD) end
       else
@@ -1645,6 +1647,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local cityPenalty = grid and grid.slack and R.CITY_BLOCKED_PENALTY
   -- (a blocked leg or link: a city's walls are real, and so are its ruins' up top)
   local function blockedPenalty(x1, y1, x2, y2)
+    if Pass and Pass.CrossesWall and Pass.CrossesWall(cont, x1, y1, x2, y2) then return R.WALL_PENALTY end
     if cityPenalty then return cityPenalty end
     local P = ns.Passability
     if P and P.Overlay and x1 then
@@ -1898,6 +1901,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
           b.open = c ~= nil
           -- (to or from a cave's roads only over open ground: not through the mountain)
           if not b.open and g.caveNode and (g.caveNode[n] or g.caveNode[m]) then b.shut = true end
+          if not b.open and Pass and Pass.CrossesWall and Pass.CrossesWall(cont, x, y, mx, my) then b.shut = true end
           b.cost = ((c or b[2] * blockedPenalty(x, y, mx, my)) + HostileExtra(cont, x, y, mx, my)) * R.OFFROAD_PENALTY
         end
         if not b.shut then relax(n, m, b.cost, { { OFF, x, y, mx, my, gap = not b.open } }) end

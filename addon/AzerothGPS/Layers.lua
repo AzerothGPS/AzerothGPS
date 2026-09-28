@@ -515,10 +515,20 @@ L.HITTER_QUESTS = 8
 -- each finished quest's turn-in, from the maps' quest pins (the map you're on first, then
 -- every zone), else the quest's next waypoint. Returns stops { x, y, cont, name } and
 -- { todo = n, turnin = n, missing = { title, ... } }.
-function L.QuestStops()
+-- The zone a map is in (a city's: the zone around it), for "only this zone".
+function L.ZoneOf(id)
+  local m = id and ns.Maps and ns.Maps[id]
+  if m and m.zoneParent then return m.zoneParent end
+  return id
+end
+
+-- `onlyZone`: just the quests whose spot is in the zone the player is in (counts.elsewhere:
+-- how many were left out).
+function L.QuestStops(onlyZone)
   local Q = C_QuestLog
   local out, placed = {}, {}
-  local counts = { todo = 0, turnin = 0, missing = {} }
+  local counts = { todo = 0, turnin = 0, missing = {}, elsewhere = 0 }
+  local myZone = onlyZone and L.ZoneOf(C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
   if not Q then return out, counts end
   local wanted = {}
   for _, id in ipairs(L.LogQuests()) do wanted[id] = true end
@@ -530,6 +540,14 @@ function L.QuestStops()
     local x, y, cont = L.MapToWorld(mapID, u, v)
     if not x or secret(x) then return end
     if cityMap[mapID] and L.CityLevelAt(cont, x, y) == cityMap[mapID] then cont = cityMap[mapID] end
+    if myZone then
+      local at = ns.GPS and ns.GPS.LocateWorld and ns.GPS.LocateWorld(Geo.Base(cont), x, y)
+      if L.ZoneOf(at) ~= myZone then
+        placed[id] = true -- (found, just not here)
+        counts.elsewhere = counts.elsewhere + 1
+        return
+      end
+    end
     local complete = Q.IsComplete and Q.IsComplete(id)
     if secret(complete) then complete = false end
     local title = QuestTitle(id) or ("Quest " .. id)

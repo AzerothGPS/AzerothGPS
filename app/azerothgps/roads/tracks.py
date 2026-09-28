@@ -35,7 +35,7 @@ def parse_shared(text: str) -> list[dict]:
     out = []
     for line in text.splitlines():
         parts = line.split()
-        if len(parts) < 6 or parts[0] != "R" or parts[1] not in ("add", "remove", "area"):
+        if len(parts) < 6 or parts[0] != "R" or parts[1] not in ("add", "remove", "area", "wall", "unwall", "unwallarea"):
             continue
         try:
             cont, t = int(parts[2]), int(parts[3])
@@ -44,7 +44,8 @@ def parse_shared(text: str) -> list[dict]:
             continue
         if len(coords) < 2 or any(len(c) != 2 for c in coords):
             continue
-        out.append({"continent": cont, "op": "remove" if parts[1] == "area" else parts[1], "area": parts[1] == "area",
+        op = {"area": "remove", "unwallarea": "unwall"}.get(parts[1], parts[1])
+        out.append({"continent": cont, "op": op, "area": parts[1] in ("area", "unwallarea"),
                     "zone": "shared", "time": t, "coords": coords})
     return out
 
@@ -78,6 +79,50 @@ def import_shared(text: str, overrides_dir: Path, per_continent: dict | None = N
                 per_continent[cont] = per_continent.get(cont, 0) + new
         added += new
     return added
+
+
+def walls(overrides_dir: Path) -> dict[int, list[list[float]]]:
+    """The walls drawn in game per continent (or city level), as the addon has them
+    (Passability.WallLines): each "wall" in order, an "unwall" taking out the walls near it
+    (or inside it, drawn as a loop). { continent: [ [x, y, x, y, ...], ... ] }"""
+    import math
+
+    def in_loop(poly, x, y):
+        inside, j = False, len(poly) - 1
+        for i in range(len(poly)):
+            (xi, yi), (xj, yj) = poly[i], poly[j]
+            if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+                inside = not inside
+            j = i
+        return inside
+
+    def near(line, x, y, r=12.0):
+        for (ax, ay), (bx, by) in zip(line, line[1:]):
+            vx, vy = bx - ax, by - ay
+            L2 = vx * vx + vy * vy
+            t = max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / L2)) if L2 > 0 else 0.0
+            if math.hypot(ax + vx * t - x, ay + vy * t - y) <= r:
+                return True
+        return False
+
+    out: dict[int, list] = {}
+    for f in sorted(Path(overrides_dir).glob("roads_*.geojson")):
+        try:
+            cont = int(f.stem.split("_", 1)[1])
+        except ValueError:
+            continue
+        ws: list = []
+        for feat in load_overrides(f)["features"]:
+            props = feat.get("properties", {})
+            line = feat["geometry"]["coordinates"]
+            if props.get("op") == "wall":
+                ws.append(line)
+            elif props.get("op") == "unwall":
+                area = props.get("area")
+                ws = [w for w in ws if not any(in_loop(line, x, y) if area else near(line, x, y) for x, y in w)]
+        if ws:
+            out[cont] = ws
+    return out
 
 
 def shipped_times(overrides_dir: Path) -> list[int]:

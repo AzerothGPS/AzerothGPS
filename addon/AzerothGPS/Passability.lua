@@ -61,9 +61,19 @@ local function Rows(g)
 end
 P.Rows = Rows
 
--- Cell value at (row, col) of grid g (2 outside the grid).
+-- Walls drawn with the road tools (Shift+left-drag) or shipped (ns.Walls): what a player
+-- can't walk through (a town's wall, a fence), like a mountain. Their cells on each grid are
+-- closed (wallCells[grid][row * 65536 + col]) and legs crossing them blocked (P.CrossesWall).
+-- Built again when the drawn ones change (P.RefreshWalls: Record.Changed).
+local wallCells, wallSegs, wallsBuilt = {}, {}, false
+P.WALL_UNDER_YD = 12 -- an erase stroke takes out the walls this close to it
+P.WALL_BUCKET = 64
+
+-- Cell value at (row, col) of grid g (2 outside the grid, and on a wall).
 local function Cell(g, row, col)
   if row < 1 or row > g.h or col < 1 or col > g.w then return 2 end
+  local wc = wallCells[g]
+  if wc and wc[row * 65536 + col] then return 2 end
   local rc = cache[g]
   if not rc then
     rc = {}
@@ -92,6 +102,135 @@ end
 local function CellCentre(g, col, row)
   local k = TILE / g.cell
   return (32 - g.ty0 - (row - 0.5) / k) * TILE, (32 - g.tx0 - (col - 0.5) / k) * TILE
+end
+
+local function InLoop(poly, x, y)
+  local inside, n = false, #poly / 2
+  local jx, jy = poly[2 * n - 1], poly[2 * n]
+  for i = 1, n do
+    local ix, iy = poly[2 * i - 1], poly[2 * i]
+    if (iy > y) ~= (jy > y) and x < (jx - ix) * (y - iy) / (jy - iy) + ix then inside = not inside end
+    jx, jy = ix, iy
+  end
+  return inside
+end
+
+local function NearLine(line, x, y, r)
+  local r2 = r * r
+  for k = 1, #line - 3, 2 do
+    local ax, ay, bx, by = line[k], line[k + 1], line[k + 2], line[k + 3]
+    local vx, vy = bx - ax, by - ay
+    local L2 = vx * vx + vy * vy
+    local t = L2 > 0 and math.max(0, math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2)) or 0
+    if (ax + vx * t - x) ^ 2 + (ay + vy * t - y) ^ 2 <= r2 then return true end
+  end
+  return false
+end
+
+-- The walls on `cont`: the shipped ones, then the player's drawn ones in order (an erase
+-- stroke, "unwall", takes out the walls near it, or inside it when drawn as a loop). Each a
+-- flat point list.
+function P.WallLines(cont)
+  local out = {}
+  for _, w in ipairs(ns.Walls and ns.Walls[cont] or {}) do out[#out + 1] = w end
+  local shipped = ns.RoadTracksIn or {}
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    if t.continent == cont and t.pts and #t.pts >= 4 and not shipped[t.time or -1] then
+      if t.op == "wall" then
+        out[#out + 1] = t.pts
+      elseif t.op == "unwall" then
+        local kept = {}
+        for _, w in ipairs(out) do
+          local under = false
+          for i = 1, #w - 1, 2 do
+            local x, y = w[i], w[i + 1]
+            if (t.area and InLoop(t.pts, x, y)) or (not t.area and NearLine(t.pts, x, y, P.WALL_UNDER_YD)) then
+              under = true
+              break
+            end
+          end
+          if not under then kept[#kept + 1] = w end
+        end
+        out = kept
+      end
+    end
+  end
+  return out
+end
+
+-- Every continent (and city level) with walls, shipped or drawn.
+local function WallConts()
+  local set = {}
+  for c in pairs(ns.Walls or {}) do set[c] = true end
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    if t.op == "wall" or t.op == "unwall" then set[t.continent] = true end
+  end
+  return set
+end
+
+-- Build the walls' cells and segments again (after drawing or erasing one).
+function P.RefreshWalls()
+  wallCells, wallSegs = {}, {}
+  wallsBuilt = true
+  local B = P.WALL_BUCKET
+  for cont in pairs(WallConts()) do
+    local g = ns.Terrain and ns.Terrain[cont]
+    local cells = {}
+    local segs = {}
+    for _, w in ipairs(P.WallLines(cont)) do
+      for k = 1, #w - 3, 2 do
+        local ax, ay, bx, by = w[k], w[k + 1], w[k + 2], w[k + 3]
+        -- its cells, every third of a cell along it (so none it crosses is skipped)
+        if g then
+          local len = math.sqrt((bx - ax) ^ 2 + (by - ay) ^ 2)
+          local n = math.max(1, math.ceil(len / (g.cell / 3)))
+          for i = 0, n do
+            local c, r = ToCell(g, ax + (bx - ax) * i / n, ay + (by - ay) * i / n)
+            cells[r * 65536 + c] = true
+          end
+        end
+        local seg = { ax, ay, bx, by }
+        for kx = math.floor(math.min(ax, bx) / B), math.floor(math.max(ax, bx) / B) do
+          for ky = math.floor(math.min(ay, by) / B), math.floor(math.max(ay, by) / B) do
+            local key = kx * 65536 + ky
+            segs[key] = segs[key] or {}
+            local list = segs[key]
+            list[#list + 1] = seg
+          end
+        end
+      end
+    end
+    if g then wallCells[g] = cells end
+    wallSegs[cont] = segs
+  end
+end
+local function EnsureWalls() if not wallsBuilt then P.RefreshWalls() end end
+
+local function Orient(ax, ay, bx, by, cx, cy)
+  local v = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  return v > 1e-9 and 1 or v < -1e-9 and -1 or 0
+end
+
+-- Whether the leg (x1, y1)-(x2, y2) crosses a wall.
+function P.CrossesWall(cont, x1, y1, x2, y2)
+  EnsureWalls()
+  local segs = wallSegs[cont]
+  if not segs then return false end
+  local B = P.WALL_BUCKET
+  local seen = {}
+  for kx = math.floor(math.min(x1, x2) / B), math.floor(math.max(x1, x2) / B) do
+    for ky = math.floor(math.min(y1, y2) / B), math.floor(math.max(y1, y2) / B) do
+      for _, s in ipairs(segs[kx * 65536 + ky] or {}) do
+        if not seen[s] then
+          seen[s] = true
+          local o1, o2 = Orient(x1, y1, x2, y2, s[1], s[2]), Orient(x1, y1, x2, y2, s[3], s[4])
+          local o3, o4 = Orient(s[1], s[2], s[3], s[4], x1, y1), Orient(s[1], s[2], s[3], s[4], x2, y2)
+          if o1 ~= o2 and o3 ~= o4 and o1 ~= 0 and o2 ~= 0 then return true end
+        end
+      end
+    end
+  end
+  return false
 end
 
 -- Grids laid over a continent's (a city's ruins up top, the caves: ns.CityHalls[cont]), by
@@ -157,6 +296,7 @@ P.Overlay = Overlay
 
 -- Cell value at world (x, y) on continent `cont` (2 outside the grid).
 function P.At(cont, x, y)
+  EnsureWalls()
   local ov = Overlay(cont, x, y)
   if ov then return ov end
   local g = ns.Terrain and ns.Terrain[cont]
@@ -178,6 +318,7 @@ P.STOP_SLACK = 40
 -- that much, or up to CITY_INSIDE_SLACK from a start or stop inside them.)
 P.CITY_INSIDE_SLACK = 0 -- (Router starts and stops from the nearest open floor instead)
 function P.SegmentCost(cont, x1, y1, x2, y2, endSlack)
+  if P.CrossesWall(cont, x1, y1, x2, y2) then return nil end -- (a wall: never, not even near its ends)
   local g = ns.Terrain and ns.Terrain[cont]
   local dx, dy = x2 - x1, y2 - y1
   local len = math.sqrt(dx * dx + dy * dy)
@@ -244,6 +385,7 @@ P.PATH_YIELD_EVERY = 50 -- cells expanded between pauses when run in the backgro
 -- Walkable path from (x1, y1) to (x2, y2) over the grid (8-connected A*, then straightened
 -- with line of sight): cost, { x1, y1, ..., x2, y2 }; nil when there is none nearby.
 function P.FindPath(cont, x1, y1, x2, y2)
+  EnsureWalls()
   local g = ns.Terrain and ns.Terrain[cont]
   if not g then return nil end
   local c1, r1 = ToCell(g, x1, y1)
@@ -286,8 +428,10 @@ function P.FindPath(cont, x1, y1, x2, y2)
     if m and hostile(c, r) then m = m * Rt.HOSTILE_FACTOR end
     return m
   end
+  local wc = wallCells[g]
   function cost0(c, r)
     if c < cmin or c > cmax or r < rmin or r > rmax then return nil end
+    if wc and wc[r * 65536 + c] then return nil end -- (a wall: not even near the ends)
     local v = Cell(g, r, c)
     if g.overlay and v == 1 then return nil end -- (an overlay grid: not its own there)
     if hasOverlay then -- (the continent's grid: a ruins' own grid over it where it has one)
@@ -417,6 +561,7 @@ end
 
 -- Whether (x, y) is open ground on `cont`'s grid (false without a grid).
 function P.IsOpen(cont, x, y)
+  EnsureWalls()
   local ov = Overlay(cont, x, y)
   if ov then return ov == 0 end
   local g = ns.Terrain and ns.Terrain[cont]

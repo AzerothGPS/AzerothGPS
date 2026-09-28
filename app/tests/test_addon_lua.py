@@ -2969,3 +2969,48 @@ def test_road_data_text_to_copy_and_read_back(nav_env, tmp_path):
     per = {}
     assert import_shared(text, tmp_path, per) == 2 and per == {0: 1, 1: 1}
     assert import_shared(text, tmp_path) == 0  # already there
+
+
+def test_a_drawn_wall_blocks_walking_but_not_roads(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua")
+    P, R = ns.Passability, ns.Router
+    # open ground in Durotar; a wall drawn across between two points
+    a, b = (-950.0, -4050.0), (-950.0, -3900.0)
+    assert P.SegmentCost(1, *a, *b) is not None
+    ns.db = lua.eval("{ tracks = { { op = 'wall', drawn = true, continent = 1, time = 1, pts = { -1030,-3975, -870,-3975 } } } }")
+    P.RefreshWalls()
+    assert P.CrossesWall(1, *a, *b) and P.SegmentCost(1, *a, *b) is None
+    c, path = P.FindPath(1, *a, *b)
+    assert c is not None and c > 150  # round the wall's end
+    pts = [(path[i], path[i + 1]) for i in range(1, len(path), 2)]
+    assert not any(P.CrossesWall(1, *p, *q) for p, q in zip(pts, pts[1:]))
+    # the wall isn't a road, and erasing it (a stroke along it) takes it out
+    R.Reset()
+    assert not any(e[4] == R.SOURCE_RECORDED for e in R.Edges(1)[0].values())
+    lua.eval("function(db) db.tracks[2] = { op = 'unwall', drawn = true, continent = 1, time = 2, pts = { -1030,-3977, -870,-3976 } } end")(ns.db)
+    P.RefreshWalls()
+    assert not P.CrossesWall(1, *a, *b)
+
+
+def test_walls_in_the_road_data_text(nav_env, tmp_path):
+    lua, ns = nav_env
+    lua.execute('GetBuildInfo = function() return "1.60.1", "70009" end')
+    load(lua, ns, "Feedback.lua")
+    ns.db = lua.eval("""{ tracks = {
+      { op = 'wall', continent = 0, time = 5, pts = { 0,0, 50,0 } },
+      { op = 'unwall', area = true, continent = 0, time = 6, pts = { 0,0, 10,0, 10,10, 0,10, 0,0 } } } }""")
+    text, n = ns.Feedback.RoadsText()
+    assert n == 2 and "R wall 0 5" in text and "R unwallarea 0 6" in text
+    from azerothgps.roads.tracks import import_shared, walls
+    assert import_shared(text, tmp_path) == 2
+    assert walls(tmp_path) == {}  # (the wall is inside the erase loop)
+
+
+def test_zone_of_a_city_is_the_zone_around_it(env):
+    lua, ns = env
+    load(lua, ns, "Data/Maps.lua", "Layers.lua")
+    ids = {ns.Maps[k].name: k for k in ns.Maps.keys() if ns.Maps[k].type == 3}
+    L = ns.Layers
+    assert L.ZoneOf(ids["Undercity"]) == ids["Tirisfal Glades"]
+    assert L.ZoneOf(ids["Durotar"]) == ids["Durotar"]

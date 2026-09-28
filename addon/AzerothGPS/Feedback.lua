@@ -116,7 +116,7 @@ end
 
 -- The player's drawn and erased roads as text to copy and send (the share page's "Copy
 -- road data"): a header line, then a road per line:
---   R <op add|remove|area> <continent> <time> <x,y> <x,y> ...
+--   R <op add|remove|area|wall|unwall|unwallarea> <continent> <time> <x,y> <x,y> ...
 -- Both the roads kept for sharing and the ones not in the road data yet, each once.
 -- (`agps import-shared` reads it back.) Numbers only: no character or realm names.
 F.TEXT_HEADER = "AzerothGPS roads 1"
@@ -126,7 +126,8 @@ function F.RoadsText()
     local key = tostring(t.continent) .. ":" .. tostring(t.time)
     if seen[key] or not t.pts or #t.pts < 4 then return end
     seen[key] = true
-    local op = t.op == "remove" and (t.area and "area" or "remove") or "add"
+    local op = t.op == "remove" and (t.area and "area" or "remove")
+      or t.op == "wall" and "wall" or t.op == "unwall" and (t.area and "unwallarea" or "unwall") or "add"
     local out = { "R", op, tostring(t.continent or 0), tostring(t.time or 0) }
     for i = 1, #t.pts - 1, 2 do out[#out + 1] = string.format("%.1f,%.1f", t.pts[i], t.pts[i + 1]) end
     lines[#lines + 1] = table.concat(out, " ")

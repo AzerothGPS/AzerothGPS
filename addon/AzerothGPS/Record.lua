@@ -31,6 +31,7 @@ end
 
 -- Tracks changed: rebuild the road network (it includes them) and the route.
 function R.Changed()
+  if ns.Passability and ns.Passability.RefreshWalls then ns.Passability.RefreshWalls() end
   if ns.Router and ns.Router.Reset then ns.Router.Reset() end
   if ns.Nav and ns.Nav.Invalidate then ns.Nav.Invalidate(true, true) end
   if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
@@ -57,7 +58,8 @@ function R.Delete(i)
   end
   local tr = table.remove(t, i)
   if ns.Feedback and ns.Feedback.RoadRemoved then ns.Feedback.RoadRemoved(tr) end
-  ns.Print(("took back drawn road #%d (%s)"):format(i, tr.op == "remove" and "erased" or "drawn"))
+  local what = { remove = "erased road", wall = "wall", unwall = "erased wall" }
+  ns.Print(("took back #%d (%s)"):format(i, what[tr.op] or "drawn road"))
   R.Changed()
 end
 
@@ -75,7 +77,8 @@ function R.List()
   local t = Tracks()
   if #t == 0 then ns.Print("no drawn roads waiting for the road data") end
   for i, tr in ipairs(t) do
-    ns.Print(("#%d %s %s, %d points, %s"):format(i, tr.op == "remove" and "erased" or "drawn", tr.zone or "?",
+    local what = { remove = "erased road", wall = "wall", unwall = "erased wall", add = "road" }
+    ns.Print(("#%d %s %s, %d points, %s"):format(i, what[tr.op] or tr.op, tr.zone or "?",
       #tr.pts / 2, date("%Y-%m-%d %H:%M", tr.time)))
   end
 end

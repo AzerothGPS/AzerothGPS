@@ -15,6 +15,7 @@ local MENU_IDLE = 20 -- seconds: the map menu (and its toggles column) closes by
 local SEARCH_IDLE = 20 -- ... and the search panel
 local LASSO_COLOR = { 1, 0.82, 0 } -- a farming area being drawn
 local DRAW_COLOR, ERASE_COLOR = { 0.3, 1, 0.3 }, { 1, 0.2, 0.2 } -- a road being drawn / erased
+local WALL_COLOR, UNWALL_COLOR = { 0.55, 0.02, 0.02 }, { 0.6, 0.6, 0.6 } -- a wall being drawn (blood red) / erased
 local CHROME_PORTRAIT_INSET = 46 -- the frame's portrait covers this much of the map's top-left
 
 -- Texture:SetRotation turns the image counter-clockwise for positive angles.
@@ -173,6 +174,28 @@ local function RoadIndex(cont)
 end
 
 G.MAX_SEGMENTS = 1500
+
+-- Walls near the view (Passability.WallLines): { x1, y1, x2, y2 } in UI units.
+function G.LayoutWalls(px, py, cont, rot, zoom, half)
+  local segs = {}
+  local P = ns.Passability
+  if not (P and P.WallLines) then return segs end
+  local s = half / zoom
+  local reach = zoom * 1.5
+  for _, w in ipairs(P.WallLines(cont)) do
+    local lx, ly
+    for i = 1, #w - 1, 2 do
+      local wx, wy = w[i], w[i + 1]
+      local dx, dy = Geo.ScreenOffset(px, py, wx, wy)
+      dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+      if lx and (math.abs(wx - px) <= reach and math.abs(wy - py) <= reach or math.abs(dx) <= half * 2) then
+        segs[#segs + 1] = { lx, ly, dx, dy }
+      end
+      lx, ly = dx, dy
+    end
+  end
+  return segs
+end
 
 -- Road segments near the player: list of { x1, y1, x2, y2, source } in UI units
 -- relative to the frame center. source: 0 road (the player's drawn ones too), 1 bridged
@@ -549,7 +572,7 @@ local pool, poolUsed = {}, 0
 local lines, linesUsed = {}, 0
 local dashes, dashesUsed = {}, 0 -- textured dotted lines (DASH_TEXTURE)
 local ROAD_COLORS = { [0] = { 1, 0.35, 0.1 }, [1] = { 0.1, 0.9, 1 }, [2] = { 0.3, 1, 0.3 }, [3] = { 0.05, 0.28, 0.85 },
-  [4] = { 0.25, 0.85, 1 }, [5] = { 0.65, 0.65, 0.7 }, [6] = { 0.45, 0.6, 1 } } -- 6: quest areas
+  [4] = { 0.25, 0.85, 1 }, [5] = { 0.65, 0.65, 0.7 }, [6] = { 0.45, 0.6, 1 }, [7] = { 0.55, 0.02, 0.02 } } -- 6: quest areas, 7: walls
 -- Route segment kinds -> { color, width, dotted }: road, off-road, transport ride, far-side walk.
 local ROUTE_STYLE = { [0] = { 3, 5, false }, [1] = { 3, 4, true }, [2] = { 4, 4, true }, [3] = { 5, 3, true } }
 local DASH, GAP = 7, 5 -- off-road route legs are dotted (UI units)
@@ -964,6 +987,11 @@ function G.Update()
   -- (the roads of the continent in view, the player's or another)
   if st.showRoads and not place then
     for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], sg[5]) end
+  end
+  -- walls (blood red): with the roads shown, or the road tools on
+  if (st.showRoads or G.roadMode) and not place then
+    local wc = here and ns.Nav.PlayerLevel(cont) or viewCont
+    for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, 3) end
   end
   -- Quest objective areas (Layers.lua), outlined in the minimap's blue, on their own layer.
   local layerMaps = { C_Map.GetBestMapForUnit("player"), browse }
@@ -1752,7 +1780,8 @@ end
 -- The road tools: on until toggled off. On the map, left-drag draws a road, right-drag
 -- erases one (in red), middle-drag pans.
 function G.RoadHint()
-  drawHint:SetText("Left-drag: draw a road   |cffff4040Right-drag: erase (circle an area to erase it all)|r   |cff9d9d9dMiddle-drag: pan|r")
+  drawHint:SetText("Left-drag: draw a road   |cffff4040Right-drag: erase (circle an area to erase it all)|r\n"
+    .. "|cffb01010Shift+left-drag: draw a wall|r   |cffb0b0b0Shift+right-drag: erase walls|r   |cff9d9d9dMiddle-drag: pan|r")
   drawHint:Show()
 end
 
@@ -1826,7 +1855,8 @@ function G.IsLoop(pts, len)
   return gap <= math.max(15, len * G.LOOP_CLOSE) and gap < len * 0.5
 end
 
-function G.FinishRoad(line, erase)
+-- `wall`: a wall (what can't be walked through), not a road; with `erase`, walls taken out.
+function G.FinishRoad(line, erase, wall)
   if not line or #line.pts < 4 then return end
   local pts, len = {}, 0
   for i = 1, #line.pts - 1, 2 do
@@ -1836,7 +1866,7 @@ function G.FinishRoad(line, erase)
     pts[n + 1], pts[n + 2] = math.floor(x * 10 + 0.5) / 10, math.floor(y * 10 + 0.5) / 10
   end
   if len < 8 then
-    ns.Print("that road is too short (drag along it)")
+    ns.Print(wall and "that wall is too short (drag along it)" or "that road is too short (drag along it)")
     return
   end
   local level = ns.Nav.PlayerLevel and ns.Nav.PlayerLevel(line.cont) or line.cont
@@ -1844,8 +1874,16 @@ function G.FinishRoad(line, erase)
   local info = mapID and C_Map.GetMapInfo(mapID)
   -- an erase drawn as a loop (ending back near its start): the roads inside it go
   local area = erase and G.IsLoop(pts, len) or nil
-  local i = ns.Record.Save({ op = erase and "remove" or "add", drawn = true, continent = level,
+  local op = wall and (erase and "unwall" or "wall") or (erase and "remove" or "add")
+  local i = ns.Record.Save({ op = op, drawn = true, continent = level,
     zone = info and info.name or "?", time = time(), pts = pts, area = area })
+  if wall then
+    ns.Print(string.format(erase and "erased the walls %s (#%d). /agps draw undo puts them back."
+      or "saved your wall (#%d, %d yd): routes won't cross it now (roads and flights still may). /agps draw undo takes it back.",
+      erase and (area and "inside that circle" or "along that stroke") or i, erase and i or math.floor(len + 0.5)))
+    elapsed = 1
+    return
+  end
   if area then
     ns.Print(string.format("erased the roads inside that circle (#%d): routes leave them out now. /agps draw undo puts them back.", i))
     elapsed = 1
@@ -2041,9 +2079,12 @@ function G.QuestRoute()
     return
   end
   if not (ns.Layers and ns.Layers.QuestStops) then return end
-  local stops, c = ns.Layers.QuestStops()
+  local onlyZone = S().questZoneOnly
+  local stops, c = ns.Layers.QuestStops(onlyZone)
   if #stops == 0 then
-    ns.Print("Quest route: no quest locations found in your quest log.")
+    ns.Print(onlyZone and c.elsewhere > 0
+      and string.format("Quest route: none of your quests are in this zone (%d elsewhere; Options > Routing: only this zone).", c.elsewhere)
+      or "Quest route: no quest locations found in your quest log.")
     return
   end
   ns.Nav.SetStops(stops, true)
@@ -2051,6 +2092,7 @@ function G.QuestRoute()
   G.RouteChanged()
   local msg = string.format("Quest route: %d stop%s (%d to do, %d to turn in).", #ns.Nav.stops,
     #ns.Nav.stops == 1 and "" or "s", c.todo, c.turnin)
+  if (c.elsewhere or 0) > 0 then msg = msg .. string.format(" %d in other zones left out.", c.elsewhere) end
   if #c.missing > 0 then msg = msg .. " No location for: " .. table.concat(c.missing, ", ") .. "." end
   ns.Print(msg)
 end
@@ -2119,8 +2161,9 @@ function G.Init()
     if G.roadMode and not G.drawMode then
       if button == "LeftButton" or button == "RightButton" then
         local erase = button == "RightButton"
-        G.lasso = { pts = {}, cont = view.cont, road = true, erase = erase, button = button,
-          color = erase and ERASE_COLOR or DRAW_COLOR }
+        local wall = IsShiftKeyDown() -- (Shift: a wall, not a road)
+        G.lasso = { pts = {}, cont = view.cont, road = true, erase = erase, wall = wall, button = button,
+          color = wall and (erase and UNWALL_COLOR or WALL_COLOR) or (erase and ERASE_COLOR or DRAW_COLOR) }
       elseif button == "MiddleButton" then
         local mx, my = GetCursorPosition()
         tour = nil
@@ -2163,7 +2206,7 @@ function G.Init()
       local l = G.lasso
       if l and button == l.button then
         G.lasso = nil
-        G.FinishRoad(l, l.erase)
+        G.FinishRoad(l, l.erase, l.wall)
       elseif button == "MiddleButton" then
         drag = nil
       end

@@ -207,20 +207,20 @@ end
 O.SHARE_URL = "https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml"
 O.SHARE_INFO = {
   "|cffffd100What is kept|r",
-  "Roads you draw or erase with the road tools (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions only: no character or realm names.",
+  "Roads and walls you draw or erase with the road tools (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions only: no character or realm names.",
   " ",
   "|cffffd100Where it is kept|r",
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
   " ",
-  "|cffffd100How to share your roads|r",
+  "|cffffd100How to share your roads and walls|r",
   "1. Click |cffffd100Copy road data...|r and press |cffffd100Ctrl+C|r.",
-  "2. Open the address below in your browser (click it, Ctrl+C, paste it there): a \"Road data\" issue on the addon's GitHub.",
+  "2. Open the address below in your browser (click it, Ctrl+C, paste it there): it opens a new \"Road data\" issue in the addon's GitHub issues.",
   "3. Paste your road data, name the zone and say what you fixed, then submit.",
-  "No GitHub account? Paste it in a comment on the addon's CurseForge page instead.",
   " ",
-  "Roads that check out are added to the road network in a later version, for everyone.",
+  "Roads and walls that check out are added in a later version, for everyone.",
 }
 
+local shareInfo
 -- Your drawn roads as text, selected, to copy (Ctrl+C) and send.
 local roadsCopy
 local function ShowRoadsText()
@@ -234,6 +234,7 @@ local function ShowRoadsText()
     f:SetSize(460, 320)
     f:SetPoint("CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetToplevel(true)
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
     f:SetMovable(true)
@@ -241,7 +242,7 @@ local function ShowRoadsText()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-    f:SetBackdropColor(0.06, 0.06, 0.07, 0.97)
+    f:SetBackdropColor(0.06, 0.06, 0.07, 1) -- (solid: nothing behind shows through)
     f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
     tinsert(UISpecialFrames, "AzerothGPSRoadsCopy")
     local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -261,7 +262,7 @@ local function ShowRoadsText()
     local bg = f:CreateTexture(nil, "BACKGROUND", nil, 1)
     bg:SetPoint("TOPLEFT", scroll, -4, 4)
     bg:SetPoint("BOTTOMRIGHT", scroll, 4, -4)
-    bg:SetColorTexture(0, 0, 0, 0.5)
+    bg:SetColorTexture(0, 0, 0, 1)
     local edit = CreateFrame("EditBox", nil, scroll)
     edit:SetMultiLine(true)
     edit:SetAutoFocus(false)
@@ -281,17 +282,18 @@ local function ShowRoadsText()
     f.edit = edit
     roadsCopy = f
   end
+  if shareInfo then shareInfo:Hide() end -- (one window at a time: it was on top of this one)
   roadsCopy.text = text
-  roadsCopy.hint:SetText(string.format("%d road%s you drew or erased. Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it where you share feedback.",
+  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue (see How to share).",
     n, n == 1 and "" or "s"))
   roadsCopy.edit:SetText(text)
   roadsCopy:Show()
+  roadsCopy:Raise()
   roadsCopy.edit:SetFocus()
   roadsCopy.edit:HighlightText()
 end
 O.ShowRoadsText = ShowRoadsText
 
-local shareInfo
 local function ShowShareInfo()
   if not shareInfo then
     local f = CreateFrame("Frame", "AzerothGPSShareInfo", UIParent, "BackdropTemplate")
@@ -305,7 +307,7 @@ local function ShowShareInfo()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-    f:SetBackdropColor(0.06, 0.06, 0.07, 0.97)
+    f:SetBackdropColor(0.06, 0.06, 0.07, 1)
     f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
     tinsert(UISpecialFrames, "AzerothGPSShareInfo")
     local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -730,6 +732,8 @@ local function BuildWindow()
       GPS().questing = v
       ns.Nav.Invalidate(true, true)
     end)
+  check("Quest route: only this zone", "The quest route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
+    function() return GPS().questZoneOnly end, function(v) GPS().questZoneOnly = v end)
   check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The addon never uses it for you; the directions just say to.",
     function() return GPS().useHearthstone ~= false end, function(v)
       GPS().useHearthstone = v

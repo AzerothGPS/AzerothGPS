@@ -38,6 +38,7 @@ ns.DEFAULTS = {
     navCloseClears = true, -- the X on the map's route panel cancels the route (else just closes the panel)
     reopenFollow = false, -- hidden while looking around the map (a route set): reopens on the player
     questing = true, -- a stop in a quest area is done when the quest's objectives are
+    questZoneOnly = false, -- the quest route: only the quests in the zone you're in
     useHearthstone = true, -- start a route with the hearthstone (or Astral Recall) when faster
     useTeleports = true, -- ... or a class teleport (mage teleports, Teleport: Moonglade)
     useFlights = true, -- take flights between the flight masters this character knows

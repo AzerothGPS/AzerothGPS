@@ -38,6 +38,17 @@ def roads_lua(data_dir: Path, continents=None) -> str:
     from ..paths import RESOURCES
     from .tracks import shipped_times
 
+    from .tracks import walls
+
+    ws = walls(RESOURCES / "overrides")
+    out.append("-- walls drawn in game (what can't be walked through, like a mountain): per continent, point lists")
+    out.append("ns.Walls = {")
+    for cont in sorted(ws):
+        out.append(f"  [{cont}] = {{")
+        for w in ws[cont]:
+            out.append("    {" + ",".join(f"{x:g},{y:g}" for x, y in w) + "},")
+        out.append("  },")
+    out.append("}")
     times = shipped_times(RESOURCES / "overrides")
     out.append("-- the roads players drew in game that this data has (by time; the addon drops them from its own list)")
     out.append("ns.RoadTracksIn = {" + ",".join(f"[{t}]=true" for t in times) + "}")
