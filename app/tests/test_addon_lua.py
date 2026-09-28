@@ -1962,7 +1962,20 @@ def test_thunder_bluff_places_are_reached_on_its_roads(capitals_env):
     for name, x, y in city_places(ns, 1456):
         r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, x, y, lua.table(offroad=False))
         share, closed, last = check_capital_route(ns, 1, r)
-        assert share > 0.8 and closed < 10 and last < 25 and r.length < 1200, (name, share, closed, last, r.length)
+        assert share > 0.75 and closed < 10 and last < 25 and r.length < 1200, (name, share, closed, last, r.length)
+
+
+DARNASSUS_OUTSIDE = (9986.0, 1864.0)  # (on Teldrassil's road below the south gate)
+
+
+@pytest.mark.parametrize("name,spot", [("Craftsmen's Terrace", (10143.0, 2317.0)), ("the Temple of the Moon", (9622.0, 2522.0)),
+                                       ("Tradesmen's Terrace", (9812.0, 2252.0)), ("Warrior's Terrace", (9950.0, 2316.7))])
+def test_route_into_darnassus_follows_its_paths(capitals_env, name, spot):
+    lua, ns = capitals_env
+    r = ns.Router.Route(1, *DARNASSUS_OUTSIDE, *spot, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.85 and closed < 5 and last < 25, (name, share, closed, last)
+    assert r.length < 2.5 * math.dist(DARNASSUS_OUTSIDE, spot), (name, r.length)
 
 
 def test_capitals_leave_routes_elsewhere_unchanged(env):

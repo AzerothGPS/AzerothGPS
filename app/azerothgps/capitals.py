@@ -75,6 +75,10 @@ CAPITALS = [
             places=(("Wind Rider Master", -1197.2, 29.7),), outside=(-1334.0, 176.0), ground_above=100.0,
             ground_reach=150.0, join_blocked=0.0,
             lifts=((-1286.2, 189.7, 68.6), (-1308.4, 185.3, 68.6), (-1028.0, -28.4, 69.0), (-1037.3, -49.2, 69.0))),
+    # (the city's model and its south gate, on Teldrassil's ground: all of it the city's)
+    Capital("Darnassus", 1, 1457, (352798, 293133), ((9984.0, 1954.0),), outside=(9986.0, 1864.0), ground_above=0.0,
+            ground_reach=150.0, places=(("Cenarion Enclave", 10250.0, 2516.7), ("Craftsmen's Terrace", 10183.3, 2283.3),
+                                        ("Warrior's Terrace", 9950.0, 2316.7), ("Tradesmen's Terrace", 9716.7, 2283.3))),
 ]
 
 
