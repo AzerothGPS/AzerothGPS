@@ -1048,7 +1048,10 @@ function G.Update()
   local place, wmo, room
   -- Interiors belong to the terrain view (like the game minimap), and only while zoomed in:
   -- the world map style shows the city's world map, and zooming out shows the outside.
-  if st.interiors and not G.IsMapStyle(st.style) and not browse and here and zoom <= G.INTERIOR_MAX_ZOOM then
+  -- (the player's own inside map only while the view is on them: not a city opened from its
+  -- icon, nor looking somewhere else)
+  local onMe = not free or (not free.interior and (free.x - px) ^ 2 + (free.y - py) ^ 2 <= (zoom * 1.5) ^ 2)
+  if st.interiors and not G.IsMapStyle(st.style) and not browse and here and onMe and zoom <= G.INTERIOR_MAX_ZOOM then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)
