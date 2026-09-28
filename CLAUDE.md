@@ -293,6 +293,11 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - Route calculation is the main cost, not drawing. Don't recalculate on every finished
     search (`Nav.SearchDone` limits it to every 3 s), work out the stretches between stops
     one per call (`N.LATER_PER_CALL`), and keep terrain checks memoized (`Router`'s `SegCost`).
+  - A walk around an obstacle is searched in the background. Meanwhile a leg blocked for
+    no more than `PENDING_BLOCKED_YD` counts as about straight (`PendingCost`), not the long
+    way by the roads (that showed as a U-turn away from the stop), and a walk found from
+    where the player just was is joined straight onto (`Reuse`, `WALK_REUSE_YD`) instead of
+    searched again from each new spot.
   - Offroad mode's straight links between road nodes (`NodeLinks`, cached) are worked out
     for `NODE_LINK_MS` per route calculation; the rest go to a background job (`LinksNow`)
     and the route is provisional (`pending`) until they're in. A long route reaches
