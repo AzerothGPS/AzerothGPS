@@ -214,6 +214,24 @@ local function Describe(v)
 end
 
 -- API probe: prints to chat and appends to AzerothGPSDB.probes (read with `agps probes`).
+-- Boss kills, for 1.0.7's instance routes: which of these events this client fires, and
+-- with what (ns.db.encounterLog, the last 20; shown by /agps debug).
+do
+  local f = CreateFrame and CreateFrame("Frame")
+  if f then
+    for _, ev in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL" }) do pcall(f.RegisterEvent, f, ev) end
+    f:SetScript("OnEvent", function(_, ev, ...)
+      if not ns.db then return end
+      ns.db.encounterLog = ns.db.encounterLog or {}
+      local args = {}
+      for i = 1, select("#", ...) do args[#args + 1] = tostring((select(i, ...))) end
+      local log = ns.db.encounterLog
+      log[#log + 1] = date("%H:%M:%S") .. " " .. ev .. " " .. table.concat(args, ",")
+      while #log > 20 do table.remove(log, 1) end
+    end)
+  end
+end
+
 function ns.RunProbe(reason)
   local rec = { time = time(), reason = reason or "manual", results = {} }
   local lines = {}
@@ -245,6 +263,24 @@ function ns.RunProbe(reason)
   add("GetUnitSpeed", function() return GetUnitSpeed("player") end)
   add("UnitPosition", function() return UnitPosition("player") end)
   add("IsInInstance", function() return IsInInstance() end)
+  -- (instances, for 1.0.7: what the game gives inside one)
+  add("GetInstanceInfo", function() return GetInstanceInfo() end)
+  add("map info", function()
+    local i = mapID and C_Map.GetMapInfo(mapID)
+    return i and i.name, i and i.mapType, i and i.parentMapID
+  end)
+  add("map floors", function()
+    local g = mapID and C_Map.GetMapGroupID and C_Map.GetMapGroupID(mapID)
+    local out = {}
+    for _, m in ipairs(g and C_Map.GetMapGroupMembersInfo(g) or {}) do out[#out + 1] = m.mapID .. " " .. tostring(m.name) end
+    return g, table.concat(out, "; ")
+  end)
+  add("map art", function() return mapID and C_Map.GetMapArtID and C_Map.GetMapArtID(mapID) end)
+  add("boss events seen", function()
+    local out = {}
+    for _, e in ipairs(ns.db and ns.db.encounterLog or {}) do out[#out + 1] = e end
+    return table.concat(out, " | ")
+  end)
   add("GPS.state", function() return ns.GPS and ns.GPS.Describe() end)
   add("Layers.state", function() return ns.Layers and ns.Layers.Describe() end)
   add("Arrow.state", function() return ns.Arrow and ns.Arrow.Describe() end)
