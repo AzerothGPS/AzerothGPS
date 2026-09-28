@@ -249,6 +249,24 @@ function G.BlockEdges(cont, cx, cy, zoom)
   return {}
 end
 
+-- An error in the map's work: kept (ns.db.errors, the last 20, read with `agps probes`-style
+-- tools after a /reload) and said once per kind in chat.
+local errorSaid = {}
+function G.LogError(what, err)
+  G.lastError = tostring(err)
+  if ns.db then
+    ns.db.errors = ns.db.errors or {}
+    local list = ns.db.errors
+    list[#list + 1] = { what = what, err = G.lastError, time = time and time() or 0,
+      stack = debugstack and debugstack(2, 8, 0) or nil }
+    while #list > 20 do table.remove(list, 1) end
+  end
+  if not errorSaid[what] then
+    errorSaid[what] = true
+    ns.Print("GPS error (" .. what .. "): " .. G.lastError)
+  end
+end
+
 -- Every frame: a little more of the outline being worked out (EDGE_MS); the map redrawn
 -- once it's done.
 function G.PumpEdges()
@@ -2358,7 +2376,8 @@ function G.Init()
       local l = G.lasso
       if l and button == l.button then
         G.lasso = nil
-        G.FinishRoad(l, l.erase, l.wall)
+        local okF, errF = pcall(G.FinishRoad, l, l.erase, l.wall)
+        if not okF then G.LogError("saving a drawn road or wall", errF) end
       elseif button == "MiddleButton" then
         drag = nil
       end
@@ -3408,8 +3427,10 @@ function G.Init()
         end
       end
     end
-    pcall(G.UpdateZoneHover)
-    pcall(G.PumpEdges) -- (the walls' outline, worked out in the background)
+    local okH, errH = pcall(G.UpdateZoneHover)
+    if not okH then G.LogError("zone hover", errH) end
+    local okE, errE = pcall(G.PumpEdges) -- (the walls' outline, worked out in the background)
+    if not okE then G.LogError("wall outline", errE) end
     if G.lasso then -- drawing a farming area: add the cursor's spot as it moves
       local mx, my = GetCursorPosition()
       local sc = canvas:GetEffectiveScale()
@@ -3447,13 +3468,7 @@ function G.Init()
     local t0 = ns.PerfStart()
     local ok, err = pcall(G.Update)
     ns.PerfEnd("redraw", t0)
-    if not ok then
-      G.lastError = tostring(err)
-      if not G.errorShown then
-        G.errorShown = true
-        ns.Print("GPS error: " .. G.lastError)
-      end
-    end
+    if not ok then G.LogError("redraw", err) end
   end)
   G.ApplySettings()
   -- a /reload keeps the view where it was panned to (saved as the UI goes)
