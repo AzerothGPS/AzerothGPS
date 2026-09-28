@@ -1,0 +1,77 @@
+name: Release
+
+# A version tag (v1.0.6) builds the addon's zip, makes the GitHub release, and uploads it
+# to CurseForge, with that version's section of CHANGELOG.md as the notes on both.
+# "Run workflow" by hand does a dry run: it only checks the CurseForge game version.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only look up the CurseForge game version (no release, no upload)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  CF_PROJECT_ID: "1712208"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: CurseForge game version (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_GAME_VERSION_ID: ${{ vars.CF_GAME_VERSION_ID }}
+        run: python3 .github/scripts/curseforge.py --dry-run
+
+      - name: Version and changelog
+        if: github.event_name == 'push'
+        id: v
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TOC=$(grep -m1 '^## Version:' addon/AzerothGPS/AzerothGPS.toc | sed 's/## Version: *//' | tr -d '\r')
+          if [ "$TOC" != "$VERSION" ]; then echo "tag $VERSION but the toc says $TOC"; exit 1; fi
+          # this version's section of CHANGELOG.md: from "## <version>" to the next "## "
+          awk -v v="$VERSION" '
+            /^## / { on = ($2 == v) ; next }
+            on { print }
+          ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > notes.md
+          if [ ! -s notes.md ]; then echo "no '## $VERSION' section in CHANGELOG.md"; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build the zip
+        if: github.event_name == 'push'
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          mkdir -p dist
+          (cd addon && zip -r -q "../dist/AzerothGPS-$VERSION.zip" AzerothGPS -x '*/.*')
+          # every file the toc lists is in it
+          grep -v '^#' addon/AzerothGPS/AzerothGPS.toc | tr -d '\r' | sed '/^\s*$/d' | tr '\\' '/' | while read -r f; do
+            unzip -l "dist/AzerothGPS-$VERSION.zip" | grep -q "AzerothGPS/$f" || { echo "missing from the zip: $f"; exit 1; }
+          done
+          unzip -l "dist/AzerothGPS-$VERSION.zip" | tail -1
+
+      - name: GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          gh release create "v$VERSION" "dist/AzerothGPS-$VERSION.zip" --title "AzerothGPS $VERSION" --notes-file notes.md
+
+      - name: CurseForge
+        if: github.event_name == 'push'
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_GAME_VERSION_ID: ${{ vars.CF_GAME_VERSION_ID }}
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          python3 .github/scripts/curseforge.py --zip "dist/AzerothGPS-$VERSION.zip" --version "$VERSION" --changelog notes.md

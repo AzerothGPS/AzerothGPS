@@ -209,13 +209,18 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 
 ## Releases
 
+Automated by `.github/workflows/release.yml` on a version tag:
 1. Bump `## Version` in `AzerothGPS.toc` and the header in `addon/AzerothGPS/README.txt`.
-2. Build `dist/AzerothGPS-<version>.zip` with a single top-level `AzerothGPS/` folder.
-   Check that every file the toc lists is in the zip.
-3. Tag `v<version>`, push, and run
-   `gh release create v<version> dist/AzerothGPS-<version>.zip -R AzerothGPS/AzerothGPS`.
-4. The user uploads the zip to CurseForge (Files → display name "Azeroth GPS v<version>",
-   game version WoW Forever 1.60.1, Markdown changelog).
+2. Add a `## <version>` section at the top of `CHANGELOG.md` (Markdown): it becomes the
+   release notes on GitHub and the changelog on CurseForge.
+3. Commit, then tag and push the tag: `git tag v<version> && git push origin v<version>`.
+   The workflow checks the toc matches the tag, builds the zip (single `AzerothGPS/`
+   folder, every toc file in it), creates the GitHub release, and uploads to CurseForge
+   (project 1712208, "Azeroth GPS v<version>"; `.github/scripts/curseforge.py`, secret
+   `CF_API_TOKEN`, game version by name "1.60.1" or the repo variable `CF_GAME_VERSION_ID`).
+   Only tag when the user asks for a release. "Run workflow" by hand is a dry run (the
+   game version lookup only).
+4. Before tagging, check nothing personal is in the repo (the repo is public).
 
 ## Commits
 
