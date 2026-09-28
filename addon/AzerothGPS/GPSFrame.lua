@@ -180,6 +180,7 @@ G.MAX_SEGMENTS = 1500
 -- samples on a grid of `step` yards (the terrain's cell, coarser zoomed out). Worked out
 -- for a block around the view and kept while the view stays in it.
 G.EDGE_SAMPLES = 48 -- samples across the view's half width, at least
+G.EDGE_SAMPLES_INSTANCE = 128 -- ... in a dungeon's map (its outline is the map: its halls are narrow)
 G.EDGE_MS = 2 -- ms of a frame spent working a new outline out (the old one stays meanwhile)
 local edgeCache, edgeJob = {}, nil
 function G.ClearEdges() edgeCache, edgeJob = {}, nil end -- (walls or wall erasers changed)
@@ -231,7 +232,9 @@ function G.BlockEdges(cont, cx, cy, zoom)
   local g = ns.Terrain and ns.Terrain[cont]
   if not (P and P.At and g) then return {} end
   local step = g.cell
-  while step < zoom / G.EDGE_SAMPLES do step = step * 2 end
+  local lvl = ns.CityLevels and ns.CityLevels[cont]
+  local samples = lvl and lvl.instance and G.EDGE_SAMPLES_INSTANCE or G.EDGE_SAMPLES
+  while step < zoom / samples do step = step * 2 end
   local chunk = step * 32
   local reach = zoom * 1.4
   local x0, x1 = math.floor((cx - reach) / chunk) * chunk, math.ceil((cx + reach) / chunk) * chunk
@@ -702,7 +705,8 @@ local pool, poolUsed = {}, 0
 local lines, linesUsed = {}, 0
 local dashes, dashesUsed = {}, 0 -- textured dotted lines (DASH_TEXTURE)
 local ROAD_COLORS = { [0] = { 1, 0.35, 0.1 }, [1] = { 0.1, 0.9, 1 }, [2] = { 0.3, 1, 0.3 }, [3] = { 0.05, 0.28, 0.85 },
-  [4] = { 0.25, 0.85, 1 }, [5] = { 0.65, 0.65, 0.7 }, [6] = { 0.45, 0.6, 1 }, [7] = { 0.55, 0.02, 0.02 } } -- 6: quest areas, 7: walls
+  [4] = { 0.25, 0.85, 1 }, [5] = { 0.65, 0.65, 0.7 }, [6] = { 0.45, 0.6, 1 }, [7] = { 0.55, 0.02, 0.02 },
+  [8] = { 0.85, 0.78, 0.6 } } -- 6: quest areas, 7: walls, 8: a dungeon's walls (its map)
 -- Route segment kinds -> { color, width, dotted }: road, off-road, transport ride, far-side walk.
 local ROUTE_STYLE = { [0] = { 3, 5, false }, [1] = { 3, 4, true }, [2] = { 4, 4, true }, [3] = { 5, 3, true } }
 local DASH, GAP = 7, 5 -- off-road route legs are dotted (UI units)
@@ -946,15 +950,21 @@ local function PoiButton(i)
   b:SetScript("OnLeave", GameTooltip_Hide)
   b:SetScript("OnClick", function(self)
     if self.cityMap then G.ShowCity(self.cityMap) end -- (a capital on a continent's map)
+    if self.instance then G.ShowInstance(self.instance) end -- (a dungeon's entrance: its map)
+    if self.exit then G.ShowEntrance(self.exit) end -- (in a dungeon's map: back out at its entrance)
   end)
   b:SetScript("OnDoubleClick", function(self)
-    if self.cityMap then return end
+    if self.cityMap or self.exit then return end
     if self.preview then return end -- (a city place a guard hasn't pointed out: ask one)
     G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex) -- like a double-click on the map, with its name and icon
   end)
   poiButtons[i] = b
   return b
 end
+
+local INSTANCE_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
+local BOSS_ICON = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
+local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 
 local function DrawPois(pois, zoom)
   local known, seen = TaxiKnowledge()
@@ -980,8 +990,25 @@ local function DrawPois(pois, zoom)
       local b = PoiButton(nb)
       b.name, b.wx, b.wy = p[4], p[5], p[6]
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
-      b.preview, b.cityMap = nil, nil
-      if p[1] == 5 then -- a capital on a continent's map: click for the city
+      b.preview, b.cityMap, b.instance, b.exit = nil, nil, nil, nil
+      if p[1] == 6 then -- a dungeon's or raid's entrance: click for its map
+        ns.SetIcon(b.icon, p.raid and "atlas:Raid" or "atlas:Dungeon", INSTANCE_ICON)
+        b.stopTex, b.questID = nil, nil
+        b.note = (p.raid and "Raid" or "Dungeon") .. ". Click: show its map"
+        b.instance = p.instance
+        b:SetSize(20, 20)
+      elseif p[1] == 7 then -- a boss, in a dungeon's map
+        ns.SetIcon(b.icon, BOSS_ICON)
+        b.stopTex, b.questID = BOSS_ICON, nil
+        b.note = p.optional and "Optional" or nil
+        b:SetSize(18, 18)
+      elseif p[1] == 8 then -- a dungeon's way out, in its map
+        ns.SetIcon(b.icon, "atlas:poi-door", EXIT_ICON)
+        b.stopTex, b.questID = nil, nil
+        b.note = "Click: back out on the map"
+        b.exit = p.exit
+        b:SetSize(18, 18)
+      elseif p[1] == 5 then -- a capital on a continent's map: click for the city
         ns.SetIcon(b.icon, "atlas:poi-majorcity", "Interface\\Icons\\INV_Misc_Map02")
         b.icon:SetVertexColor(1, 1, 1)
         b.stopTex, b.questID = nil, nil
@@ -1107,6 +1134,10 @@ function G.Update()
   -- The continent whose coordinates this view uses (browsing may show the other one).
   local viewCont = ViewCont(cont)
   local here = viewCont == cont
+  -- a dungeon or raid: the player in one (the game reports its map), or one opened from its
+  -- entrance's icon. Its map is its floors' outline (no map art for them here).
+  local inst = G.InstanceOf(ns.Nav.InstanceLevel and ns.Nav.InstanceLevel(viewCont) or viewCont)
+  view.instance = inst
   local quads
   -- Indoors inside a known building: show its interior map, like the game minimap.
   local place, wmo, room
@@ -1115,7 +1146,7 @@ function G.Update()
   -- (the player's own inside map only while the view is on them: not a city opened from its
   -- icon, nor looking somewhere else)
   local onMe = not free or (not free.interior and (free.x - px) ^ 2 + (free.y - py) ^ 2 <= (zoom * 1.5) ^ 2)
-  if st.interiors and not G.IsMapStyle(st.style) and not browse and here and onMe and zoom <= G.INTERIOR_MAX_ZOOM then
+  if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and onMe and zoom <= G.INTERIOR_MAX_ZOOM then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)
@@ -1134,7 +1165,9 @@ function G.Update()
     place, wmo, room = free.interior[1], free.interior[2], free.interior[3]
   end
   G.inside = place and ((room.n ~= "" and room.n or "?") .. " / " .. place[1]) or nil
-  if place and not browse then
+  if inst and not browse then
+    quads = {}
+  elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   elseif browse then
     quads = G.LayoutZone(cx, cy, browse, rot, zoom, half, browseBounds, st.style == "nospoiler")
@@ -1159,19 +1192,23 @@ function G.Update()
   -- (the roads of the continent in view, the player's or another)
   local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
   if (st.showRoads or forced) and not place then
-    for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do
+    for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or (here and cont or viewCont), rot, zoom, half)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
     end
   end
   -- walls (blood red): with the roads shown, or the road tools on
-  if st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
+  if inst then -- a dungeon's map: its floors' outline (and walls drawn in it)
+    for _, sg in ipairs(G.LayoutWalls(cx, cy, inst, rot, zoom, half, true)) do
+      AddSeg(sg[1], sg[2], sg[3], sg[4], sg.edge and 8 or 7, sg.edge and 2 or 3)
+    end
+  elseif st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
     local wc = (here and onMe) and ns.Nav.PlayerLevel(cont) or viewCont -- (the level shown: the player's only while the view is on them)
     -- (the terrain's impassable borders thinner, drawn walls thicker)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
   end
   -- Quest objective areas (Layers.lua), outlined in the minimap's blue, on their own layer.
   local layerMaps = { C_Map.GetBestMapForUnit("player"), browse }
-  DrawAreas(ns.Layers and st.layerQuests and st.layerQuestAreas and not place, viewCont, cx, cy, zoom, rot, s, half, layerMaps)
+  DrawAreas(ns.Layers and st.layerQuests and st.layerQuestAreas and not place and not inst, viewCont, cx, cy, zoom, rot, s, half, layerMaps)
   ns.PerfEnd("redraw: roads and quest areas", pt)
   pt = ns.PerfStart()
   -- Route: solid along roads, dotted for the legs to and from the road; destination pin.
@@ -1210,7 +1247,7 @@ function G.Update()
     -- (the level shown: the player's, or a city's opened from its icon; the route's stretches
     -- on another level (down in a city while up top, or back up) are drawn faint and dotted,
     -- not as if across what's shown)
-    local shown = here and ns.Nav.PlayerLevel(cont) or viewCont
+    local shown = inst or (here and ns.Nav.PlayerLevel(cont) or viewCont)
     if free and free.interior then
       for lc, l in pairs(ns.CityLevels or {}) do
         if l.wmo == free.interior[1][1] then shown = lc end
@@ -1307,7 +1344,26 @@ function G.Update()
     end
     return out
   end
-  if (not place or browse) and not worldView then
+  if inst and not browse then
+    -- a dungeon's map: its bosses (in the usual order) and its ways out
+    local pois = {}
+    local function add(p)
+      local dx, dy = Geo.ScreenOffset(cx, cy, p[5], p[6])
+      dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+      if math.abs(dx) <= half and math.abs(dy) <= half then
+        p[2], p[3] = dx, dy
+        pois[#pois + 1] = p
+      end
+    end
+    local info = ns.Instances[inst]
+    for _, e in ipairs(info.entrances or {}) do
+      add({ 8, 0, 0, "Way out: " .. info.name, e[4], e[5], exit = e })
+    end
+    for _, b in ipairs(info.bosses or {}) do
+      add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional })
+    end
+    DrawPois(DropUnderStops(pois), zoom)
+  elseif (not place or browse) and not worldView then
     local fac = ns.CharDB().faction
     fac = fac == "Horde" and "H" or fac == "Alliance" and "A" or nil
     -- (a continent's map: none of the points of interest, only once in a zone)
@@ -1327,6 +1383,17 @@ function G.Update()
           if math.abs(dx) <= half and math.abs(dy) <= half then
             pois[#pois + 1] = { 5, dx, dy, m.name, x, y, cityMap = id }
           end
+        end
+      end
+    end
+    -- dungeon and raid entrances (every map style but the world map): click for its map
+    if st.layerInstances ~= false then
+      local zoomedOut = bm and bm.type == 2
+      for _, e in ipairs(G.InstanceEntrances(Geo.Base(viewCont))) do
+        local dx, dy = Geo.ScreenOffset(cx, cy, e.x, e.y)
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if math.abs(dx) <= half and math.abs(dy) <= half and not (zoomedOut and e.shared) then
+          pois[#pois + 1] = { 6, dx, dy, e.name, e.x, e.y, instance = e.level, raid = e.raid, level = e.cont }
         end
       end
     end
@@ -1451,6 +1518,10 @@ function G.UpdateInfo()
     mark = "|cff80c0ff>|r "
   elseif free and free.cross then
     x, y, mark = view.x, view.y, "|cffffd100+|r "
+  end
+  if x and view.instance and ns.Instances[view.instance] then -- (a dungeon's map)
+    infoText:SetFormattedText("%s%s  %.0f, %.0f", mark, ns.Instances[view.instance].name, x, y)
+    return
   end
   if x and view.cont then
     local _, name, u, v = G.LocateWorld(view.cont, x, y)
@@ -1649,6 +1720,7 @@ end
 
 -- Right-click in world-map style: up one level.
 function G.ZoomOut()
+  if not browse and LeaveInstance() then return end
   local current = browse or G.DisplayMap(C_Map.GetBestMapForUnit("player"))
   if not current or not ns.Maps[current] then return end
   if not browse then
@@ -1716,6 +1788,7 @@ function G.ContinentMap(c)
 end
 
 function G.TerrainZoomOut()
+  if not browse and LeaveInstance() then return end
   local m = browse and ns.Maps[browse]
   local _, _, cont = Geo.PlayerWorld()
   if not browse then
@@ -1788,6 +1861,73 @@ function G.ShowCity(id)
   free = { x = cx, y = cy, rot = 0, cross = true, cont = m.continent, interior = interior }
   if recenter then recenter:Show() end
   elapsed = 1
+end
+
+-- Dungeons and raids (Data/Instances.lua) --------------------------------------------------
+
+-- Level `lvl` if it's a dungeon's or raid's, else nil.
+function G.InstanceOf(lvl)
+  local l = lvl and ns.CityLevels and ns.CityLevels[lvl]
+  return l and l.instance and ns.Instances and ns.Instances[lvl] and lvl or nil
+end
+
+-- The dungeon and raid entrances on continent `cont`: { { level, name, raid, cont, x, y,
+-- shared } } (shared: another's within 60 yd, e.g. the Scarlet Monastery's wings, Blackrock
+-- Mountain's; only the first of those shows on a continent's map).
+local entrances = {}
+function G.InstanceEntrances(cont)
+  local list = entrances[cont]
+  if list then return list end
+  list = {}
+  local levels = {}
+  for lvl in pairs(ns.Instances or {}) do levels[#levels + 1] = lvl end
+  table.sort(levels)
+  for _, lvl in ipairs(levels) do
+    local info = ns.Instances[lvl]
+    for _, e in ipairs(info.entrances or {}) do
+      if e[1] == cont then
+        local shared = false
+        for _, o in ipairs(list) do
+          if (o.x - e[2]) ^ 2 + (o.y - e[3]) ^ 2 <= 60 * 60 then shared = true break end
+        end
+        list[#list + 1] = { level = lvl, name = info.name, raid = info.raid, cont = e[1], x = e[2], y = e[3], shared = shared }
+      end
+    end
+  end
+  entrances[cont] = list
+  return list
+end
+
+-- A dungeon's map: its floors, bosses and ways out, fitted in the view.
+function G.ShowInstance(lvl)
+  local P = ns.Passability
+  local x0, x1, y0, y1
+  if P and P.GridBounds then x0, x1, y0, y1 = P.GridBounds(lvl) end
+  if not x0 then return end
+  browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
+  free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cross = true, cont = lvl, instance = lvl }
+  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
+  if recenter then recenter:Show() end
+  elapsed = 1
+end
+
+-- Back out of a dungeon's map: the terrain view at entrance `e` ({ cont, x, y, ... }).
+function G.ShowEntrance(e)
+  browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
+  free = { x = e[2], y = e[3], rot = 0, cross = true, cont = e[1] }
+  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, 400))
+  if recenter then recenter:Show() end
+  elapsed = 1
+end
+
+-- Right-click in a dungeon's map: out at its (first) entrance.
+local function LeaveInstance()
+  local inst = view.instance
+  local info = inst and ns.Instances and ns.Instances[inst]
+  local e = info and info.entrances and info.entrances[1]
+  if not e then return false end
+  G.ShowEntrance(e)
+  return true
 end
 
 -- "Route Here": destination at the crosshair, then a short tour: hold 3 s, ease out to
@@ -2919,6 +3059,8 @@ function G.Init()
     { id = "ore", key = "layerOre", icon = "Interface\\Icons\\INV_Ore_Copper_01", label = "Ore", tip = "Ore nodes you know." },
     { id = "city", key = "layerCity", icon = "Interface\\Icons\\INV_Helmet_03", label = "City locations",
       tip = "Places guards pointed out to you (trainers, bank, ...), for all your characters.", defaultOn = true },
+    { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
+      tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
     { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
       tip = "Click to turn on, click again when done. On the map: left-drag along a road the routes miss to add it (joined to the roads it meets; where it runs along one, that road stays), right-drag over a road that isn't there to erase it (red), middle-drag to pan. Routes use your changes at once. (Shown with the road tools option, or /agps dev)",
       isOn = function() return G.roadMode end,
@@ -2955,7 +3097,7 @@ function G.Init()
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
   G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight", offroad = "hidden",
-    city = "hidden", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
+    city = "hidden", instances = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {

@@ -175,7 +175,14 @@ The addon is going public, so every change must keep it policy-safe:
     `ns.Transports` (kind "portal": continent end where the server's exit teleport puts you,
     else the client's ghost entrance `Map.Corpse`; instance end where its entering teleport puts
     you), so a trip from outside walks to the portal (into a cave or capital when it's in one),
-    rides it, and goes on over the instance's roads. Entrances, bosses (the server's encounters
+    rides it, and goes on over the instance's roads (`Nav.Plan` takes a portal only for a trip
+    from or to inside that instance: never through a dungeon's two entrances as a shortcut).
+    On the map (`layerInstances`, the "Dungeons and raids" quick button): entrance icons on
+    every style but the world map (one per spot on a continent's map); a click opens the
+    instance's map (`G.ShowInstance`: no art here, its floors' outline from
+    `G.BlockEdges` at `EDGE_SAMPLES_INSTANCE`, its roads, boss icons numbered in order, the way
+    out); right-click or the way-out icon goes back to the entrance (`G.ShowEntrance`). The
+    player inside one gets the same view (`G.InstanceOf`, `view.instance`). Entrances, bosses (the server's encounters
     and rank 3 NPCs, positions from their spawns) come from the CMaNGOS dump under
     `data/thirdparty`; the AreaTrigger and DungeonEncounter layouts this client has are in
     `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into

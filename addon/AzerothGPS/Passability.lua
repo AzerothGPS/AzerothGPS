@@ -286,6 +286,14 @@ function P.WallHit(cont, x1, y1, x2, y2)
 end
 
 -- Whether world (x, y) is inside grid `key`'s rectangle (a city level's: over the city).
+-- The world extent of grid `key` (a continent's, a city's or an instance's): x0, x1, y0, y1.
+function P.GridBounds(key)
+  local g = ns.Terrain and ns.Terrain[key]
+  if not (g and g.w and g.h) then return nil end
+  local x1, y1 = (32 - g.ty0) * TILE, (32 - g.tx0) * TILE -- (its north-west corner: rows run south, columns east)
+  return x1 - g.h * g.cell, x1, y1 - g.w * g.cell, y1
+end
+
 function P.InGrid(key, x, y)
   local g = ns.Terrain and ns.Terrain[key]
   if not g then return false end

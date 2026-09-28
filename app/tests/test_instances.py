@@ -118,3 +118,27 @@ def test_wailing_caverns_portal_is_in_its_cave(inst_env):
     v = ns.Passability.OverlayRaw(1, portal[2], portal[3])
     v, grid = v if isinstance(v, tuple) else (v, None)
     assert grid is not None and grid.cave
+
+
+def test_instance_map_view_helpers(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G, P = ns.GPS, ns.Passability
+    assert G.InstanceOf(DM) == DM and G.InstanceOf(0) is None and G.InstanceOf(10001) is None
+    # the map fitted to the instance's grid: every boss and the way in are on it
+    x0, x1, y0, y1 = P.GridBounds(DM)
+    inst = ns.Instances[DM]
+    for i in range(1, len(inst.bosses) + 1):
+        b = inst.bosses[i]
+        assert x0 <= b[3] <= x1 and y0 <= b[4] <= y1, b[1]
+    assert x0 <= DM_INSIDE[0] <= x1 and y0 <= DM_INSIDE[1] <= y1
+    # entrance icons per continent, at the continent end of the portal
+    ents = G.InstanceEntrances(0)
+    dm = [ents[i] for i in range(1, len(ents) + 1) if ents[i].level == DM]
+    assert len(dm) == 1 and dm[0].cont == 0 and dm[0].x == pytest.approx(-11208.7, abs=0.2)
+    names1 = {G.InstanceEntrances(1)[i].name for i in range(1, len(G.InstanceEntrances(1)) + 1)}
+    assert "Wailing Caverns" in names1 and "Deadmines" not in names1
+    # the Scarlet Monastery's wings share a spot: one icon on a continent's map
+    sm = [ents[i] for i in range(1, len(ents) + 1) if "Scarlet Monastery" in ents[i].name]
+    if len(sm) > 1:
+        assert any(not e.shared for e in sm) and any(e.shared for e in sm)

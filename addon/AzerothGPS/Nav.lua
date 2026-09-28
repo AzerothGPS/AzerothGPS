@@ -380,8 +380,11 @@ function N.Plan(cont, px, py, speed, d, teleports)
     nodes[#nodes + 1] = { row[4], row[5], row[6], tp = row }
   end
   for i, t in ipairs(ns.Transports or {}) do
-    nodes[#nodes + 1] = { t[1], t[2], t[3], t = i, side = 1 }
-    nodes[#nodes + 1] = { t[4], t[5], t[6], t = i, side = 2 }
+    -- (a dungeon's way in only for a trip from or to inside it: never through one as a shortcut)
+    if t[8] ~= "portal" or t[4] == cont or t[4] == d.cont then
+      nodes[#nodes + 1] = { t[1], t[2], t[3], t = i, side = 1 }
+      nodes[#nodes + 1] = { t[4], t[5], t[6], t = i, side = 2 }
+    end
   end
   local fl = Flights()
   if fl then

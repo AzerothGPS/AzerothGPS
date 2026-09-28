@@ -551,6 +551,8 @@ local function BuildWindow()
     function() return GPS().layerHerbs ~= false end, function(v) GPS().layerHerbs = v end)
   check("Ore", "Mining nodes you've gathered, hovered on the game minimap, right-clicked (without Mining) or imported. Saved for all your characters. A farming area (map menu) uses the kinds shown.",
     function() return GPS().layerOre ~= false end, function(v) GPS().layerOre = v end)
+  check("Dungeons and raids", "Their entrances, on every map style. Click one for its map, with its bosses in the usual order; right-click goes back out.",
+    function() return GPS().layerInstances ~= false end, function(v) GPS().layerInstances = v end)
 
   ---------------------------------------------------------------- Routing
   ---------------------------------------------------------------- Quick buttons

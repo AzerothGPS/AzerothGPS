@@ -32,6 +32,7 @@ ns.DEFAULTS = {
     layerHerbs = true, -- herbs you've gathered, hovered on the minimap, right-clicked or imported
     layerOre = true, -- ... and ore
     layerCity = true, -- city locations guards pointed out (trainers, bank, ...)
+    layerInstances = true, -- dungeon and raid entrances (click one for its map, with its bosses)
     approachZoom = true, -- zoom in near the next stop, back out once there
     -- routing
     offroad = true, -- straight across open ground, roads only where needed
