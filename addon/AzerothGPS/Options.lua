@@ -833,6 +833,30 @@ local function BuildWindow()
     undoBtn:SetEnabled(any and true or false)
   end
 
+  ---------------------------------------------------------------- Wall tools
+  Page("Wall tools")
+  header("Walls", "What routes can't walk through: a town's wall, a fence, a cliff edge.")
+  check("Show extracted walls", "Draws the walls the routes go around (blood red): the addon's and the ones you drew.",
+    function() return GPS().showWalls end, function(v) GPS().showWalls = v end)
+  header("Fixing walls")
+  note("With the wall tools on, on the map: left-drag along a wall the routes try to walk through, right-drag over a wall that isn't there (circle an area to erase every wall in it), middle-drag to pan. Routes go around your walls right away, like a mountain; roads and flight paths still cross them.")
+  check("Wall tools button on the map", "Adds a Wall tools toggle to the map's buttons (the up column).",
+    function() return GPS().wallTools end, function(v)
+      GPS().wallTools = v
+      if not v and ns.GPS.wallMode then ns.GPS.SetWallMode(false) end
+      if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
+    end)
+  local wallBtn = Button(page, "Wall tools on/off", 150, function() ns.GPS.ToggleWallMode() end)
+  place(wallBtn, 28, 4)
+  local wUndo = Button(page, "Take back the last", 150, function() ns.Record.Undo() end)
+  local wList = Button(page, "List drawn walls", 150, function() ns.Record.List() end)
+  place(wUndo, 28, 4)
+  wList:SetPoint("LEFT", wUndo, "RIGHT", 6, 0)
+  controls[#controls + 1] = function()
+    local any = ns.db and ns.db.tracks and #ns.db.tracks > 0
+    wUndo:SetEnabled(any and true or false)
+  end
+
   ---------------------------------------------------------------- Help improve
   Page("Help improve")
   header("Help improve AzerothGPS", "Kept on your PC only; sharing it is a separate step.")

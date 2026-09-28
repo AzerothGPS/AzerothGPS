@@ -246,12 +246,16 @@ N.FLIGHT_OVERHEAD = 15 -- s: talking to the flight master, taking off and landin
 
 local flightCache -- { key, masters = { [node] = { cont, x, y, name } }, trips = { [from] = { [to] = row } } }
 
--- Flight masters (Data/Pois.lua kind 1): { [nodeID] = { cont, x, y, name, faction } }.
+-- Flight masters (Data/Pois.lua kind 1): { [nodeID] = { cont, x, y, name, faction } }; cont
+-- is the city level for one down in a city (Undercity's: p[7]).
 local function Masters()
   local m = {}
   for cont, list in pairs(ns.Pois or {}) do
     for _, p in ipairs(list) do
-      if p[1] == 1 then m[p[5]] = { cont, p[2], p[3], p[4], p[6] } end
+      if p[1] == 1 then
+        local lvl = p[7] and ns.CityLevels and ns.CityLevels[p[7]] and p[7] -- (with the city's data)
+        m[p[5]] = { lvl or cont, p[2], p[3], p[4], p[6] }
+      end
     end
   end
   return m

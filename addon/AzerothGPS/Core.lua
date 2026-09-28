@@ -63,6 +63,8 @@ ns.DEFAULTS = {
     -- help improve AzerothGPS (opt-in: off unless the player turns them on)
     shareRoads = false, -- keep the roads the player draws or erases for sharing
     devTools = false, -- the road tools on the map's buttons (Draw a road, Erase a road)
+    wallTools = false, -- the wall tools on the map's buttons
+    showWalls = false, -- draw the walls routes don't walk through (blood red)
     shareTrips = false, -- keep traces of trips clearly faster than estimated
   },
   minimap = { hide = false, angle = 128 }, -- minimap button (degrees around the minimap)

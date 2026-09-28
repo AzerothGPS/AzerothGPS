@@ -265,14 +265,17 @@ def flights_lua(cd: ClientData) -> str:
 
 def pois_lua(cd: ClientData) -> str:
     """ns.Pois[continent] = { {kind, x, y, name, extra}, ... }
-    kind: 1 flight master (extra = nodeID, faction "A"/"H"/"AH"), 2 map point of interest
-    (extra = importance), 3 town/place label (extra = parent zone areaId)."""
+    kind: 1 flight master (extra = nodeID, faction "A"/"H"/"AH", and the city level it's down
+    in, if it is: Undercity's), 2 map point of interest (extra = importance), 3 town/place
+    label (extra = parent zone areaId)."""
     from .extract.pipeline import CONTINENTS, area_pois, extract_area_grid, taxi_pois, town_labels
 
     rows: dict[int, list[str]] = {c: [] for c in CONTINENTS}
     for p in taxi_pois(cd):
         fac = "".join(f[0].upper() for f in sorted(p["factions"]))
-        rows[p["continent"]].append(f'{{1,{p["wx"]},{p["wy"]},{_lua_str(p["name"])},{p["id"]},"{fac}"}}')
+        level = underground_level(cd, p)
+        tail = f",{level}" if level else ""
+        rows[p["continent"]].append(f'{{1,{p["wx"]},{p["wy"]},{_lua_str(p["name"])},{p["id"]},"{fac}"{tail}}}')
     for p in area_pois(cd):
         rows[p["continent"]].append(f'{{2,{p["wx"]},{p["wy"]},{_lua_str(p["name"])},{p["importance"]}}}')
     for cont in CONTINENTS:
@@ -297,6 +300,30 @@ def pois_lua(cd: ClientData) -> str:
         out.append(f"  [{_lua_str(name)}] = {{ {c}, {x:.1f}, {y:.1f} }},")
     out.append("}")
     return "\n".join(out) + "\n"
+
+
+UNDERGROUND_YD = 10.0  # a flight master this far below the ground over it is down in a city
+
+
+def underground_level(cd: ClientData, p: dict):
+    """The city level (Undercity: 10001) a flight master stands down in, else None: it's on a
+    city level's base continent, near the city, and well below the ground there."""
+    import math
+
+    import numpy as np
+
+    from .cities import UNDERCITY_ID, _ground
+
+    if p["continent"] != 0 or "wz" not in p:
+        return None
+    if math.hypot(p["wx"] - 1600.0, p["wy"] - 240.0) > 450:  # (the Undercity's area)
+        return None
+    x, y = p["wx"], p["wy"]
+    height, _ = _ground(cd, x - 4, x + 4, y - 4, y + 4, 2.0)
+    ground = np.nanmax(height) if np.isfinite(height).any() else None
+    if ground is not None and p["wz"] < ground - UNDERGROUND_YD:
+        return UNDERCITY_ID
+    return None
 
 
 def area_spots(cd: ClientData) -> dict[str, tuple[int, float, float]]:

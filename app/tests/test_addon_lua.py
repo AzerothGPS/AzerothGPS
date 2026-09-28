@@ -3025,3 +3025,24 @@ def test_quest_route_stops_in_a_city_still_go_in_the_fastest_order(nav_env):
     assert N.KeepCityOrder()  # placed by hand: your order
     N.stops = lua.eval("{ { x = 1480, y = 280, cont = 10001, questRoute = true }, { x = 1590, y = 204, cont = 10001, questRoute = true } }")
     assert not N.KeepCityOrder()  # the quest route: fastest
+
+
+def test_undercity_flight_master_is_down_in_the_city(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Pois.lua")
+    fm = [ns.Pois[0][i] for i in range(1, len(ns.Pois[0]) + 1)
+          if ns.Pois[0][i][1] == 1 and ns.Pois[0][i][4] == "Undercity, Tirisfal"]
+    assert fm and fm[0][7] == 10001
+    others = [ns.Pois[0][i] for i in range(1, len(ns.Pois[0]) + 1) if ns.Pois[0][i][1] == 1 and ns.Pois[0][i][7]]
+    assert len(others) == 1  # (only it)
+
+
+def test_flying_from_undercity_starts_at_its_flight_master_down_in_the_city(nav_env):
+    lua, ns = flights_env(nav_env, [11, 17])  # Undercity, Hammerfall
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua")
+    ns.Nav.FlightsChanged()
+    lua.execute("function AGPS_STOP(x, y) return { x = x, y = y, cont = 0 } end")
+    # in the Trade Quarter, down in the city, a few yards from the bat handler
+    legs, secs = ns.Nav.Plan(10001, 1585.0, 280.0, 7.0, lua.eval("AGPS_STOP")(-910.0, -3490.0))
+    kinds = [("ride " + str(legs[i].ride[8])) if legs[i].ride else "walk" for i in range(1, len(legs) + 1)]
+    assert kinds[:2] == ["walk", "ride flight"]  # straight to the flight master: no lift first

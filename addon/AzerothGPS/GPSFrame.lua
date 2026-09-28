@@ -441,7 +441,7 @@ function G.LayoutPois(cx, cy, cont, rot, zoom, half, show, faction)
       if math.abs(dx) < reach and math.abs(dy) < reach then
         dx, dy = Geo.Rotate(dx * s, dy * s, rot)
         if math.abs(dx) <= half and math.abs(dy) <= half then
-          out[#out + 1] = { kind, dx, dy, p[4], p[2], p[3], p[5], p[6] }
+          out[#out + 1] = { kind, dx, dy, p[4], p[2], p[3], p[5], p[6], level = kind == 1 and p[7] or nil }
           if #out >= G.MAX_POIS then break end
         end
       end
@@ -782,7 +782,7 @@ local function PoiButton(i)
   b:SetScript("OnDoubleClick", function(self)
     if self.cityMap then return end
     if self.preview then return end -- (a city place a guard hasn't pointed out: ask one)
-    G.AddStopAt(self.wx, self.wy, self.name, nil, self.stopTex) -- like a double-click on the map, with its name and icon
+    G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex) -- like a double-click on the map, with its name and icon
   end)
   poiButtons[i] = b
   return b
@@ -811,6 +811,7 @@ local function DrawPois(pois, zoom)
       nb = nb + 1
       local b = PoiButton(nb)
       b.name, b.wx, b.wy = p[4], p[5], p[6]
+      b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.preview, b.cityMap = nil, nil
       if p[1] == 5 then -- a capital on a continent's map: click for the city
         ns.SetIcon(b.icon, "atlas:poi-majorcity", "Interface\\Icons\\INV_Misc_Map02")
@@ -989,7 +990,7 @@ function G.Update()
     for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], sg[5]) end
   end
   -- walls (blood red): with the roads shown, or the road tools on
-  if (st.showRoads or G.roadMode) and not place then
+  if (st.showWalls or G.wallMode) and not place then
     local wc = here and ns.Nav.PlayerLevel(cont) or viewCont
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, 3) end
   end
@@ -1772,7 +1773,7 @@ end
 function G.StopDrawing()
   G.drawMode, G.lasso = false, nil
   if drawHint then
-    if G.roadMode then G.RoadHint() else drawHint:Hide() end
+    if G.roadMode or G.wallMode then G.RoadHint() else drawHint:Hide() end
   end
   elapsed = 1
 end
@@ -1780,20 +1781,44 @@ end
 -- The road tools: on until toggled off. On the map, left-drag draws a road, right-drag
 -- erases one (in red), middle-drag pans.
 function G.RoadHint()
-  drawHint:SetText("Left-drag: draw a road   |cffff4040Right-drag: erase (circle an area to erase it all)|r\n"
-    .. "|cffb01010Shift+left-drag: draw a wall|r   |cffb0b0b0Shift+right-drag: erase walls|r   |cff9d9d9dMiddle-drag: pan|r")
+  if G.wallMode then
+    drawHint:SetText("|cffd02020Left-drag: draw a wall|r   |cffb0b0b0Right-drag: erase walls (circle an area to erase them all)|r   |cff9d9d9dMiddle-drag: pan|r")
+  else
+    drawHint:SetText("Left-drag: draw a road   |cffff4040Right-drag: erase (circle an area to erase it all)|r   |cff9d9d9dMiddle-drag: pan|r")
+  end
   drawHint:Show()
 end
 
 function G.SetRoadMode(on)
   G.roadMode = on and true or false
+  if G.roadMode then G.wallMode = false end -- (one set of tools at a time)
   G.lasso, drag = nil, nil
   if G.drawMode then G.drawMode = false end
   if drawHint then
-    if G.roadMode then G.RoadHint() else drawHint:Hide() end
+    if G.roadMode or G.wallMode then G.RoadHint() else drawHint:Hide() end
   end
   if G.RefreshQuick then G.RefreshQuick() end
   elapsed = 1
+end
+
+-- The wall tools: like the road tools, for walls (what routes can't walk through): on the
+-- map, left-drag draws one, right-drag erases them, middle-drag pans. On until toggled off.
+function G.SetWallMode(on)
+  G.wallMode = on and true or false
+  if G.wallMode then G.roadMode = false end
+  G.lasso, drag = nil, nil
+  if G.drawMode then G.drawMode = false end
+  if drawHint then
+    if G.roadMode or G.wallMode then G.RoadHint() else drawHint:Hide() end
+  end
+  if G.RefreshQuick then G.RefreshQuick() end
+  elapsed = 1
+end
+
+function G.ToggleWallMode()
+  G.SetWallMode(not G.wallMode)
+  ns.Print(G.wallMode and "wall tools on: left-drag draws a wall, right-drag erases walls, middle-drag pans (toggle off when done)"
+    or "wall tools off")
 end
 
 function G.ToggleRoadMode()
@@ -2158,10 +2183,10 @@ function G.Init()
     -- a click on the map closes the map menu and the search panel
     if G.mapMenu then G.mapMenu:Hide() end
     if G.searchPanel then G.searchPanel:Hide() end
-    if G.roadMode and not G.drawMode then
+    if (G.roadMode or G.wallMode) and not G.drawMode then
       if button == "LeftButton" or button == "RightButton" then
         local erase = button == "RightButton"
-        local wall = IsShiftKeyDown() -- (Shift: a wall, not a road)
+        local wall = G.wallMode
         G.lasso = { pts = {}, cont = view.cont, road = true, erase = erase, wall = wall, button = button,
           color = wall and (erase and UNWALL_COLOR or WALL_COLOR) or (erase and ERASE_COLOR or DRAW_COLOR) }
       elseif button == "MiddleButton" then
@@ -2202,7 +2227,7 @@ function G.Init()
     drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false }
   end)
   frame:SetScript("OnMouseUp", function(f, button)
-    if G.roadMode and not G.drawMode then
+    if (G.roadMode or G.wallMode) and not G.drawMode then
       local l = G.lasso
       if l and button == l.button then
         G.lasso = nil
@@ -2656,8 +2681,15 @@ function G.Init()
         if G.mapMenu then G.mapMenu:Hide() end
         G.ToggleRoadMode()
       end },
-    { id = "roadUndo", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", label = "Undo", dev = true,
-      tip = "Takes back your last drawn or erased road (until it's in the road data). (Shown with the road tools option, or /agps dev)",
+    { id = "wallTools", icon = "Interface\\Icons\\Ability_Warrior_ShieldWall", label = "Wall tools", wallDev = true,
+      tip = "Click to turn on, click again when done. On the map: left-drag along a wall, fence or cliff edge the routes try to walk through (blood red): routes go around it like a mountain (roads and flight paths still cross it). Right-drag over walls to erase them (circle an area for all in it), middle-drag to pan. (Shown with the wall tools option)",
+      isOn = function() return G.wallMode end,
+      action = function()
+        if G.mapMenu then G.mapMenu:Hide() end
+        G.ToggleWallMode()
+      end },
+    { id = "roadUndo", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", label = "Undo", dev = true, wallDev = true,
+      tip = "Takes back your last drawn or erased road or wall (until it's in the data). (Shown with the road or wall tools)",
       action = function()
         if G.mapMenu then G.mapMenu:Hide() end
         ns.Record.Undo()
@@ -2678,7 +2710,7 @@ function G.Init()
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
   G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight", offroad = "hidden",
-    city = "hidden", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp" }
+    city = "hidden", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {
@@ -2857,12 +2889,15 @@ function G.Init()
     for i, id in ipairs(S().quickOrder or {}) do rank[id] = i end
     local out = {}
     for i, t in ipairs(SLOTS) do
-      if not t.dev or S().devTools then out[#out + 1] = t end -- (the road tools: /agps dev)
+      -- (the road tools: /agps dev; the wall tools: their option; Undo with either)
+      local shown = (not t.dev and not t.wallDev) or (t.dev and S().devTools) or (t.wallDev and S().wallTools)
+      if shown then out[#out + 1] = t end
       base[t.id] = i
     end
     -- (Undo sits right above the road tools)
     local function key(t)
       if t.id == "roadUndo" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.5 end
+      if t.id == "wallTools" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.7 end
       return rank[t.id] or 1000 + base[t.id]
     end
     table.sort(out, function(a, b) return key(a) < key(b) end)

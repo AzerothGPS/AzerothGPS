@@ -183,7 +183,9 @@ AzerothGPS reads the TomTom `/way` format used by guides and websites:
 
 ## Drawing a missing road (or a wall)
 
-Turn on the road tools (Options > Road tools, or `/agps dev`) and the map gets a **Road tools** button. Click it, then left-drag along a trail the routes miss: routes use it right away, joined to the roads it meets. A "road" that isn't really there? Right-drag over it (red), or circle an area to erase every road in it. A wall or fence the routes try to walk through? **Shift**+left-drag along it: routes go around it like a mountain (roads and flight paths still cross it). Shift+right-drag erases walls. Middle-drag pans; click the button again when you're done. `/agps draw undo` takes the last one back.
+Turn on the road tools (Options > Road tools, or `/agps dev`) and the map gets a **Road tools** button. Click it, then left-drag along a trail the routes miss: routes use it right away, joined to the roads it meets. A "road" that isn't really there? Right-drag over it (red), or circle an area to erase every road in it. Middle-drag pans; click the button again when you're done.
+
+A wall or fence the routes try to walk through? Turn on the **Wall tools** (Options > Wall tools) and left-drag along it: routes go around it like a mountain (roads and flight paths still cross it). Right-drag erases walls; "Show extracted walls" draws them all in red. `/agps draw undo` takes the last one back.
 
 **Share them:** Options > Help improve > **Copy road data...**, then paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) on GitHub. Roads and walls that check out go into a later version for everyone.
 

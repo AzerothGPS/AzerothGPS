@@ -93,9 +93,9 @@ def taxi_pois(cd: ClientData) -> list[dict]:
         faction = [f for bit, f in ((FACTION_ALLIANCE, "alliance"), (FACTION_HORDE, "horde")) if r["Flags"] & bit]
         if not faction or r["ContinentID"] not in CONTINENTS:
             continue  # transports / unused nodes
-        wx, wy, _ = r["Pos"]
+        wx, wy, wz = r["Pos"]
         out.append({"type": "taxi", "id": r["ID"], "name": r["Name_lang"], "continent": r["ContinentID"],
-                    "wx": round(wx, 1), "wy": round(wy, 1), "factions": faction})
+                    "wx": round(wx, 1), "wy": round(wy, 1), "wz": round(wz, 1), "factions": faction})
     return out
 
 
