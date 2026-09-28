@@ -2,8 +2,6 @@
 
 **A car-style GPS for Azeroth.** Pick where you want to go and AzerothGPS draws the way there along the world's roads and trails, with turn-by-turn directions, distances and ETAs. Multi-stop trips, flight paths, boats, zeppelins and your hearthstone are all part of the route.
 
-_I built AzerothGPS for myself while playing through WoW Forever, and thought I'd share it with anyone who'd find it useful._
-
 ![A three-stop route around Brill and the Undercity, with the direction arrow](https://i.imgur.com/lOUdHxl.png)
 
 _A three-stop trip in Tirisfal Glades: each leg in its stop's color, the steps and times at the top, the direction arrow top left. (Enlarged for the showcase; the map's size and opacity are adjustable.)_
