@@ -175,13 +175,90 @@ end
 
 G.MAX_SEGMENTS = 1500
 
--- Walls near the view (Passability.WallLines): { x1, y1, x2, y2 } in UI units.
-function G.LayoutWalls(px, py, cont, rot, zoom, half)
+-- The terrain's impassable edges near a view (mountains, cliffs: Passability.At == 2), as
+-- world segments { x1, y1, x2, y2, ... } (flat): the borders between blocked and open
+-- samples on a grid of `step` yards (the terrain's cell, coarser zoomed out). Worked out
+-- for a block around the view and kept while the view stays in it.
+G.EDGE_SAMPLES = 60 -- samples across the view's half width, at least
+local edgeCache = {}
+function G.BlockEdges(cont, cx, cy, zoom)
+  local P = ns.Passability
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not (P and P.At and g) then return {} end
+  local step = g.cell
+  while step < zoom / G.EDGE_SAMPLES do step = step * 2 end
+  local chunk = step * 32
+  local reach = zoom * 1.6
+  local x0, x1 = math.floor((cx - reach) / chunk) * chunk, math.ceil((cx + reach) / chunk) * chunk
+  local y0, y1 = math.floor((cy - reach) / chunk) * chunk, math.ceil((cy + reach) / chunk) * chunk
+  local key = string.format("%s:%g:%g:%g:%g:%g", tostring(cont), step, x0, x1, y0, y1)
+  if edgeCache.key == key then return edgeCache.segs end
+  local nx, ny = math.floor((x1 - x0) / step), math.floor((y1 - y0) / step)
+  local blocked = {}
+  for i = 0, nx - 1 do
+    local row = {}
+    local x = x0 + (i + 0.5) * step
+    for j = 0, ny - 1 do row[j] = P.At(cont, x, y0 + (j + 0.5) * step) == 2 end
+    blocked[i] = row
+  end
+  local segs = {}
+  local function line(ax, ay, bx, by)
+    segs[#segs + 1], segs[#segs + 2], segs[#segs + 3], segs[#segs + 4] = ax, ay, bx, by
+  end
+  -- borders across x (between rows i and i + 1), merged along y; then across y
+  for i = 0, nx - 2 do
+    local a, b = blocked[i], blocked[i + 1]
+    local x = x0 + (i + 1) * step
+    local run
+    for j = 0, ny do
+      local edge = j < ny and a[j] ~= b[j]
+      if edge and not run then run = j
+      elseif not edge and run then
+        line(x, y0 + run * step, x, y0 + j * step)
+        run = nil
+      end
+    end
+  end
+  for j = 0, ny - 2 do
+    local y = y0 + (j + 1) * step
+    local run
+    for i = 0, nx do
+      local edge = i < nx and blocked[i][j] ~= blocked[i][j + 1]
+      if edge and not run then run = i
+      elseif not edge and run then
+        line(x0 + run * step, y, x0 + i * step, y)
+        run = nil
+      end
+    end
+  end
+  edgeCache.key, edgeCache.segs = key, segs
+  return segs
+end
+
+-- Walls near the view (Passability.WallLines, and with `edges` the terrain's impassable
+-- borders: G.BlockEdges): { x1, y1, x2, y2 } in UI units.
+function G.LayoutWalls(px, py, cont, rot, zoom, half, edges)
   local segs = {}
   local P = ns.Passability
   if not (P and P.WallLines) then return segs end
   local s = half / zoom
   local reach = zoom * 1.5
+  if edges then
+    local e = G.BlockEdges(cont, px, py, zoom)
+    for i = 1, #e - 3, 4 do
+      local ax, ay, bx, by = e[i], e[i + 1], e[i + 2], e[i + 3]
+      if math.abs(ax - px) <= reach or math.abs(bx - px) <= reach then
+        if math.abs(ay - py) <= reach or math.abs(by - py) <= reach then
+          local dx1, dy1 = Geo.ScreenOffset(px, py, ax, ay)
+          dx1, dy1 = Geo.Rotate(dx1 * s, dy1 * s, rot)
+          local dx2, dy2 = Geo.ScreenOffset(px, py, bx, by)
+          dx2, dy2 = Geo.Rotate(dx2 * s, dy2 * s, rot)
+          segs[#segs + 1] = { dx1, dy1, dx2, dy2, edge = true }
+          if #segs >= G.MAX_SEGMENTS then return segs end
+        end
+      end
+    end
+  end
   for _, w in ipairs(P.WallLines(cont)) do
     local lx, ly
     for i = 1, #w - 1, 2 do
@@ -992,7 +1069,8 @@ function G.Update()
   -- walls (blood red): with the roads shown, or the road tools on
   if (st.showWalls or G.wallMode) and not place then
     local wc = here and ns.Nav.PlayerLevel(cont) or viewCont
-    for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, 3) end
+    -- (the terrain's impassable borders thinner, drawn walls thicker)
+    for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
   end
   -- Quest objective areas (Layers.lua), outlined in the minimap's blue, on their own layer.
   local layerMaps = { C_Map.GetBestMapForUnit("player"), browse }

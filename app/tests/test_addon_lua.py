@@ -3046,3 +3046,23 @@ def test_flying_from_undercity_starts_at_its_flight_master_down_in_the_city(nav_
     legs, secs = ns.Nav.Plan(10001, 1585.0, 280.0, 7.0, lua.eval("AGPS_STOP")(-910.0, -3490.0))
     kinds = [("ride " + str(legs[i].ride[8])) if legs[i].ride else "walk" for i in range(1, len(legs) + 1)]
     assert kinds[:2] == ["walk", "ride flight"]  # straight to the flight master: no lift first
+
+
+def test_show_walls_outlines_the_mountains(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua")
+    G, P = ns.GPS, ns.Passability
+    # Durotar's hills around Razor Hill: blocked and open ground both near
+    e = G.BlockEdges(1, 300.0, -4700.0, 400.0)
+    n = len(e) // 4
+    assert n > 10
+    # each border lies between a blocked and an open sample
+    for k in range(0, min(n, 50)):
+        ax, ay, bx, by = e[4 * k + 1], e[4 * k + 2], e[4 * k + 3], e[4 * k + 4]
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        if ax == bx:  # (a border across x)
+            sides = {P.At(1, mx - 4, my) == 2, P.At(1, mx + 4, my) == 2}
+        else:
+            sides = {P.At(1, mx, my - 4) == 2, P.At(1, mx, my + 4) == 2}
+        assert sides == {True, False}
+    assert lua.eval("rawequal")(G.BlockEdges(1, 300.0, -4700.0, 400.0), e)  # (kept while the view stays near)

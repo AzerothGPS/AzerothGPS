@@ -836,7 +836,7 @@ local function BuildWindow()
   ---------------------------------------------------------------- Wall tools
   Page("Wall tools")
   header("Walls", "What routes can't walk through: a town's wall, a fence, a cliff edge.")
-  check("Show extracted walls", "Draws the walls the routes go around (blood red): the addon's and the ones you drew.",
+  check("Show extracted walls", "Draws what routes can't walk through, in blood red: the edges of mountains and cliffs too steep to climb (the terrain data), and the walls drawn in (thicker).",
     function() return GPS().showWalls end, function(v) GPS().showWalls = v end)
   header("Fixing walls")
   note("With the wall tools on, on the map: left-drag along a wall the routes try to walk through, right-drag over a wall that isn't there (circle an area to erase every wall in it), middle-drag to pan. Routes go around your walls right away, like a mountain; roads and flight paths still cross them.")
