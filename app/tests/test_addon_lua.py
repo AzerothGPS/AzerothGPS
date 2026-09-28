@@ -975,7 +975,7 @@ def test_multi_stop_route_covers_every_stop(nav_env):
     assert r.totalYards > r.walkYards > 0  # whole trip longer than the way to stop 1
     # every segment knows which stop it leads to (for per-stop colours)
     seen = set()
-    ns.Nav.EachSegment(r, 1, lambda x1, y1, x2, y2, kind, stop: seen.add(stop))
+    ns.Nav.EachSegment(r, 1, lambda x1, y1, x2, y2, kind, stop, *rest: seen.add(stop))
     assert seen == {1, 2}
 
 
@@ -1825,7 +1825,7 @@ def test_add_and_remove_stops_on_an_active_route(nav_env):
     assert N.route is None  # rerouted on the next request
     r = N.Route(-500.0, -4500.0, 1)
     seen = set()
-    N.EachSegment(r, 1, lambda x1, y1, x2, y2, kind, stop: seen.add(stop))
+    N.EachSegment(r, 1, lambda x1, y1, x2, y2, kind, stop, *rest: seen.add(stop))
     assert seen == {1, 2}
 
 
