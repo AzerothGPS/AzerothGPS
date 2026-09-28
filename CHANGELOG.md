@@ -8,21 +8,41 @@ For WoW Forever client 1.60.1 (interface 16001). New data files are included, so
 
 ### New
 
-- **Undercity:** routes down in the city follow its own floors, stairs and lifts, with "above you / below you" hints, and say when it's safe to jump down a ledge. Offroad turns itself off in cities and the Ruins of Lordaeron, and back on after.
-- **Caves and mines:** 351 caves and mines on both continents are mapped: routes enter at the mouth and follow the tunnels.
-- **More roads:** many roads the map was missing (Dun Morogh, Desolace, Badlands, Winterspring and more) are now part of the network.
-- **Other faction's towns:** routes keep away from the other faction's guards and go around their towns when there's a way (Options, Routing).
-- **Road tools** (Options, Road tools): draw a road the routes miss, or erase a false one (or circle an area). **Wall tools** (Options, Wall tools): draw walls routes can't walk through, or erase mountain edges that are really walkable. Share both with **Copy map data...** on the Help improve page.
-- **City locations:** after talking to a guard in a capital, its banks, trainers and other places show on the map. Asking a guard again routes there again, and any banker, auctioneer or trainer finishes that stop.
-- **Continent map:** hover a zone to see its name and level range. Capital icons open the city's map (Ironforge and Undercity show their inside).
-- **Quest route:** an option to use only the quests in the zone you're in; quests in a city now route to the city itself.
-- **Quick buttons:** grouped (map styles, quests, herbs and ore), and ordered as you like in Options.
-- Directions ignore short jogs in the route, and the map keeps where you panned it across a /reload.
+- **Undercity:** routes follow the city's own floors, stairs and lifts, with "above you" and "below you" hints, and use a safe jump down a ledge when it saves time (only when your health allows it). Off-road shortcuts turn themselves off in cities and the Ruins of Lordaeron, and back on after. Its flight master, trainers and quest givers are reached down in the city, not up top.
+
+  ![Undercity's map with its districts and places](https://i.imgur.com/AZzfqTs.png)
+
+- **Caves and mines:** 351 of them on both continents are mapped: routes go in at the mouth and follow the tunnels.
+- **More roads:** many roads the map was missing (Dun Morogh, Desolace, Badlands, Winterspring and more) are part of the network now.
+- **The other faction's towns:** routes keep away from their guards and go around their towns when there's a way (Options → Routing).
+- **Continent map:** right-click from the terrain view goes to the continent's map, then the world map. Hover a zone for its name and level range; click a capital's icon to open the city (Ironforge and Undercity show their inside).
+
+  ![A continent's map: hovering a zone shows its name and level range](https://i.imgur.com/HHVpQsL.png)
+
+- **City locations:** after talking to a guard in a capital, its banks, trainers and other places show on the map. Asking a guard again routes there again, and any banker, auctioneer or trainer of the kind finishes that stop.
+- **Quick buttons** are grouped (map styles; quests; herbs, ore and farming) and slide out beside their button, in the order you set in Options.
+
+  ![Quick button groups sliding out](https://i.imgur.com/DG6utoK.gif)
+
+- **Road tools** (Options → Road tools): draw a road the routes miss, or erase a false one (or circle an area).
+
+  ![Road tools: circling a false road to erase it, then drawing the real one](https://i.imgur.com/WjwnjW1.gif)
+
+- **Wall tools** (Options → Wall tools): draw walls routes can't walk through (roads crossing them are cut; leave a gap for a gate), or erase a mountain edge the map has wrong. **Show extracted walls** draws everything routes won't cross.
+
+  ![Stormwind's roads](https://i.imgur.com/woSLg9m.png)
+  ![The walls routes won't cross, over the roads](https://i.imgur.com/oH1dYxZ.png)
+
+- **Share your fixes:** Options → Help improve → **Copy map data...**, then paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) on GitHub.
+- **Quest route:** an option to use only the quests in the zone you're in; a quest route always goes in the fastest order, in cities too.
+- **Smoother directions:** short jogs in a route are straightened (not on hilly ground, where winding is the way up), and a turn that just jogs back onto the same line reads as straight on. Parts of a route on another floor are drawn faint and dotted.
+- The map keeps where you panned it across a /reload, and switching map style keeps the spot you're looking at.
 
 ### Fixed
 
 - Routes through walls, off ledges and into water in Undercity and the Ruins of Lordaeron.
-- A freeze when the first route after logging in was calculated.
+- A freeze when the first route after logging in was worked out, and the road network builds several times faster.
+- "Turn around" when the way on was a lift down or up.
 
 ## 1.0.5
 
