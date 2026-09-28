@@ -29,6 +29,15 @@ function R.Prune()
     end
   end
   prune(ns.db.tracks, true)
+  -- (strokes saved on a city's level though drawn elsewhere, looking at another zone from down
+  -- in the city: back on the continent)
+  local P = ns.Passability
+  for _, t in ipairs(ns.db.tracks or {}) do
+    local lvl = ns.CityLevels and ns.CityLevels[t.continent]
+    if lvl and P and P.InGrid and t.pts and t.pts[1] and not P.InGrid(t.continent, t.pts[1], t.pts[2]) then
+      t.continent = lvl.base
+    end
+  end
   -- (and the copies kept for sharing: the data has them, nothing to share)
   prune(ns.db.feedback and ns.db.feedback.roads)
   if n > 0 then ns.Print(("%d of your drawn roads and walls are in the map data now"):format(n)) end

@@ -3150,3 +3150,18 @@ def test_nothing_to_share_once_the_data_has_it(nav_env):
     assert tuple(ns.Feedback.Counts())[0] == 1 and tuple(ns.Feedback.DrawnCounts()) == (0, 0)
     ns.Record.Prune()
     assert len(ns.db.tracks) == 0 and len(ns.db.feedback.roads) == 1
+
+
+def test_a_stroke_drawn_elsewhere_from_down_in_a_city_is_on_the_continent(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "Record.lua")
+    ns.Print = lua.eval("function() end")
+    lua.execute("C_Map = C_Map or {} C_Map.GetBestMapForUnit = function() return 1458 end C_Map.GetMapInfo = function() return { name = 'Undercity' } end time = function() return 1 end")
+    ns.Nav.PlayerLevel = lua.eval("function(c) return 10001 end")  # (the player is down in Undercity)
+    ns.db = lua.eval("{ tracks = {} }")
+    # looking at Duskwood from there, a road drawn
+    ns.GPS.FinishRoad(lua.eval("{ cont = 0, pts = { -10900,400, -10880,450, -10860,500 } }"))
+    assert ns.db.tracks[1].continent == 0
+    # drawn over the city itself: on its level
+    ns.GPS.FinishRoad(lua.eval("{ cont = 0, pts = { 1560,250, 1570,270, 1590,280 } }"))
+    assert ns.db.tracks[2].continent == 10001

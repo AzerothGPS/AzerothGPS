@@ -285,6 +285,14 @@ function P.WallHit(cont, x1, y1, x2, y2)
   return best
 end
 
+-- Whether world (x, y) is inside grid `key`'s rectangle (a city level's: over the city).
+function P.InGrid(key, x, y)
+  local g = ns.Terrain and ns.Terrain[key]
+  if not g then return false end
+  local c, r = ToCell(g, x, y)
+  return r >= 1 and r <= g.h and c >= 1 and c <= g.w
+end
+
 -- Whether `cont` has any walls.
 function P.HasWalls(cont)
   EnsureWalls()

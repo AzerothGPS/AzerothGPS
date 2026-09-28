@@ -2039,7 +2039,11 @@ function G.FinishRoad(line, erase, wall)
     ns.Print(wall and "that wall is too short (drag along it)" or "that road is too short (drag along it)")
     return
   end
+  -- (down in a city: on its level only when drawn over the city, not somewhere else looked at)
   local level = ns.Nav.PlayerLevel and ns.Nav.PlayerLevel(line.cont) or line.cont
+  if level ~= line.cont and not (ns.Passability and ns.Passability.InGrid and ns.Passability.InGrid(level, pts[1], pts[2])) then
+    level = line.cont
+  end
   local mapID = C_Map.GetBestMapForUnit("player")
   local info = mapID and C_Map.GetMapInfo(mapID)
   -- an erase drawn as a loop (ending back near its start): the roads inside it go
