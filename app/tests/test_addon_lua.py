@@ -3018,7 +3018,7 @@ def test_zone_of_a_city_is_the_zone_around_it(env):
 
 def test_quest_route_stops_in_a_city_still_go_in_the_fastest_order(nav_env):
     lua, ns = nav_env
-    load(lua, ns, "Data/Cities.lua")
+    load(lua, ns, "Data/Terrain.lua", "Data/Cities.lua")
     ns.settings = lua.eval("{ gps = { fastestOrder = true, cityKeepOrder = true } }")
     N = ns.Nav
     N.stops = lua.eval("{ { x = 1480, y = 280, cont = 10001 }, { x = 1590, y = 204, cont = 10001 } }")
