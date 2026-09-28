@@ -64,6 +64,9 @@ CAPITALS = [
     Capital("Ironforge", 0, 1455, (7706,), ((-5040.0, -805.0),),
             places=(("Gryphon Master", -4821.8, -1155.4), ("Deeprun Tram", -4838.0, -1318.0)),
             outside=(-5100.0, -741.0), indoor=True),
+    # (the city's model; its harbor's docks are models of their own on the land's ground, left to it)
+    Capital("Stormwind City", 0, 1453, (10047,), ((-9095.0, 412.0),),
+            places=(("Gryphon Master", -8832.8, 478.6), ("Harbor boat", -8654.5, 1344.4)), outside=(-9120.0, 397.0)),
 ]
 
 

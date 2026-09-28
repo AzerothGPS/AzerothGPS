@@ -1922,6 +1922,24 @@ def test_route_into_ironforge_follows_its_halls(capitals_env, name, spot):
     assert min(math.dist(p, (-5030.0, -835.0)) for p in pts) < 20  # (in by the gates)
 
 
+STORMWIND_OUTSIDE = (-9120.0, 397.0)  # (on Elwynn's road before the bridge to the gate)
+
+
+@pytest.mark.parametrize("name,spot", [("the Trade District", (-8832.0, 625.0)), ("Cathedral Square", (-8618.0, 776.0)),
+                                       ("the gryphon master", (-8832.8, 478.6)), ("the Dwarven District", (-8407.0, 573.0)),
+                                       ("Stormwind Keep", (-8438.0, 399.0)), ("the Mage Quarter", (-8947.0, 858.0))])
+def test_route_into_stormwind_follows_its_streets(capitals_env, name, spot):
+    # In at the gate past the Valley of Heroes, along the city's streets and over its canals'
+    # bridges (not straight through its walls and houses)
+    lua, ns = capitals_env
+    r = ns.Router.Route(0, *STORMWIND_OUTSIDE, *spot, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 0, r)
+    assert share > 0.85 and closed < 5 and last < 25, (name, share, closed, last)
+    assert r.length < 2.5 * math.dist(STORMWIND_OUTSIDE, spot), (name, r.length)
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, (-9016.0, 474.0)) for p in pts) < 30  # (through the Valley of Heroes)
+
+
 def test_capitals_leave_routes_elsewhere_unchanged(env):
     # Trips nowhere near a capital route the same with the capitals loaded.
     trips = [(0, (2250.0, 250.0), (1841.0, 236.0)), (1, (1100.0, -4400.0), (850.0, -4450.0)),
