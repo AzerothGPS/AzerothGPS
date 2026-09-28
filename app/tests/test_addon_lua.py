@@ -3462,3 +3462,91 @@ def test_no_u_turn_to_the_road_while_a_walk_around_is_searched(env):
             assert not r.pending and r.length < 130 and not R.HasWork()
     finally:
         R.SYNC_WALKS = True
+
+
+def test_routes_keep_out_of_zones_too_high_for_the_player(nav_env):
+    # Level 13 from Brill to Tarren Mill: not over Alterac Mountains (30-40, red for them) but
+    # by Silverpine; Hillsbrad (the destination's zone) is fine. At 60, the short way.
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Zones.lua", "GPSFrame.lua")
+    R = ns.Router
+    R.Reset()
+    R.SYNC_WALKS = True
+    ns.settings = lua.eval("{ gps = {} }")
+
+    def zone(name):
+        return next(k for k in ns.Maps.keys() if ns.Maps[k].name == name and ns.Maps[k].type == 3)
+
+    def at(name, u, v):
+        b = ns.Maps[zone(name)].bounds
+        return b[3] - v / 100 * (b[3] - b[1]), b[4] - u / 100 * (b[4] - b[2])
+
+    (sx, sy), (tx, ty) = at("Tirisfal Glades", 61, 52), at("Hillsbrad Foothills", 61, 20)
+    alterac = zone("Alterac Mountains")
+    assert R.ZoneAt(0, sx, sy) == zone("Tirisfal Glades") and R.ZoneAt(0, tx, ty) == zone("Hillsbrad Foothills")
+
+    def through(r, z):
+        pts = [r.pts[i] for i in range(1, len(r.pts) + 1)]
+        yd = 0
+        for i in range(0, len(pts) - 3, 2):
+            yd += (R.ZoneYards(0, pts[i], pts[i + 1], pts[i + 2], pts[i + 3])[z] or 0)
+        return yd
+
+    for offroad in (False, True):
+        opts = lua.table(offroad=offroad)
+        lua.execute("UnitLevel = function() return 60 end")
+        high = R.Route(0, sx, sy, tx, ty, opts)
+        assert through(high, alterac) > 500  # (the short way: over the mountains)
+        lua.execute("UnitLevel = function() return 13 end")
+        low = R.Route(0, sx, sy, tx, ty, opts)
+        assert through(low, alterac) < 50 and through(low, zone("Silverpine Forest")) > 1000
+        ns.settings.gps.avoidHighZones = False  # (the option off: the short way again)
+        assert through(R.Route(0, sx, sy, tx, ty, opts), alterac) > 500
+        ns.settings.gps.avoidHighZones = None
+
+
+def test_a_stop_in_a_zone_too_high_is_confirmed_first(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Zones.lua", "GPSFrame.lua")
+    N, R = ns.Nav, ns.Router
+    ns.settings = lua.eval("{ gps = {} }")
+    ns.Print = lua.eval("function() end")
+
+    def at(name, u, v):
+        k = next(k for k in ns.Maps.keys() if ns.Maps[k].name == name and ns.Maps[k].type == 3)
+        b = ns.Maps[k].bounds
+        return b[3] - v / 100 * (b[3] - b[1]), b[4] - u / 100 * (b[4] - b[2])
+
+    brill, tarren = at("Tirisfal Glades", 61, 52), at("Hillsbrad Foothills", 61, 20)
+    lua.execute("UnitLevel = function() return 13 end")
+    lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
+    lua.execute("StaticPopupDialogs = {}; ASKED = nil; StaticPopup_Show = function(which, text, _, data) ASKED = { text = text, data = data } end")
+    stop = lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill")
+    ok, asked = N.SetStops(lua.table(stop))
+    assert ok is False and asked and len(N.stops) == 0  # not yet: asked first
+    popup = lua.eval("ASKED")
+    assert "Tarren Mill is in Hillsbrad Foothills (level 20-30)" in popup.text and "your level 13" in popup.text
+    popup.data()  # Yes
+    assert len(N.stops) == 1 and N.stops[1].name == "Tarren Mill"
+    N.Clear()
+    lua.execute("ASKED = nil")
+    # No: nothing set (the popup just closes)
+    N.SetStops(lua.table(stop))
+    assert lua.eval("ASKED") is not None and len(N.stops) == 0
+    # adding one to a route: asked the same way
+    lua.execute("ASKED = nil")
+    N.SetStops(lua.table(lua.table(x=brill[0] + 50, y=brill[1], cont=0, name="Brill")))
+    assert lua.eval("ASKED") is None and len(N.stops) == 1  # (in the player's level: no question)
+    ok, asked = N.AddStop(stop)
+    assert not ok and asked and len(N.stops) == 1
+    lua.eval("ASKED").data()
+    assert len(N.stops) == 2
+    # the player in that zone already, or the option off: no question
+    N.Clear()
+    lua.execute("ASKED = nil")
+    lua.execute(f"UnitPosition = function() return {tarren[0] + 30}, {tarren[1]}, 0, 0 end")
+    assert N.SetStops(lua.table(stop)) and lua.eval("ASKED") is None
+    N.Clear()
+    lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
+    ns.settings.gps.avoidHighZones = False
+    assert N.SetStops(lua.table(stop)) and lua.eval("ASKED") is None

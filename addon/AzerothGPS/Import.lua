@@ -130,12 +130,13 @@ function I.AddMapPin(pin)
   local N = ns.Nav
   local stop = { cont = pin.cont, x = pin.x, y = pin.y, name = pin.name, tex = pin.tex }
   if #N.stops > 0 then
-    if not N.AddStop(stop, ns.settings and ns.settings.gps.fastestOrder) then
-      ns.Print(string.format("Map pin: the route is full (%d stops at most).", N.MAX_STOPS))
+    local ok, asked = N.AddStop(stop, ns.settings and ns.settings.gps.fastestOrder)
+    if not ok then
+      if not asked then ns.Print(string.format("Map pin: the route is full (%d stops at most).", N.MAX_STOPS)) end
       return
     end
-  else
-    N.SetStops({ stop })
+  elseif N.SetStops({ stop }) == false then
+    return -- (held off, or asked first: a zone too high for the character)
   end
   ns.Print(pin.name .. " added to your route.")
   if ns.GPS and ns.GPS.RouteChanged then ns.GPS.RouteChanged() end

@@ -127,8 +127,39 @@ local function Locked(force)
   return true
 end
 
+-- Stops in zones too high for the player (red on the map; option avoidHighZones): { { zone
+-- name, lowest level, highest }, ... } (each zone once), or nil. Not the zone the player is in.
+function N.RedStops(list)
+  local R = ns.Router
+  local red = R and R.RedZones and R.RedZones()
+  if not red then return nil end
+  local px, py, pc = Geo.PlayerWorld()
+  local here = px and R.ZoneAt(Geo.Base(pc), px, py)
+  local out, seen = {}, {}
+  for _, d in ipairs(list) do
+    local z = d.x and R.ZoneAt(Geo.Base(d.cont), d.x, d.y)
+    if z and red[z] and z ~= here and not seen[z] then
+      seen[z] = true
+      local lo, hi = R.ZoneLevels(z)
+      local m = ns.Maps and ns.Maps[z]
+      out[#out + 1] = { m and m.name or "?", lo, hi }
+    end
+  end
+  return out[1] and out or nil
+end
+
+-- A route to stops in a zone too high for the player: asked first (GPSFrame's popup), and
+-- `again` (setting them, confirmed) run on yes. True while asking.
+local function AskRed(list, again)
+  local zones = N.RedStops(list)
+  if not zones or not (ns.GPS and ns.GPS.ConfirmRedZone) then return false end
+  return ns.GPS.ConfirmRedZone(zones, list, again)
+end
+
 function N.SetStops(stops, fastest, force)
   if Locked(force) then return false end
+  -- ("red": asked and confirmed; true: the dungeon route, its own)
+  if not force and AskRed(stops, function() N.SetStops(stops, fastest, "red") end) then return false, true end
   N.stops, N.loop = {}, false
   for i, d in ipairs(stops) do
     if i > N.MAX_STOPS then break end
@@ -144,6 +175,7 @@ end
 -- Add a stop at the end of the route (then reorder if `fastest`).
 function N.AddStop(d, fastest, force)
   if Locked(force) then return false end
+  if not force and AskRed({ d }, function() N.AddStop(d, fastest, "red") end) then return false, true end
   if #N.stops >= (N.loop and N.MAX_LOOP_STOPS or N.MAX_STOPS) then return false end
   local c = Copy(d)
   c.icon = c.icon or N.NextMarker(N.stops)
@@ -236,7 +268,7 @@ function N.RemoveStop(i)
 end
 
 function N.SetDestination(x, y, cont, name)
-  N.SetStops({ { x = x, y = y, cont = cont, name = name, icon = 1 } })
+  return N.SetStops({ { x = x, y = y, cont = cont, name = name, icon = 1 } })
 end
 
 -- Changes whenever the stops do (a new route, a stop added, removed or reached).

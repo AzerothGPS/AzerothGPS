@@ -92,6 +92,55 @@ def city_zone_parents(cd: ClientData, maps: dict) -> dict[int, int]:
     return out
 
 
+def zones_lua(cd: ClientData) -> str:
+    """Data/Zones.lua: the zone (its uiMap) of every ground chunk (33.3 yd) on each continent,
+    from the ADTs' area ids (a subzone counts as its zone). For routes that keep out of zones
+    too high for the player (Router.ZoneAt)."""
+    from .extract import adt
+    from .extract.pipeline import CONTINENTS, extract_area_grid
+
+    maps = {m["id"]: m for m in build_uimaps(cd)}
+    areas = {r["ID"]: r for r in cd.table("AreaTable")}
+    zone_map = {m["areaId"]: mid for mid, m in maps.items() if m["type"] == 3 and m.get("areaId")}
+    top: dict[int, int] = {}
+
+    def zone_of(area):
+        if area in top:
+            return top[area]
+        a, seen = area, set()
+        while a and a not in seen:
+            seen.add(a)
+            if a in zone_map:
+                break
+            a = areas.get(a, {}).get("ParentAreaID", 0)
+        top[area] = zone_map.get(a, 0)
+        return top[area]
+
+    out = [_header(cd, "Zones"),
+           "-- ns.Zones[continent] = { chunk = yards, rows = { [row] = { uiMap, run, uiMap, run, ... } } }:",
+           "-- row = floor((32 - x / 533.33) * 16), column = floor((32 - y / 533.33) * 16), runs from column 0;",
+           "-- 0 = no zone. (Router.ZoneAt)",
+           "ns.Zones = {}"]
+    for cont in CONTINENTS:
+        grid, _n = extract_area_grid(cd, cont)
+        out.append(f"ns.Zones[{cont}] = {{ chunk = {adt.CHUNK_YD:.4f}, rows = {{")
+        for r in range(grid.shape[0]):
+            row = [zone_of(int(a)) if a else 0 for a in grid[r].tolist()]
+            if not any(row):
+                continue
+            runs, cur, n = [], row[0], 0
+            for z in row:
+                if z == cur:
+                    n += 1
+                else:
+                    runs += [cur, n]
+                    cur, n = z, 1
+            runs += [cur, n]
+            out.append(f"  [{r}] = {{{','.join(map(str, runs))}}},")
+        out.append("} }")
+    return "\n".join(out) + "\n"
+
+
 def zone_art_lua(cd: ClientData) -> str:
     """ns.Maps[uiMapID] = bounds + art tiles + explored overlays (fully revealed map)."""
     all_maps = {m["id"]: m for m in build_uimaps(cd)}
@@ -370,7 +419,8 @@ def generate(cd: ClientData, addon_dir: Path) -> list[Path]:
     for name, text in (("Minimap.lua", minimap_lua(cd)), ("Maps.lua", zone_art_lua(cd)), ("Interiors.lua", interiors),
                        ("Pois.lua", pois_lua(cd)), ("Terrain.lua", terrain_lua(cd)),
                        ("Transports.lua", transports_lua(cd)), ("Flights.lua", flights_lua(cd)),
-                       ("Cities.lua", cities_lua(cd)), ("Caves.lua", caves_lua(cd)), ("Capitals.lua", capitals_lua(cd))):
+                       ("Cities.lua", cities_lua(cd)), ("Caves.lua", caves_lua(cd)), ("Capitals.lua", capitals_lua(cd)),
+                       ("Zones.lua", zones_lua(cd))):
         p = data / name
         p.write_text(text, encoding="utf-8", newline="\n")
         written.append(p)

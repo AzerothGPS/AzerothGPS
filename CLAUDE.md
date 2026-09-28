@@ -110,6 +110,15 @@ The addon is going public, so every change must keep it policy-safe:
     other faction's reach (road edges, off-road legs, node links, and the terrain search
     in `Passability.FindPath`), so they go around their towns; option "Avoid the other
     faction's towns" (`avoidHostile`).
+  - `Data/Zones.lua` (`addon_data.zones_lua`, from the ADTs' area ids): each continent's zone
+    (uiMap) per ground chunk, run-length rows (`Router.ZoneAt`, `ZoneYards`). Zones too high
+    for the character (option `avoidHighZones`, on by default: lowest level more than
+    `LEVEL_RED` above theirs, `Router.RedZones`, levels from `C_Map.GetMapLevels` or
+    `GPS.ZONE_LEVELS`) cost `LEVEL_FACTOR` per yard on roads (`g.zones` per edge), gap links,
+    node links and legs, not in the zones the route starts and ends in; an open straight line
+    through one isn't taken at once but weighed. A route to a stop in one asks first
+    (`Nav.RedStops`, `GPS.ConfirmRedZone`: "route there anyway?"; `SetStops`/`AddStop` return
+    false, true while asking), not for the zone the player is in.
   - `Data/Caves.lua` (`app/azerothgps/caves.py`, the WMO floor code shared with Undercity in
     `walknet.py`): caves, mines, dens and tunnels on continents 0 and 1 (minor-dungeon WMOs placed
     in the ADTs), merged into the continent's level. Each gets a grid over the continent's

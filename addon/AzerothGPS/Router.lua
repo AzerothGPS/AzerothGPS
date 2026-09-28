@@ -908,6 +908,7 @@ function BuildGraph(cont)
   pt = P0()
   local adj = {}
   local ratio = {} -- [edge] = its cost per yard, where more than 1 (past guards)
+  local edgeZones, hasZones = {}, ns.Zones and ns.Zones[cont] ~= nil -- [edge] = { [zone] = yards }
   local side = HostileSide()
   for ei, e in ipairs(edges) do
     Breathe(ei, 100)
@@ -925,6 +926,12 @@ function BuildGraph(cont)
       adj[a][#adj[a] + 1] = { b, len, ei, true, cost }
       adj[b][#adj[b] + 1] = { a, len, ei, false, cost }
       if cost > len then ratio[ei] = cost / math.max(len, 1) end
+      -- (yards in each zone: for keeping out of zones too high for the player)
+      if hasZones then
+        local zy = {}
+        for i = 5, #e - 3, 2 do R.ZoneYards(cont, e[i], e[i + 1], e[i + 2], e[i + 3], zy) end
+        edgeZones[ei] = zy
+      end
     end
   end
   local grid = ns.Terrain and ns.Terrain[cont]
@@ -944,7 +951,7 @@ function BuildGraph(cont)
   end
   P1("router: build roads: gap links", pt)
   local g = { adj = adj, n = nodes, e = edges, count = #nodes / 2, bridges = bridges, drops = drops, side = side,
-    ratio = ratio, cave = caveEdges, caveNode = noBridge }
+    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones }
   -- (built in the background by WarmUp, a route may have built it meanwhile: keep that one)
   if graphs[cont] == nil then graphs[cont] = g end
   return graphs[cont] or nil
@@ -1030,6 +1037,80 @@ function R.HostileYards(cont, x1, y1, x2, y2, side)
 end
 local function HostileExtra(cont, x1, y1, x2, y2)
   return R.HostileYards(cont, x1, y1, x2, y2) * (R.HOSTILE_FACTOR - 1)
+end
+
+-- Zones too high for the player (option avoidHighZones, on by default): their lowest level
+-- more than LEVEL_RED above the player's (red on the map's zone hover). A yard in one costs
+-- LEVEL_FACTOR, like the other faction's guards' reach but milder: the way round is taken
+-- when it's up to that much longer. The zones a route starts and ends in don't count.
+R.LEVEL_RED = 4
+R.LEVEL_FACTOR = 4
+R.ZONE_STEP = 16 -- yards between the points checked along a road or leg
+
+-- The zone (its uiMap) at world (x, y) on `cont`, from Data/Zones.lua; 0 for none.
+local ZONE_TILE = 1600 / 3
+function R.ZoneAt(cont, x, y)
+  local z = ns.Zones and ns.Zones[cont]
+  if not z then return 0 end
+  local runs = z.rows[math.floor((32 - x / ZONE_TILE) * 16)]
+  local col = math.floor((32 - y / ZONE_TILE) * 16)
+  if not runs or col < 0 then return 0 end
+  local c = 0
+  for i = 1, #runs - 1, 2 do
+    c = c + runs[i + 1]
+    if col < c then return runs[i] end
+  end
+  return 0
+end
+
+-- Yards of the line (x1, y1)-(x2, y2) in each zone, added to `out` ({ [uiMap] = yards }).
+function R.ZoneYards(cont, x1, y1, x2, y2, out)
+  out = out or {}
+  if not (ns.Zones and ns.Zones[cont]) then return out end
+  local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+  local n = math.max(1, math.ceil(d / R.ZONE_STEP))
+  for k = 0, n - 1 do
+    local t = (k + 0.5) / n
+    local z = R.ZoneAt(cont, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+    if z ~= 0 then out[z] = (out[z] or 0) + d / n end
+  end
+  return out
+end
+
+-- A zone's levels: the game's (C_Map.GetMapLevels), else the map's table (GPSFrame's).
+function R.ZoneLevels(id)
+  if C_Map and C_Map.GetMapLevels then
+    local ok, lo, hi = pcall(C_Map.GetMapLevels, id)
+    if ok and lo and hi and lo > 0 then return lo, hi end
+  end
+  local m = ns.Maps and ns.Maps[id]
+  local l = m and ns.GPS and ns.GPS.ZONE_LEVELS and ns.GPS.ZONE_LEVELS[m.name]
+  if l then return l[1], l[2] end
+end
+
+-- The zones too high for the player now: { [uiMap] = true }, or nil (none, the option off,
+-- the level unknown).
+local redZones = {}
+function R.RedZones()
+  local st = ns.settings and ns.settings.gps
+  if st and st.avoidHighZones == false then return nil end
+  local ok, lvl = pcall(UnitLevel or error, "player")
+  if not ok or type(lvl) ~= "number" or lvl <= 0 then return nil end
+  local set = redZones[lvl]
+  if set == nil then
+    set = false
+    for id, m in pairs(ns.Maps or {}) do
+      if m.type == 3 then
+        local lo = R.ZoneLevels(id)
+        if lo and lvl < lo - R.LEVEL_RED then
+          set = set or {}
+          set[id] = true
+        end
+      end
+    end
+    redZones[lvl] = set
+  end
+  return set or nil
 end
 
 function R.Reset()
@@ -1909,10 +1990,39 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   local Pass = ns.Passability
   local g = Graph(cont)
+  -- zones too high for the player: more per yard (not the ones the route starts and ends in)
+  local red = R.RedZones()
+  local exempt = red and { [R.ZoneAt(cont, sx, sy)] = true, [R.ZoneAt(cont, tx, ty)] = true }
+  local function Danger(zy)
+    if not (red and zy) then return 0 end
+    local d = 0
+    for z, yd in pairs(zy) do
+      if red[z] and not exempt[z] then d = d + yd end
+    end
+    return d * (R.LEVEL_FACTOR - 1)
+  end
+  local function DangerLine(x1, y1, x2, y2)
+    if not red then return 0 end
+    return Danger(R.ZoneYards(cont, x1, y1, x2, y2))
+  end
+  local edgeDanger = {} -- [edge] = extra cost per yard (memo)
+  local function EdgeDanger(ei)
+    if not red then return 0 end
+    local v = edgeDanger[ei]
+    if v == nil then
+      local e = g and g.e[ei]
+      v = e and g.zones and Danger(g.zones[ei]) / math.max(e[3], 1) or 0
+      edgeDanger[ei] = v
+    end
+    return v
+  end
   local direct = not Pass or Pass.SegmentCost(cont, sx, sy, tx, ty)
   -- (straight past the other faction's guards isn't a way to go if there's another)
   if direct and R.HostileYards(cont, sx, sy, tx, ty) > 0 then direct = nil end
-  if not g or (offroad and direct) then return Straight(g, sx, sy, tx, ty) end
+  -- (straight at once when it's open, unless through a zone too high for the player: then it's
+  -- weighed against the ways round, below)
+  local directSafe = direct and DangerLine(sx, sy, tx, ty) == 0
+  if not g or (offroad and directSafe) then return Straight(g, sx, sy, tx, ty) end
   local ss = R.NearestEdges(cont, sx, sy)
   local ts = R.NearestEdges(cont, tx, ty)
   -- the caves (Data/Caves.lua): in one, on by its roads; outside, not onto them, but for a
@@ -1954,7 +2064,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   local s, t = ss[1], ts[1]
   if not s or not t then return Straight(g, sx, sy, tx, ty) end
-  if not offroad and direct and Dist(sx, sy, tx, ty) <= s.dist + t.dist then return Straight(g, sx, sy, tx, ty) end
+  if not offroad and directSafe and Dist(sx, sy, tx, ty) <= s.dist + t.dist then return Straight(g, sx, sy, tx, ty) end
 
   local OFF, ROAD = R.KIND_OFFROAD, R.KIND_ROAD
   -- a terrain search this route needs is still running: it's provisional (see Nav's Route)
@@ -1987,11 +2097,13 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       pieces = {}
       for i = 1, #path - 2, 2 do pieces[#pieces + 1] = { OFF, path[i], path[i + 1], path[i + 2], path[i + 3] } end
     end
-    local h = 0 -- (past the other faction's guards)
+    local h = 0 -- (past the other faction's guards, and through zones too high for the player)
     if path then
-      for i = 1, #path - 2, 2 do h = h + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) end
+      for i = 1, #path - 2, 2 do
+        h = h + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
+      end
     else
-      h = HostileExtra(cont, x1, y1, x2, y2)
+      h = HostileExtra(cont, x1, y1, x2, y2) + DangerLine(x1, y1, x2, y2)
     end
     if offroad then
       if c then return (c + h) * R.OFFROAD_TIE, pieces end
@@ -2010,7 +2122,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
 
   -- (yards along part of an edge, as cost: more past the other faction's guards)
-  local function part(ei, yd) return yd * (g.ratio and g.ratio[ei] or 1) end
+  local function part(ei, yd) return yd * ((g.ratio and g.ratio[ei] or 1) + EdgeDanger(ei)) end
   local START, GOAL = -1, -2
   local gscore, came, open, closed = { [START] = 0 }, {}, {}, {}
   local function h(n)
@@ -2064,21 +2176,9 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     end
   end
   -- Offroad mode: straight links from the start to nearby road nodes, and from nearby
-  -- road nodes to the destination, where the ground allows; and for a short trip, a walk
-  -- around whatever is in the way.
+  -- road nodes to the destination, where the ground allows. (A walk around whatever is in
+  -- the way, for a short trip: after the search, as in road mode.)
   if offroad then
-    if Dist(sx, sy, tx, ty) <= R.OFFROAD_WALK_AROUND and Pass.FindPath then
-      local c, path, searching = Walk(cont, sx, sy, tx, ty, opts and opts.transient)
-      if searching then pending = true end
-      if c then
-        local pieces = {}
-        for i = 1, #path - 2, 2 do
-          pieces[#pieces + 1] = { OFF, path[i], path[i + 1], path[i + 2], path[i + 3] }
-          c = c + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3])
-        end
-        relax(START, GOAL, c * R.OFFROAD_TIE, pieces)
-      end
-    end
     local function nearestNodes(x, y) return NodesNear(g, x, y, R.OFFROAD_LINK_MAX) end
     for i, nd in ipairs(nearestNodes(sx, sy)) do
       if i > R.OFFROAD_LINKS then break end
@@ -2148,7 +2248,8 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
         local e = g.e[a[3]]
         local drop = g.drops and g.drops[a[3]]
         if not drop or drop <= maxDrop then -- (a drop only when the fall is safe, and worth it)
-          relax(n, a[1], (a[5] or a[2]) + (drop and R.DROP_COST or 0), { { kind = ROAD, edge = a[3], from = a[4] and 0 or e[3], to = a[4] and e[3] or 0 } })
+          relax(n, a[1], (a[5] or a[2]) + a[2] * EdgeDanger(a[3]) + (drop and R.DROP_COST or 0),
+            { { kind = ROAD, edge = a[3], from = a[4] and 0 or e[3], to = a[4] and e[3] or 0 } })
         end
       end
       -- across a gap to another piece of the road network (walked around obstacles below)
@@ -2166,7 +2267,10 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
           if not b.open and Pass and Pass.CrossesWall and Pass.CrossesWall(cont, x, y, mx, my) then b.shut = true end
           b.cost = ((c or b[2] * blockedPenalty(x, y, mx, my)) + HostileExtra(cont, x, y, mx, my)) * R.OFFROAD_PENALTY
         end
-        if not b.shut then relax(n, m, b.cost, { { OFF, x, y, mx, my, gap = not b.open } }) end
+        if not b.shut then
+          if red and b.zy == nil then b.zy = R.ZoneYards(cont, x, y, mx, my) end
+          relax(n, m, b.cost + Danger(b.zy), { { OFF, x, y, mx, my, gap = not b.open } })
+        end
       end
       if offroad and Pass then
         local x, y = g.n[n * 2 - 1], g.n[n * 2]
@@ -2174,7 +2278,8 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
         if not links then pending = true end
         for _, l in ipairs(links or {}) do
           local m = l[1]
-          relax(n, m, l[2], { { OFF, x, y, g.n[m * 2 - 1], g.n[m * 2] } })
+          if red and l.zy == nil then l.zy = R.ZoneYards(cont, x, y, g.n[m * 2 - 1], g.n[m * 2]) end
+          relax(n, m, l[2] + Danger(l.zy), { { OFF, x, y, g.n[m * 2 - 1], g.n[m * 2] } })
         end
       end
     end
@@ -2198,11 +2303,13 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
           c = PendingCost(cont, sx, sy, tx, ty) -- (meanwhile: about straight, when only a little is blocked)
         end
       end
-      if c then -- (past the other faction's guards: more)
+      if c then -- (past the other faction's guards, through zones too high for the player: more)
         if path then
-          for i = 1, #path - 2, 2 do c = c + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) end
+          for i = 1, #path - 2, 2 do
+            c = c + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
+          end
         else
-          c = c + HostileExtra(cont, sx, sy, tx, ty)
+          c = c + HostileExtra(cont, sx, sy, tx, ty) + DangerLine(sx, sy, tx, ty)
         end
       end
       if c and c * directFactor < best then

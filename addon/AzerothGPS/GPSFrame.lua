@@ -2268,7 +2268,7 @@ function G.RouteHere()
   if not px or not free then return end
   if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   local viewCont = ViewCont(cont)
-  ns.Nav.SetDestination(free.x, free.y, viewCont)
+  if ns.Nav.SetDestination(free.x, free.y, viewCont) == false then return end -- (asked first: a zone too high)
   StartTour(px, py, cont, viewCont, false)
 end
 
@@ -2283,7 +2283,12 @@ function G.ConfirmRoute()
   local stops = {}
   for _, d in ipairs(ns.Nav.stops) do stops[#stops + 1] = d end
   for _, d in ipairs(pending) do stops[#stops + 1] = d end
-  ns.Nav.SetStops(stops, S().fastestOrder)
+  local _, asked = ns.Nav.SetStops(stops, S().fastestOrder)
+  if asked then -- (a zone too high: "route there anyway?" has them now)
+    pending = {}
+    elapsed = 1
+    return
+  end
   StartTour(px, py, cont, viewCont, true)
 end
 
@@ -2726,7 +2731,7 @@ function G.QuestRoute()
       or "Quest route: no quest locations found in your quest log.")
     return
   end
-  ns.Nav.SetStops(stops, true)
+  if ns.Nav.SetStops(stops, true) == false then return end -- (asked first: a zone too high)
   ns.Nav.questRouteStale = nil
   G.RouteChanged()
   local msg = string.format("Quest route: %d stop%s (%d to do, %d to turn in).", #ns.Nav.stops,
@@ -2778,6 +2783,36 @@ function G.BossRoute(quiet)
   ns.Print(string.format("%s: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
     quiet and "Dungeon route" or "Boss route", info.name, #stops, #stops == 1 and "" or "es",
     dead > 0 and string.format(" (%d already down)", dead) or ""))
+end
+
+-- A route to a zone too high for the player (Nav.RedStops): "route there anyway?" `zones`:
+-- { { name, lo, hi }, ... }; `stops` the route's; `again` sets them (confirmed). True when asked
+-- (no popup here: false, and the route is set without asking).
+function G.ConfirmRedZone(zones, stops, again)
+  if not (StaticPopup_Show and StaticPopupDialogs) then return false end
+  if not StaticPopupDialogs.AZEROTHGPS_RED_ZONE then
+    StaticPopupDialogs.AZEROTHGPS_RED_ZONE = {
+      text = "%s", button1 = YES or "Yes", button2 = NO or "No",
+      OnAccept = function(_, data)
+        if data then
+          data()
+          if G.RouteChanged then G.RouteChanged() end
+        end
+      end,
+      timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+    }
+  end
+  local ok, lvl = pcall(UnitLevel or error, "player")
+  local parts = {}
+  for _, z in ipairs(zones) do
+    parts[#parts + 1] = z[2] and string.format("%s (level %d-%d)", z[1], z[2], z[3] or z[2]) or z[1]
+  end
+  local what = #stops == 1 and ((stops[1].name and stops[1].name ~= "" and stops[1].name or "That stop") .. " is in ")
+    or "Some of the stops are in "
+  local text = string.format("%s%s: too high for %s.\n\nRoute there anyway?", what, table.concat(parts, ", "),
+    ok and type(lvl) == "number" and ("your level " .. lvl) or "your level")
+  StaticPopup_Show("AZEROTHGPS_RED_ZONE", text, nil, again)
+  return true
 end
 
 -- Whether the route is a boss route in instance level `lvl` (any, with nil).
