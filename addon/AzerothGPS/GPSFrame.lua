@@ -1110,7 +1110,16 @@ function G.Update()
       return shades[key]
     end
     local questing = ns.Nav.QuestPaused()
-    ns.Nav.EachSegment(route, viewCont, function(x1, y1, x2, y2, kind, stop)
+    -- (the level shown: the player's, or a city's opened from its icon; the route's stretches
+    -- on another level (down in a city while up top, or back up) are drawn faint and dotted,
+    -- not as if across what's shown)
+    local shown = here and ns.Nav.PlayerLevel(cont) or viewCont
+    if free and free.interior then
+      for lc, l in pairs(ns.CityLevels or {}) do
+        if l.wmo == free.interior[1][1] then shown = lc end
+      end
+    end
+    ns.Nav.EachSegment(route, viewCont, function(x1, y1, x2, y2, kind, stop, partCont)
       if questing and stop == 1 then return end -- in the stop's quest area, spot reached: no way there
       local ax, ay = toScreen(x1, y1)
       local bx, by = toScreen(x2, y2)
@@ -1119,7 +1128,9 @@ function G.Update()
           or (ay < -reach and by < -reach) then return end
       local style = ROUTE_STYLE[kind] or ROUTE_STYLE[1]
       local col = color(stop, kind, style[1])
-      if not style[3] then
+      if partCont and partCont ~= shown and (ns.CityLevels and (ns.CityLevels[partCont] or ns.CityLevels[shown])) then
+        AddSeg(ax, ay, bx, by, col, math.max(2, style[2] - 2), 0.45, true, true) -- (another level)
+      elseif not style[3] then
         AddSeg(ax, ay, bx, by, col, style[2], 1, true)
       elseif G.dashTexture then
         AddSeg(ax, ay, bx, by, col, style[2], 1, true, true)

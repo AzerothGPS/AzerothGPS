@@ -1084,7 +1084,7 @@ function N.EachSegment(route, view, fn)
     for i = 1, #part.pts, 2 do
       local x, y = Geo.ToContinent(part.cont, part.pts[i], part.pts[i + 1], view)
       if not x then break end
-      if px then fn(px, py, x, y, part.kinds[(i - 1) / 2], part.stop) end
+      if px then fn(px, py, x, y, part.kinds[(i - 1) / 2], part.stop, part.cont) end
       px, py = x, y
     end
     lx, ly = px or lx, py or ly
