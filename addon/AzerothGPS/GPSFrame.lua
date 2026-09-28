@@ -238,28 +238,36 @@ function G.BlockEdges(cont, cx, cy, zoom)
   local y0, y1 = math.floor((cy - reach) / chunk) * chunk, math.ceil((cy + reach) / chunk) * chunk
   local key = string.format("%s:%g:%g:%g:%g:%g", tostring(cont), step, x0, x1, y0, y1)
   if edgeCache.key == key then return edgeCache.segs end
-  -- (a new block: worked out a little each frame, the last one shown until it's done)
+  -- (a new block: worked out a little each frame by G.PumpEdges, the last one shown meanwhile)
   if not edgeJob or edgeJob.key ~= key then
-    edgeJob = { key = key, co = coroutine.create(EdgeWork) }
+    edgeJob = { key = key, cont = cont, co = coroutine.create(EdgeWork) }
     edgeJob.args = { cont, g, P, step, x0, x1, y0, y1 }
   end
+  if not debugprofilestop then G.PumpEdges() end -- (no frames to spread it over: all now)
+  if edgeCache.key == key then return edgeCache.segs end
+  if edgeCache.cont == cont then return edgeCache.segs or {} end
+  return {}
+end
+
+-- Every frame: a little more of the outline being worked out (EDGE_MS); the map redrawn
+-- once it's done.
+function G.PumpEdges()
+  if not edgeJob then return end
   local clock = debugprofilestop
   local t0 = clock and clock()
   repeat
     local ok, res = coroutine.resume(edgeJob.co, (unpack or table.unpack)(edgeJob.args))
     if not ok then
       edgeJob = nil
-      return edgeCache.segs or {}
+      return
     end
     if coroutine.status(edgeJob.co) == "dead" then
-      edgeCache.key, edgeCache.segs, edgeCache.cont = key, res, cont
+      edgeCache.key, edgeCache.segs, edgeCache.cont = edgeJob.key, res, edgeJob.cont
       edgeJob = nil
-      return res
+      if G.Redraw then G.Redraw() end
+      return
     end
   until clock and clock() - t0 >= G.EDGE_MS
-  -- (the old outline belongs to another spot: only while it's the same continent)
-  if edgeCache.cont == cont then return edgeCache.segs or {} end
-  return {}
 end
 
 -- Walls near the view (Passability.WallLines, and with `edges` the terrain's impassable
@@ -1097,7 +1105,7 @@ function G.Update()
     for _, sg in ipairs(G.LayoutRoads(cx, cy, here and cont or viewCont, rot, zoom, half)) do AddSeg(sg[1], sg[2], sg[3], sg[4], sg[5]) end
   end
   -- walls (blood red): with the roads shown, or the road tools on
-  if (st.showWalls or G.wallMode) and not place then
+  if st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
     local wc = here and ns.Nav.PlayerLevel(cont) or viewCont
     -- (the terrain's impassable borders thinner, drawn walls thicker)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
@@ -3401,6 +3409,7 @@ function G.Init()
       end
     end
     pcall(G.UpdateZoneHover)
+    pcall(G.PumpEdges) -- (the walls' outline, worked out in the background)
     if G.lasso then -- drawing a farming area: add the cursor's spot as it moves
       local mx, my = GetCursorPosition()
       local sc = canvas:GetEffectiveScale()
