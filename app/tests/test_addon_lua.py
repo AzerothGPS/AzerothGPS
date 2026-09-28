@@ -1114,7 +1114,9 @@ def test_terrain_walks_run_in_the_background(offroad):
     assert slices > 10
     after = R.Route(1, 0.0, 300.0, 600.0, 300.0, opts)
     pts, kinds = route_pts(after)
-    assert after.length <= before.length + 1e-6
+    # (meanwhile about straight: only the wall's width is blocked; then the walk found, through the pass)
+    assert before.pending and not after.pending
+    assert any(abs(y) < 60 for x, y in pts if 250 < x < 350)
     for i, k in enumerate(kinds):
         if k == 1:
             (x1, y1), (x2, y2) = pts[i], pts[i + 1]
@@ -2050,7 +2052,9 @@ def test_busy_search_queue_never_drops_legs_between_stops(offroad):
     lua.eval("function(R) while R.HasWork() do R.Pump(math.huge, function() return 0 end) end end")(R)
     after = R.Route(1, 0.0, 300.0, 600.0, 300.0, fixed)
     assert not R.HasWork()  # its walk finished (it wasn't dropped): nothing re-queued
-    assert after.length < before.length  # and the route uses it
+    assert before.pending and not after.pending  # and the route uses it: through the pass
+    pts, kinds = route_pts(after)
+    assert any(abs(y) < 60 for x, y in pts if 250 < x < 350)
 
 
 def test_following_the_route_trims_instead_of_recalculating(nav_env):
@@ -3430,3 +3434,31 @@ def test_terrain_view_city_icons_are_the_cities_with_an_inside_map(env):
     load(lua, ns, "Data/Maps.lua", "Data/Interiors.lua")
     names = {c.name for c in ns.GPS.InteriorCities(0).values()}
     assert {"Ironforge", "Undercity"} <= names and "Stormwind City" not in names
+
+
+def test_no_u_turn_to_the_road_while_a_walk_around_is_searched(env):
+    # Tirisfal, a corpse run: the body ~95 yd south, a small steep patch on the straight line.
+    # While the walk around it was searched the route went back north to the road (a 284 yd
+    # U-turn), and every step started the search over, so it stayed that way.
+    lua, ns, at = tirisfal_env(env)
+    R = ns.Router
+    px, py, bx, by = 2192.7, 430.5, 2099.7, 409.5
+    assert ns.Passability.SegmentCost(0, px, py, bx, by) is None  # (blocked in a straight line)
+    R.Reset()
+    R.SYNC_WALKS = False
+    now = lua.eval("function() return os.clock() * 1000 end")
+    try:
+        for offroad in (True, False):
+            R.Reset()
+            opts = lua.table(offroad=offroad, transient=True)
+            r = R.Route(0, px, py, bx, by, opts)
+            assert r.pending and r.length < 130  # meanwhile: about straight, not the long way round
+            while R.HasWork():
+                R.Pump(now() + 50, now)
+            r = R.Route(0, px, py, bx, by, opts)
+            assert not r.pending and r.length < 130
+            # a few yards on: the walk found is joined, not searched again
+            r = R.Route(0, px - 4, py - 3, bx, by, opts)
+            assert not r.pending and r.length < 130 and not R.HasWork()
+    finally:
+        R.SYNC_WALKS = True

@@ -960,6 +960,9 @@ R.WALK_FAIL_YD = 25 -- a walk that failed isn't retried from within this distanc
 R.SYNC_WALKS = false
 R.MAX_WALK_JOBS = 8
 R.STALE_START_YD = 15 -- queued searches from where the player was, further than this: dropped
+R.WALK_REUSE_YD = 30 -- a walk found from where the player was, this close: joined straight from here
+R.PENDING_BLOCKED_YD = 40 -- while a walk around is searched: blocked for no more than this in a straight
+R.PENDING_BLOCKED_COST = 2 -- line, it's taken to be about straight (each blocked yard costing this many)
 
 -- The road edges routing uses on `cont` (shipped roads plus recorded ones), and the graph
 -- they belong to (a new one after Reset, e.g. when a recording is saved).
@@ -1052,10 +1055,15 @@ local function SegCost(cont, x1, y1, x2, y2)
   return c or nil
 end
 
-local function Remember(key, rough, c, path)
-  if walkCount > 256 then walks, walkCount, failed = {}, 0, {} end
+local byTarget = {} -- walks found, by where they go: [cont:x:y] = { [walk key] = true }
+local function Remember(key, rough, c, path, tkey)
+  if walkCount > 256 then walks, walkCount, failed, byTarget = {}, 0, {}, {} end
   walks[key], walkCount = c and { c, path } or false, walkCount + 1
   if not c then failed[rough] = true end
+  if c and path and tkey then
+    byTarget[tkey] = byTarget[tkey] or {}
+    byTarget[tkey][key] = true
+  end
 end
 
 -- Run background terrain searches until `deadline` (now() in ms). Returns true when one
@@ -1074,7 +1082,7 @@ function R.Pump(deadline, now)
       elseif j.links then -- (offroad links a route wanted: recalculate)
         finished, fixed = true, true
       else
-        Remember(j.key, j.rough, ok and c or nil, ok and path or nil)
+        Remember(j.key, j.rough, ok and c or nil, ok and path or nil, j.tkey)
         finished = true
         if not j.transient then fixed = true end
       end
@@ -1090,16 +1098,53 @@ function R.Warming() return walkJobs[1] ~= nil and walkJobs[1].warm or false end
 -- Returns yards, path; or nil (no way found), or nil, nil, true while still searching.
 -- transient: a walk from the player's current position (soon stale as they move on);
 -- only those are dropped when the queue is full; walks between fixed points always finish.
+-- A walk found from near (x1, y1) to the same place (`tkey`): from here straight onto its
+-- path (over open ground, within WALK_REUSE_YD), then along the rest of it. Yards, path; or nil.
+-- (The player moves on while a walk from where they were is searched: without this every step
+-- started a new search, and the route stayed on its stopgap meanwhile.)
+local function Reuse(cont, x1, y1, tkey)
+  local bestC, bestI, bestPath
+  local P = ns.Passability
+  for key in pairs(byTarget[tkey] or {}) do
+    local w = walks[key]
+    local path = w and w[2]
+    if path and #path >= 4 then
+      local remain = { [#path - 1] = 0 }
+      for i = #path - 3, 1, -2 do
+        local dx, dy = path[i + 2] - path[i], path[i + 3] - path[i + 1]
+        remain[i] = remain[i + 2] + math.sqrt(dx * dx + dy * dy)
+      end
+      for i = 1, #path - 1, 2 do
+        local dx, dy = path[i] - x1, path[i + 1] - y1
+        local d = math.sqrt(dx * dx + dy * dy)
+        if d <= R.WALK_REUSE_YD and (not bestC or d + remain[i] < bestC) and P.SegmentCost(cont, x1, y1, path[i], path[i + 1]) then
+          bestC, bestI, bestPath = d + remain[i], i, path
+        end
+      end
+    end
+  end
+  if not bestI then return nil end
+  local out = { x1, y1 }
+  for i = bestI, #bestPath do out[#out + 1] = bestPath[i] end
+  return bestC, out
+end
+
 local function Walk(cont, x1, y1, x2, y2, transient)
   local key = string.format("%d:%.0f:%.0f:%.0f:%.0f", cont, x1, y1, x2, y2)
+  local tkey = string.format("%d:%.0f:%.0f", cont, x2, y2)
   local w = walks[key]
+  if w == nil and transient then
+    local c, path = Reuse(cont, x1, y1, tkey)
+    if c then return c, path end
+  end
   if w == nil then
     local g = R.WALK_FAIL_YD
     local rough = string.format("%d:%d:%d:%d:%d", cont, math.floor(x1 / g), math.floor(y1 / g),
       math.floor(x2 / g), math.floor(y2 / g))
     if failed[rough] then return nil end
     if R.SYNC_WALKS then
-      Remember(key, rough, ns.Passability.FindPath(cont, x1, y1, x2, y2))
+      local c, path = ns.Passability.FindPath(cont, x1, y1, x2, y2)
+      Remember(key, rough, c, path, tkey)
       w = walks[key]
     else
       -- search in the background (Pump); meanwhile the caller falls back to a straight leg
@@ -1125,7 +1170,7 @@ local function Walk(cont, x1, y1, x2, y2, transient)
           walkQueued[table.remove(walkJobs, oldest).key] = nil
         end
         walkQueued[key] = true
-        walkJobs[#walkJobs + 1] = { key = key, rough = rough, transient = transient, cont = cont, x1 = x1, y1 = y1,
+        walkJobs[#walkJobs + 1] = { key = key, rough = rough, tkey = tkey, transient = transient, cont = cont, x1 = x1, y1 = y1,
           co = coroutine.create(function() return ns.Passability.FindPath(cont, x1, y1, x2, y2) end) }
       end
       return nil, nil, true -- still searching
@@ -1137,6 +1182,28 @@ end
 local function Dist(x1, y1, x2, y2)
   local dx, dy = x2 - x1, y2 - y1
   return math.sqrt(dx * dx + dy * dy)
+end
+
+-- Yards of blocked ground on the straight line (x1, y1)-(x2, y2) (sampled every 4 yd).
+local function BlockedYards(cont, x1, y1, x2, y2)
+  local P = ns.Passability
+  local d = Dist(x1, y1, x2, y2)
+  local n = math.max(1, math.floor(d / 4))
+  local blocked = 0
+  for i = 0, n do
+    local t = i / n
+    if P.At(cont, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t) == 2 then blocked = blocked + d / (n + 1) end
+  end
+  return blocked
+end
+
+-- While the walk around is searched: its cost taken as about straight when only a little of
+-- the line is blocked (a rock, a steep patch), not the long way by the roads meanwhile (which
+-- showed as a U-turn away from the stop until the search was done). Else nil.
+local function PendingCost(cont, x1, y1, x2, y2)
+  local b = BlockedYards(cont, x1, y1, x2, y2)
+  if b > R.PENDING_BLOCKED_YD then return nil end
+  return Dist(x1, y1, x2, y2) + b * R.PENDING_BLOCKED_COST
 end
 
 -- Squared distance from (x, y) to segment a-b, and the parameter of the closest point.
@@ -1904,13 +1971,18 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     -- and blind to its floors over each other; a leg there is straight, its walls real)
     local capital = not c and (R.CapitalAt(cont, x1, y1) or R.CapitalAt(cont, x2, y2))
     if capital then walk = false end
+    local stopgap = false
     if not c and walk and Pass and Pass.FindPath then
       local searching
       c, path, searching = Walk(cont, x1, y1, x2, y2, opts and opts.transient and x1 == sx and y1 == sy)
-      if searching then pending = true end
+      if searching then
+        pending = true
+        c = PendingCost(cont, x1, y1, x2, y2)
+        stopgap = c ~= nil
+      end
     end
     -- (blocked in a straight line: walked around it once searched, if the route takes it)
-    local pieces = { { OFF, x1, y1, x2, y2, gap = not c and not cityPenalty and not capital or nil } }
+    local pieces = { { OFF, x1, y1, x2, y2, gap = (stopgap or not c) and not cityPenalty and not capital or nil } }
     if path then
       pieces = {}
       for i = 1, #path - 2, 2 do pieces[#pieces + 1] = { OFF, path[i], path[i + 1], path[i + 2], path[i + 3] } end
@@ -2107,19 +2179,24 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
     end
   end
-  -- Road mode: roads that go a long way round, or that are only reached across blocked
-  -- ground, lose to walking straight there around the obstacles (see ROAD_DIRECT_PENALTY).
+  -- Roads that go a long way round, or that are only reached across blocked ground, lose to
+  -- walking straight there around the obstacles (road mode: see ROAD_DIRECT_PENALTY; offroad
+  -- mode, whose straight line is blocked: like any leg off the roads).
   -- (Searched only when it could win: the walk is at least the straight distance. Not in a
   -- city or its ruins up top, whose grids are floors and walls, not terrain.)
-  if not offroad and Pass and not cityPenalty and not (Pass.Overlay and (Pass.Overlay(cont, sx, sy) or Pass.Overlay(cont, tx, ty))) then
+  local directFactor = offroad and R.OFFROAD_TIE or R.ROAD_DIRECT_PENALTY
+  if Pass and not cityPenalty and not (Pass.Overlay and (Pass.Overlay(cont, sx, sy) or Pass.Overlay(cont, tx, ty))) then
     local d = Dist(sx, sy, tx, ty)
     local best = gscore[GOAL] or math.huge
-    if d <= R.OFFROAD_WALK_AROUND and best > d * R.ROAD_DIRECT_PENALTY then
+    if d <= R.OFFROAD_WALK_AROUND and best > d * directFactor then
       local c, path = direct, nil
       if not c and Pass.FindPath then
         local searching
         c, path, searching = Walk(cont, sx, sy, tx, ty, opts and opts.transient)
-        if searching then pending = true end
+        if searching then
+          pending = true
+          c = PendingCost(cont, sx, sy, tx, ty) -- (meanwhile: about straight, when only a little is blocked)
+        end
       end
       if c then -- (past the other faction's guards: more)
         if path then
@@ -2128,7 +2205,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
           c = c + HostileExtra(cont, sx, sy, tx, ty)
         end
       end
-      if c and c * R.ROAD_DIRECT_PENALTY < best then
+      if c and c * directFactor < best then
         local pieces = { { OFF, sx, sy, tx, ty } }
         if path then
           pieces = {}
