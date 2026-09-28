@@ -12,6 +12,7 @@ For WoW Forever client 1.60.1 (interface 16001). New data files are included, so
 
   ![Undercity's map with its districts and places](https://i.imgur.com/AZzfqTs.png)
 
+- **The capitals:** Orgrimmar, Ironforge, Stormwind, Thunder Bluff and Darnassus have their own streets now: routes go in through the gates and follow them to the banks, trainers, flight masters and docks. That includes the Cleft of Shadow under Orgrimmar, the halls under Ironforge's mountain, Stormwind's canal bridges, and Thunder Bluff's bridges and elevators. Off-road shortcuts turn themselves off inside.
 - **Caves and mines:** 351 of them on both continents are mapped: routes go in at the mouth and follow the tunnels.
 - **More roads:** many roads the map was missing (Dun Morogh, Desolace, Badlands, Winterspring and more) are part of the network now.
 - **The other faction's towns:** routes keep away from their guards and go around their towns when there's a way (Options → Routing).

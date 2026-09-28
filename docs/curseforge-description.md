@@ -13,7 +13,7 @@ _Double-click where you want to go, confirm, and follow the arrow._
 ## Highlights
 
 - **Real routes:** along the roads, around mountains and in through the passes, with optional off-road shortcuts.
-- **Inside cities and caves:** Undercity's floors, stairs and lifts, and 351 caves and mines, entered at the mouth.
+- **Inside cities and caves:** every capital's streets (Undercity's floors, stairs and lifts too), and 351 caves and mines, entered at the mouth.
 - **Keeps you out of trouble:** routes go around the other faction's towns and guards.
 - **Turn-by-turn directions** in a small arrow window, with the distance and ETA to every stop.
 - **Multi-stop trips** in the fastest order, including flight paths (even ones you'll learn on the way), boats, zeppelins, your hearthstone and class teleports.
@@ -85,6 +85,7 @@ _Hearth home, then walk the rest._
 ### Cities and caves
 
 - **Undercity** is routed on its own floors: stairs, ramps and the lifts up to the Ruins of Lordaeron, with "12 yd above you" or "below you (down a lift)" when your stop is on another floor. Safe drops off a ledge are used when they save time ("Jump down here", only when your health allows it). Off-road shortcuts turn themselves off in cities and back on after.
+- **The capitals:** Orgrimmar, Ironforge, Stormwind, Thunder Bluff and Darnassus are routed along their own streets, in through the gates: the Cleft of Shadow under Orgrimmar, the halls under Ironforge's mountain, Stormwind's canal bridges, Thunder Bluff's bridges and elevators.
 - **Caves and mines** (351 of them on both continents, from Fargodeep and Jasperlode to the Wailing Caverns): routes go in at the mouth and follow the tunnels.
 - **City locations:** once you've asked a guard in a capital for directions, its banks, trainers and other places show on the map (for all your characters). Asking a guard again routes you there again, and any banker, auctioneer or trainer of the kind finishes that stop.
 
