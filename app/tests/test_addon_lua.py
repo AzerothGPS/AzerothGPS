@@ -616,6 +616,28 @@ def test_offroad_respects_tirisfal_mountains(env):
             assert ns.Passability.SegmentCost(0, x1, y1, x2, y2) is not None
 
 
+def test_offroad_long_route_works_out_node_links_in_the_background(env):
+    lua, ns, at = tirisfal_env(env)
+    R = ns.Router
+    (sx, sy), (tx, ty) = at(57.2, 55.4), at(12.6, 65.2)
+    want = R.Route(0, sx, sy, tx, ty, lua.table(offroad=True)).length  # all at once
+    R.Reset()
+    R.SYNC_WALKS, R.NODE_LINK_MS = False, 0  # (none in the route calculation itself)
+    pump = lua.eval("function(R) while R.HasWork() do R.Pump(math.huge, function() return 0 end) end end")
+    try:
+        r = R.Route(0, sx, sy, tx, ty, lua.table(offroad=True))
+        assert r.pending  # provisional: the links are worked out in the background
+        for _ in range(10):
+            pump(R)
+            r = R.Route(0, sx, sy, tx, ty, lua.table(offroad=True))
+            if not r.pending:
+                break
+        assert not r.pending
+        assert r.length == pytest.approx(want, abs=1)  # then the same route
+    finally:
+        R.SYNC_WALKS, R.NODE_LINK_MS = True, 12
+
+
 def test_offroad_from_undercity_skips_brill(env):
     lua, ns, at = tirisfal_env(env)
     # Out of the Ruins' gate and straight west, not north through Brill first.

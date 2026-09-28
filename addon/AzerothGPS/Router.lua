@@ -29,6 +29,9 @@ R.ON_ROAD_YD = 8 -- a straight leg this close to a road is drawn (and counted) a
 R.ON_ROAD_MIN = 25 -- yards: shorter stretches along a road stay off-road
 R.NODE_LINKS = 8 -- offroad mode: straight shortcuts from each road node, one per direction
 R.NODE_LINK_MAX = 1500 -- yards
+R.NODE_LINK_TRIES = 3 -- ... the nearest this many nodes tried in each direction (past rock, give that one up)
+R.NODE_LINK_MS = 12 -- ... worked out for this long per route calculation, the rest in the background (a long
+-- route's search reaches thousands of nodes: done at once, the game froze)
 R.OFFROAD_WALK_AROUND = 3000 -- yards: offroad trips up to this long may walk around obstacles
 R.OFFROAD_ALONG_STEP = 50 -- offroad mode: points this far apart along nearby roads, to join or leave them
 R.OFFROAD_ALONG_MAX = 700 -- ... within this many yards of the start or the destination
@@ -1057,6 +1060,8 @@ function R.Pump(deadline, now)
       walkQueued[j.key] = nil
       if j.warm then
         warming[j.cont] = nil
+      elseif j.links then -- (offroad links a route wanted: recalculate)
+        finished, fixed = true, true
       else
         Remember(j.key, j.rough, ok and c or nil, ok and path or nil)
         finished = true
@@ -1208,36 +1213,97 @@ local function NodeLinks(g, cont, n)
   g.links = g.links or {}
   local cached = g.links[n]
   if cached then return cached end
+  -- (not from or to a cave's or a city's own nodes: those are reached by their ways in)
+  local inside = g.caveNode
+  if inside and inside[n] then
+    g.links[n] = {}
+    return g.links[n]
+  end
   NodeBuckets(g)
   local x, y = g.n[n * 2 - 1], g.n[n * 2]
   local bx, by, reach = math.floor(x / NODE_BUCKET), math.floor(y / NODE_BUCKET), math.ceil(R.NODE_LINK_MAX / NODE_BUCKET)
-  local near = {}
+  -- the nearest NODE_LINK_TRIES nodes in each of NODE_LINKS directions (kept sorted, no full sort)
+  local sectors, count, tries, maxd = {}, R.NODE_LINKS, R.NODE_LINK_TRIES, R.NODE_LINK_MAX
+  local atan2, tau = math.atan2 or math.atan, 2 * math.pi
   for kx = bx - reach, bx + reach do
     for ky = by - reach, by + reach do
-      for _, m in ipairs(g.nodeBuckets[Key(kx, ky)] or {}) do
-        local d = Dist(x, y, g.n[m * 2 - 1], g.n[m * 2])
-        if m ~= n and d <= R.NODE_LINK_MAX then near[#near + 1] = { m, d } end
+      local bucket = g.nodeBuckets[Key(kx, ky)]
+      if bucket then
+        for _, m in ipairs(bucket) do
+          local mx, my = g.n[m * 2 - 1], g.n[m * 2]
+          local dx, dy = mx - x, my - y
+          local d = math.sqrt(dx * dx + dy * dy)
+          if m ~= n and d <= maxd and not (inside and inside[m]) then
+            local sector = math.floor(atan2(dy, dx) / tau * count) % count
+            local list = sectors[sector]
+            if not list then
+              list = {}
+              sectors[sector] = list
+            end
+            local k = #list
+            if k < tries or d < list[k][2] then
+              if k == tries then list[k] = nil k = k - 1 end
+              while k > 0 and list[k][2] > d do
+                list[k + 1] = list[k]
+                k = k - 1
+              end
+              list[k + 1] = { m, d }
+            end
+          end
+        end
       end
     end
   end
-  table.sort(near, function(a, b) return a[2] < b[2] end)
-  -- the nearest reachable node in each of NODE_LINKS directions
-  local links, taken, Pass = {}, {}, ns.Passability
-  for _, nd in ipairs(near) do
-    local m = nd[1]
-    local mx, my = g.n[m * 2 - 1], g.n[m * 2]
-    local sector = math.floor((math.atan2 and math.atan2(my - y, mx - x) or math.atan(my - y, mx - x)) / (2 * math.pi) * R.NODE_LINKS) % R.NODE_LINKS
-    if not taken[sector] then
-      local c = Pass.SegmentCost(cont, x, y, mx, my)
+  -- the nearest reachable one in each direction (past rock, the next nearest)
+  local links = {}
+  for sector = 0, count - 1 do
+    for _, nd in ipairs(sectors[sector] or {}) do
+      local m = nd[1]
+      local mx, my = g.n[m * 2 - 1], g.n[m * 2]
+      local c = ns.Passability.SegmentCost(cont, x, y, mx, my)
       if c then
-        taken[sector] = true
         links[#links + 1] = { m, (c + HostileExtra(cont, x, y, mx, my)) * R.OFFROAD_TIE }
-        if #links >= R.NODE_LINKS then break end
+        break
       end
     end
   end
   g.links[n] = links
   return links
+end
+
+local function Clock() return debugprofilestop and debugprofilestop() or os.clock() * 1000 end
+local linkDeadline -- (Clock() ms: the route being calculated works out node links until then)
+
+-- Node n's links, or nil when they aren't worked out yet and this route's time for them is
+-- used up: then they're worked out in the background, and the route recalculated after.
+local function LinksNow(g, cont, n)
+  local l = g.links and g.links[n]
+  if l then return l end
+  if R.SYNC_WALKS or not linkDeadline or Clock() < linkDeadline then return NodeLinks(g, cont, n) end
+  g.linkQueued = g.linkQueued or {}
+  if g.linkQueued[n] then return nil end
+  g.linkQueued[n] = true
+  local key = "links:" .. cont
+  local job = walkQueued[key] and g.linkJob
+  if job and job.cont == cont then
+    job.want[#job.want + 1] = n
+    return nil
+  end
+  job = { key = key, links = true, cont = cont, want = { n } }
+  job.co = coroutine.create(function()
+    local i = 1
+    while job.want[i] do
+      local m = job.want[i]
+      NodeLinks(g, cont, m)
+      g.linkQueued[m] = nil
+      i = i + 1
+      Breathe(i, 4)
+    end
+  end)
+  g.linkJob = job
+  walkQueued[key] = true
+  walkJobs[#walkJobs + 1] = job
+  return nil
 end
 
 -- Road segments bucketed on a SEG_BUCKET grid, with how far along its edge each starts:
@@ -1815,6 +1881,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local OFF, ROAD = R.KIND_OFFROAD, R.KIND_ROAD
   -- a terrain search this route needs is still running: it's provisional (see Nav's Route)
   local pending = false
+  linkDeadline = Clock() + R.NODE_LINK_MS
   -- Off-road leg: cost and pieces. Straight where the ground allows. Getting on/off the
   -- road (`must`) otherwise walks around obstacles over the terrain grid, and as a last
   -- resort goes straight at a heavy penalty; offroad mode's extra links are just dropped.
@@ -2020,7 +2087,9 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
       if offroad and Pass then
         local x, y = g.n[n * 2 - 1], g.n[n * 2]
-        for _, l in ipairs(NodeLinks(g, cont, n)) do
+        local links = LinksNow(g, cont, n)
+        if not links then pending = true end
+        for _, l in ipairs(links or {}) do
           local m = l[1]
           relax(n, m, l[2], { { OFF, x, y, g.n[m * 2 - 1], g.n[m * 2] } })
         end

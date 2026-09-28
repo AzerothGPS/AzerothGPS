@@ -230,6 +230,10 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - Route calculation is the main cost, not drawing. Don't recalculate on every finished
     search (`Nav.SearchDone` limits it to every 3 s), work out the stretches between stops
     one per call (`N.LATER_PER_CALL`), and keep terrain checks memoized (`Router`'s `SegCost`).
+  - Offroad mode's straight links between road nodes (`NodeLinks`, cached) are worked out
+    for `NODE_LINK_MS` per route calculation; the rest go to a background job (`LinksNow`)
+    and the route is provisional (`pending`) until they're in. A long route reaches
+    thousands of nodes: done at once, it froze the game for seconds.
   - A continent's road data is built in the background the first time (`Router.WarmUp`;
     Nav waits for it up to `WARM_WAIT` s). Long loops that can run inside it call
     `Breathe`. Tests set `Router.WARM = false`.
