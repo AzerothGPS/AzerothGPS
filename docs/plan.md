@@ -24,6 +24,63 @@ client files can be read offline.
 | **A5 Flight paths** | Known nodes from the flight map, learned flight times, flight edges and a toggle | A long route flies when that is faster, and only via known nodes |
 | **A6 Polish** | Options panel, boats and zeppelins, minimap/world-map integration, packaging for CurseForge/Wago, a checklist for the Forever launch data refresh | |
 
+## 1.0.7: Dungeons and raids
+
+Goal: every dungeon and raid on the open continents viewable and routed like a city: its
+own walk network, its bosses on the map, and a suggested boss route where killing a boss
+counts as arriving at that stop.
+
+### What it looks like to the player
+- **Instances toggle** in the map menu (a quick button, grouped with the map layers):
+  shows instance entrances on every map style (Terrain, World Map, No Spoiler) and, inside
+  or viewing an instance, its boss icons.
+- **View an instance like a city:** click an entrance icon (on the continent map, a zone
+  map or the terrain view) to open the instance's map, as capital icons open cities today.
+- **Instance route** (like the quest route): inside an instance, one click makes a route
+  through its bosses in the suggested order, from the entrance. A stop is done when its
+  boss dies (or is already dead), not when you reach its spot; skipped bosses can be
+  removed like any stop. Outside, a route to an instance ends at its entrance (the
+  summoning stone / portal), including the walk to it through caves (e.g. Wailing Caverns).
+- **City icons on the terrain view:** cities with a map of their own (Undercity, and the
+  capitals' interiors like Ironforge) get their icon on the terrain view too, at the
+  entrance; clicking opens the city's map, as on the continent map.
+
+### How it's built
+1. **Feasibility first (in game, `/agps debug` inside a dungeon):**
+   - whether the player's position is available inside an instance (`UnitPosition`,
+     `C_Map.GetBestMapForUnit`, `C_Map.GetPlayerMapPosition`: retail and some classic
+     clients hide it there);
+   - which uiMaps the instance has (floors), and whether its map art draws;
+   - whether `ENCOUNTER_END` / `BOSS_KILL` fire, else the combat log's `UNIT_DIED` for the
+     boss's NPC.
+   If the position is hidden, the instance view and boss list still work, but routing
+   inside becomes "next boss" guidance without live following. Decide after the probe.
+2. **Extraction (`app/azerothgps/instances.py`, reusing `walknet.py`):** each instance
+   map (Map DB2 with an instance type) becomes its own routing level (like Undercity's
+   10001: a pseudo-continent per instance), built from its WMO (or terrain, for the few
+   outdoor ones): floors, walls, stairs/drops, roads. Entrances from the client's
+   AreaTrigger/portal positions on the continent and in the instance, joined as
+   transports (like the lifts). Output `Data/Instances.lua` (a new toc file: a full game
+   restart).
+3. **Bosses:** positions from the NPC spawn data already in use (the CMaNGOS dump, same
+   license decision as the NPC paths), matched to the client's DungeonEncounter table
+   for names and encounter IDs; boss icons in `Data/Instances.lua`.
+4. **Suggested order:** the usual boss order per instance from public guides (facts
+   only: which boss after which), reviewed by hand; the route stays on the instance's
+   roads between them.
+5. **Addon:** instance levels in Router/Nav (as city levels), the instance map view and
+   entrance/boss icons on all map styles, the map-menu toggle, the Instance route, boss
+   kill = stop done.
+
+### Order of work
+1. Probe in game (you, in any dungeon: Ragefire Chasm or the Deadmines are closest), and
+   city icons on the terrain view (independent, small).
+2. Research (boss order per instance) and extraction (walk networks, entrances, bosses)
+   in parallel background agents, one dungeon family at a time, starting with the
+   low-level five-mans (Ragefire Chasm, Wailing Caverns, the Deadmines, Shadowfang Keep,
+   Blackfathom Deeps, the Stockade).
+3. Addon side, then the rest of the dungeons and the raids.
+
 ## Risks
 - **Texture rotation (A1):** heading-up relies on `Texture:SetRotation` turning the whole
   quad. If it only rotates texture coordinates inside an axis-aligned box, fall back to
