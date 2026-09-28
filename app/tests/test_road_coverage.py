@@ -19,8 +19,14 @@ from azerothgps.roads.graph import RoadGraph, bridge_gaps
 # ---- the shipped network -----------------------------------------------------------
 
 def _parse_roads(text: str) -> dict:
-    roads, cur = {}, None
+    roads, cur, inside = {}, None, False
     for line in text.splitlines():
+        # (only ns.Roads: the tables after it, e.g. ns.Walls, look alike)
+        if line.startswith("ns."):
+            inside = line.startswith("ns.Roads")
+            continue
+        if not inside:
+            continue
         m = re.match(r"\s*\[(\d+)\] = \{", line)
         s = line.strip()
         if m:

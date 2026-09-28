@@ -3066,3 +3066,13 @@ def test_show_walls_outlines_the_mountains(nav_env):
             sides = {P.At(1, mx, my - 4) == 2, P.At(1, mx, my + 4) == 2}
         assert sides == {True, False}
     assert lua.eval("rawequal")(G.BlockEdges(1, 300.0, -4700.0, 400.0), e)  # (kept while the view stays near)
+
+
+def test_the_ruins_southern_wall_is_closed(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua")
+    P = ns.Passability
+    P.RefreshWalls()
+    # (from the Ruins' courtyard straight out over the lake: not that way)
+    assert P.CrossesWall(0, 1420.0, 240.0, 1330.0, 240.0)
+    assert P.SegmentCost(0, 1420.0, 240.0, 1330.0, 240.0) is None
