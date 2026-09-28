@@ -3400,3 +3400,10 @@ def test_public_api_world_to_map_and_forced_roads(api):
     assert ns.GPS.overlays["sv"] is not None
     A.SetOverlay("sv", None)
     assert ns.GPS.overlays["sv"] is None
+
+
+def test_terrain_view_city_icons_are_the_cities_with_an_inside_map(env):
+    lua, ns = env
+    load(lua, ns, "Data/Maps.lua", "Data/Interiors.lua")
+    names = {c.name for c in ns.GPS.InteriorCities(0).values()}
+    assert {"Ironforge", "Undercity"} <= names and "Stormwind City" not in names

@@ -1330,6 +1330,17 @@ function G.Update()
         end
       end
     end
+    -- the terrain view: the cities with an inside map of their own (Undercity, Ironforge),
+    -- to click for it
+    if not browse and not G.IsMapStyle(st.style) then
+      for _, c in ipairs(G.InteriorCities(viewCont)) do
+        local dx, dy = Geo.ScreenOffset(cx, cy, c.x, c.y)
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if math.abs(dx) <= half and math.abs(dy) <= half then
+          pois[#pois + 1] = { 5, dx, dy, c.name, c.x, c.y, cityMap = c.id }
+        end
+      end
+    end
     DrawPois(DropUnderStops(pois), zoom)
   elseif place and not browse then
     -- inside a building's map (a city like Undercity): its districts' names, like the
@@ -1749,6 +1760,21 @@ function G.CityInterior(id)
     end
     if all > 0 and indoor >= all * G.CITY_INDOOR_SHARE then return { place, wmo, room } end
   end
+end
+
+-- The capitals on `cont` with an inside map of their own (G.CityInterior): { { id, name, x, y } }.
+local interiorCities = {}
+function G.InteriorCities(cont)
+  local list = interiorCities[cont]
+  if list then return list end
+  list = {}
+  for id, m in pairs(ns.Maps or {}) do
+    if m.zoneParent and m.continent == cont and m.bounds and G.CityInterior(id) then
+      list[#list + 1] = { id = id, name = m.name, x = (m.bounds[1] + m.bounds[3]) / 2, y = (m.bounds[2] + m.bounds[4]) / 2 }
+    end
+  end
+  interiorCities[cont] = list
+  return list
 end
 
 -- A capital picked on a continent's map: the terrain view over the city.
