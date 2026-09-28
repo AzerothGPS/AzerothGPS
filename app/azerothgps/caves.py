@@ -226,9 +226,10 @@ class RoadFinder:
     def xy(self, r, c):
         return (32 - self.ty0 - (r + 0.5) / self.k) * walknet.TILE, (32 - self.tx0 - (c + 0.5) / self.k) * walknet.TILE
 
-    def walk(self, a, inside):
+    def walk(self, a, inside, blocked_max: float = WALK_BLOCKED_MAX):
         """From a (a mouth) to the nearest road: (yards, points ending on the road), or None.
-        `inside(x, y)`: the cave's own cells (rock or floor), not walked through."""
+        `inside(x, y)`: the cave's own cells (rock or floor), not walked through; `blocked_max`:
+        the most yards over blocked ground (away from the mouth) the way may cross."""
         from skimage.graph import MCP_Geometric
 
         R = int(ENTRANCE_MAX / self.cell) + 1
@@ -256,7 +257,7 @@ class RoadFinder:
         cells_ = [(r + ra, c + ca) for r, c in m.traceback(best)]
         steep = sum(self.cell * math.hypot(q[0] - p_[0], q[1] - p_[1]) for p_, q in zip(cells_, cells_[1:])
                     if self.cells[q] == 2 and not near[q[0] - ra, q[1] - ca])
-        if steep > WALK_BLOCKED_MAX:
+        if steep > blocked_max:
             return None
         end = self.road[cells_[-1]]
         pts = [a] + [self.xy(*q) for q in cells_[1:-1]] + [end]

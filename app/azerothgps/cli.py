@@ -150,6 +150,40 @@ def cmd_caves(args) -> int:
     return 0
 
 
+def cmd_capitals(args) -> int:
+    """Capital cities at ground level: build them, render each (data/debug/capitals/) with
+    summary.txt, and with --write, Data/Capitals.lua."""
+    from .capitals import build_all, capitals_lua, render_debug
+
+    cd = _client(args)
+    out = DATA / "debug" / "capitals"
+    logs: list = []
+
+    def log(s):
+        print(s)
+        logs.append(s)
+
+    built = build_all(cd, DATA, log=log, only=args.only)
+    for u in built:
+        render_debug(u, out)
+    out.mkdir(parents=True, exist_ok=True)
+    if args.write:
+        if args.only:
+            print("--write builds every capital: run it without --only")
+            return 1
+        p = ADDON_DIR / "Data" / "Capitals.lua"
+        p.write_text(capitals_lua(cd, log=log, built=built), encoding="utf-8", newline="\n")
+        print(f"wrote {p} ({p.stat().st_size // 1024} KB)")
+    if args.check:  # (the routes over Data/Capitals.lua as it is: --write first after a change)
+        from .capitals import check_routes
+
+        log("-- routes from outside each gate to the places (the addon's routing, 3D walk over the floors):")
+        check_routes(built, log=log)
+    (out / "summary.txt").write_text("\n".join(logs) + "\n", encoding="utf-8")
+    print(f"{len(built)} capitals built; renders and summary.txt in {out}")
+    return 0
+
+
 def cmd_install_addon(args) -> int:
     import shutil
 
@@ -305,6 +339,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--only", nargs="+", help="only caves whose name contains one of these (or with this placement id)")
     sp.add_argument("--write", action="store_true", help="also write Data/Caves.lua (gen-addon-data writes it too)")
     sp.set_defaults(fn=cmd_caves)
+
+    sp = sub.add_parser("capitals", help="build the capitals' grids and roads; renders in data/debug/capitals/")
+    client_args(sp)
+    sp.add_argument("--only", nargs="+", help="only capitals whose name contains one of these")
+    sp.add_argument("--write", action="store_true", help="also write Data/Capitals.lua (gen-addon-data writes it too)")
+    sp.add_argument("--check", action="store_true",
+                    help="route from outside each gate to its places over the data and walk them in 3D")
+    sp.set_defaults(fn=cmd_capitals)
 
     sp = sub.add_parser("extract", help="extract map art, bounds, POIs, area grid (+ roads) into data/")
     client_args(sp)

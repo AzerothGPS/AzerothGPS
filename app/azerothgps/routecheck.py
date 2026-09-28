@@ -42,7 +42,7 @@ def _runtime():
     ns.db = lua.eval("{}")
     loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
     for name in ("Geo.lua", "GPSFrame.lua", "Data/Maps.lua", "Data/Roads.lua", "Data/Terrain.lua", "Data/Caves.lua",
-                 "Passability.lua", "Router.lua"):
+                 "Data/Capitals.lua", "Passability.lua", "Router.lua"):
         loader((ADDON_DIR / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
     ns.Router.SYNC_WALKS = True
     return lua, ns
