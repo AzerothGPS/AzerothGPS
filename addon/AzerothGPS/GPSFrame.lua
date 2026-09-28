@@ -1860,9 +1860,9 @@ end
 -- erases one (in red), middle-drag pans.
 function G.RoadHint()
   if G.wallMode then
-    drawHint:SetText("|cffd02020Left-drag: draw a wall|r   |cffb0b0b0Right-drag: erase walls (circle an area to erase them all)|r   |cff9d9d9dMiddle-drag: pan|r")
+    drawHint:SetText("|cffd02020Left-drag: draw a wall|r  ·  |cffb0b0b0Right-drag: erase walls (circle an area to erase them all)|r  ·  |cff9d9d9dMiddle-drag: pan|r")
   else
-    drawHint:SetText("Left-drag: draw a road   |cffff4040Right-drag: erase (circle an area to erase it all)|r   |cff9d9d9dMiddle-drag: pan|r")
+    drawHint:SetText("Left-drag: draw a road  ·  |cffff4040Right-drag: erase (circle an area to erase it all)|r  ·  |cff9d9d9dMiddle-drag: pan|r")
   end
   drawHint:Show()
 end
@@ -2570,7 +2570,11 @@ function G.Init()
   G.zoneLabel:SetShadowOffset(1, -1)
   G.zoneLabel:Hide()
   drawHint = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  drawHint:SetPoint("TOP", 0, -46)
+  -- (as wide as the map, less a margin: longer lines wrap instead of running past its edges)
+  drawHint:SetPoint("TOPLEFT", top, "TOPLEFT", 14, -46)
+  drawHint:SetPoint("TOPRIGHT", top, "TOPRIGHT", -14, -46)
+  drawHint:SetWordWrap(true)
+  drawHint:SetJustifyH("CENTER")
   drawHint:SetText("Drag around the nodes to farm  |cff9d9d9d(right-click cancels)|r")
   -- (on a black band, a quarter opaque, so it reads over any map; shown and hidden with it)
   local hintBg = top:CreateTexture(nil, "ARTWORK")
