@@ -18,15 +18,20 @@ R.Tracks = Tracks
 -- At login: drop the fixes the road data now has.
 function R.Prune()
   local shipped = ns.RoadTracksIn
-  if not shipped or not ns.db or not ns.db.tracks then return end
-  local t, n = ns.db.tracks, 0
-  for i = #t, 1, -1 do
-    if t[i].time and shipped[t[i].time] then
-      table.remove(t, i)
-      n = n + 1
+  if not shipped or not ns.db then return end
+  local n = 0
+  local function prune(list, count)
+    for i = #(list or {}), 1, -1 do
+      if list[i].time and shipped[list[i].time] then
+        table.remove(list, i)
+        if count then n = n + 1 end
+      end
     end
   end
-  if n > 0 then ns.Print(("%d of your drawn roads are in the road data now"):format(n)) end
+  prune(ns.db.tracks, true)
+  -- (and the copies kept for sharing: the data has them, nothing to share)
+  prune(ns.db.feedback and ns.db.feedback.roads)
+  if n > 0 then ns.Print(("%d of your drawn roads and walls are in the map data now"):format(n)) end
 end
 
 -- Tracks changed: rebuild the road network (it includes them) and the route.

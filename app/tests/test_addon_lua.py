@@ -3134,3 +3134,19 @@ def test_height_hint_is_about_the_next_ride_when_one_comes_first(nav_env):
     N.route = lua.eval("{ legs = { { walk = true }, { ride = { 10001, 1569, 268, 0, -916, -3497, 60, 'flight' }, from = 1 } } }")
     way = N.HeightHint(1596.0, 266.0, 10001)
     assert way != "up" or N.HeightText(1596.0, 266.0, 10001).find("lift") == -1  # not "up a lift" for the flight master
+
+
+def test_nothing_to_share_once_the_data_has_it(nav_env):
+    lua, ns = nav_env
+    lua.execute('GetBuildInfo = function() return "1.60.1", "70009" end')
+    load(lua, ns, "Feedback.lua", "Record.lua")
+    ns.Print = lua.eval("function() end")
+    ns.db = lua.eval("""{ tracks = { { op = 'add', continent = 0, time = 5, pts = { 0,0, 50,0 } } },
+      feedback = { roads = { { op = 'add', continent = 0, time = 5, pts = { 0,0, 50,0 } },
+                             { op = 'wall', continent = 0, time = 6, pts = { 0,0, 0,50 } } }, trips = {} } }""")
+    ns.RoadTracksIn = lua.eval("{ [5] = true }")  # (road 5 is in the data now)
+    text, n = ns.Feedback.RoadsText()
+    assert n == 1 and "R wall 0 6" in text and "R add 0 5" not in text
+    assert tuple(ns.Feedback.Counts())[0] == 1 and tuple(ns.Feedback.DrawnCounts()) == (0, 0)
+    ns.Record.Prune()
+    assert len(ns.db.tracks) == 0 and len(ns.db.feedback.roads) == 1

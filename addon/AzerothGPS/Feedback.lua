@@ -122,9 +122,11 @@ end
 F.TEXT_HEADER = "AzerothGPS roads 1"
 function F.RoadsText()
   local seen, lines = {}, {}
+  local shipped = ns.RoadTracksIn or {}
   local function add(t)
     local key = tostring(t.continent) .. ":" .. tostring(t.time)
-    if seen[key] or not t.pts or #t.pts < 4 then return end
+    -- (not what the data has already: nothing to share there)
+    if seen[key] or not t.pts or #t.pts < 4 or shipped[t.time or -1] then return end
     seen[key] = true
     local op = t.op == "remove" and (t.area and "area" or "remove")
       or t.op == "wall" and "wall" or t.op == "unwall" and (t.area and "unwallarea" or "unwall") or "add"
@@ -157,5 +159,10 @@ end
 -- For the options: how much is waiting to be shared.
 function F.Counts()
   local fb = ns.db and ns.db.feedback
-  return fb and fb.roads and #fb.roads or 0, fb and fb.trips and #fb.trips or 0
+  local shipped = ns.RoadTracksIn or {}
+  local roads = 0
+  for _, t in ipairs(fb and fb.roads or {}) do
+    if not shipped[t.time or -1] then roads = roads + 1 end
+  end
+  return roads, fb and fb.trips and #fb.trips or 0
 end
