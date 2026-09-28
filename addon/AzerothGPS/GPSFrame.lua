@@ -1106,7 +1106,7 @@ function G.Update()
   end
   -- walls (blood red): with the roads shown, or the road tools on
   if st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
-    local wc = here and ns.Nav.PlayerLevel(cont) or viewCont
+    local wc = (here and onMe) and ns.Nav.PlayerLevel(cont) or viewCont -- (the level shown: the player's only while the view is on them)
     -- (the terrain's impassable borders thinner, drawn walls thicker)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
   end
