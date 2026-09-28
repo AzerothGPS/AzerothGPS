@@ -1940,6 +1940,31 @@ def test_route_into_stormwind_follows_its_streets(capitals_env, name, spot):
     assert min(math.dist(p, (-9016.0, 474.0)) for p in pts) < 30  # (through the Valley of Heroes)
 
 
+THUNDER_BLUFF_BELOW = (-1334.0, 176.0)  # (on Mulgore's road at the foot of the west lifts)
+
+
+def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
+    # From Mulgore up to the bank: up a lift (the mesas' cliffs are no way up), then along the
+    # mesa's roads
+    lua, ns = capitals_env
+    bank = next((x, y) for n, x, y in city_places(ns, 1456) if n == "Thunder Bluff Bank")
+    r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, *bank, lua.table(offroad=False))
+    share, closed, last = check_capital_route(ns, 1, r)
+    assert share > 0.85 and closed < 5 and last < 15
+    pts, _ = route_pts(r)
+    assert min(math.dist(p, q) for p in pts for q in ((-1286.2, 189.7), (-1308.4, 185.3))) < 12  # (the lift)
+
+
+def test_thunder_bluff_places_are_reached_on_its_roads(capitals_env):
+    # Every service a guard points out, from the lifts' foot: on the mesas' roads and their
+    # bridges, never a long way through the chasms between the mesas or their tents
+    lua, ns = capitals_env
+    for name, x, y in city_places(ns, 1456):
+        r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, x, y, lua.table(offroad=False))
+        share, closed, last = check_capital_route(ns, 1, r)
+        assert share > 0.8 and closed < 10 and last < 25 and r.length < 1200, (name, share, closed, last, r.length)
+
+
 def test_capitals_leave_routes_elsewhere_unchanged(env):
     # Trips nowhere near a capital route the same with the capitals loaded.
     trips = [(0, (2250.0, 250.0), (1841.0, 236.0)), (1, (1100.0, -4400.0), (850.0, -4450.0)),

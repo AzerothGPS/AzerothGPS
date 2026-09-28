@@ -136,10 +136,18 @@ The addon is going public, so every change must keep it policy-safe:
     true`, `split` = a height between the two: `Router.CaveDown` takes the player as down
     under when lower (`opts.z`, `Nav.PlayerZ`); a stop there is down, except within 8 yd of
     a flight master or dock, `capitals.up_top_spots`), with their own roads (a `cave` entry,
-    no gap links). A straight line (`Passability.Overlay`) goes by the floor over them. In a
+    no gap links). A straight line (`Passability.Overlay`) goes by the floor over them. A city
+    under a mountain (Ironforge, `indoor`) is also written like a cave (its floor under walkable
+    land 3, its rock there the continent's; `IsIndoors` tells). A city on its own ground
+    (Thunder Bluff's mesas, Darnassus: `ground_above`) takes that ground in too; its gates'
+    ways to the land's roads may not cross blocked ground (`join_blocked`), and a lift
+    (`lifts`: Thunder Bluff's from Mulgore, shafts from the cmangos DB's "Mesa Elevator") is a
+    road from the city's road up top down onto the land's road at its foot, its length
+    counting the wait and the ride (`LIFT_SECONDS`). In a
     capital, legs off the roads are straight (no terrain walk: its grid is coarser than the
     streets and blind to levels), gap links through closed cells are shut, and offroad mode
-    goes off there (`Nav.CityOffroad`). `agps capitals` renders each (floors under others
+    goes off there (`Nav.CityOffroad`); `route-check` leaves out trips from or to a capital's
+    own cells (its flat walk can't judge levels and lifts). `agps capitals` renders each (floors under others
     purple, their roads cyan) into `data/debug/capitals/` with `summary.txt`; `--write` writes
     the file, `--check` routes from outside the gate to every place (CityPlaces, the check's
     own, each named area of the models) and walks the routes in 3D over the floors

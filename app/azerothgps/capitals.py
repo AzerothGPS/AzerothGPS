@@ -67,6 +67,14 @@ CAPITALS = [
     # (the city's model; its harbor's docks are models of their own on the land's ground, left to it)
     Capital("Stormwind City", 0, 1453, (10047,), ((-9095.0, 412.0),),
             places=(("Gryphon Master", -8832.8, 478.6), ("Harbor boat", -8654.5, 1344.4)), outside=(-9120.0, 397.0)),
+    # (the buildings, bridges and platforms on the mesas; the mesas' tops are its ground: the lifts from
+    # Mulgore come up onto them)
+    Capital("Thunder Bluff", 1, 1456, (179660, 179678, 179663, 179674, 179659, 179664, 179655, 179682, 179651, 179652,
+                                       179656, 179681, 179679, 179661, 179675, 179650, 179658, 179677, 179605, 179654,
+                                       179680, 179662), ((-1290.0, 188.0), (-1033.0, -40.0)),
+            places=(("Wind Rider Master", -1197.2, 29.7),), outside=(-1334.0, 176.0), ground_above=100.0,
+            ground_reach=150.0, join_blocked=0.0,
+            lifts=((-1286.2, 189.7, 68.6), (-1308.4, 185.3, 68.6), (-1028.0, -28.4, 69.0), (-1037.3, -49.2, 69.0))),
 ]
 
 
@@ -128,6 +136,10 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     # the city's own cells: its models' footprint (floors, and the rock and walls between them)
     fp = ndimage.binary_closing(u["model"] | (u["has"] & ~u["ground"]), iterations=3)
     fp = ndimage.binary_fill_holes(fp) & ~u["ground"]
+    if cap.ground_above is not None:
+        # (a city on its own ground: that ground is its too, so a way onto it from the land below
+        # is a straight line up its cliffs, not a walk the land's coarser grid finds up them)
+        fp |= u["ground"] & u["walk"]
     walk = u["walk"]
     cells = np.where(fp, np.where(walk, OPEN, CLOSED), CONT).astype(np.uint8)
     if cap.indoor and cont_at is not None:
