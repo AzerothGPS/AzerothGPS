@@ -1684,16 +1684,24 @@ function RouteBody(cont, sx, sy, tx, ty, opts)
     -- (the spot chosen last time, while the start is near where it was chosen from)
     local key = string.format("%d:%.0f:%.0f", cont, tx, ty)
     local c = snapChosen[key]
-    local tries = R.OpenAround(cont, tx, ty, sx, sy)
-    if c and Dist(c[1], c[2], sx, sy) <= R.CITY_SNAP_KEEP then tries = { c[3] } end
+    local fresh = R.OpenAround(cont, tx, ty, sx, sy)
+    local tries = fresh
+    if c and Dist(c[1], c[2], sx, sy) <= R.CITY_SNAP_KEEP then
+      -- (the spot kept, and the best one from here now: walked past the booth, the kept
+      -- one can be round the far side)
+      tries = { c[3] }
+      local f = fresh[1]
+      if f and (f[1] ~= c[3][1] or f[2] ~= c[3][2]) then tries[2] = f end
+    end
+    local chosen
     for _, p in ipairs(tries) do
       local r = RouteOne(cont, sx, sy, p[1], p[2], opts)
       pending = pending or r.pending
       if r.length + p[3] < (bestLen or math.huge) then
-        best, bestLen = r, r.length + p[3]
-        if not (c and tries[1] == c[3]) and not r.pending then snapChosen[key] = { sx, sy, p } end
+        best, bestLen, chosen = r, r.length + p[3], p
       end
     end
+    if chosen and not pending and not (c and chosen == c[3]) then snapChosen[key] = { sx, sy, chosen } end
     if ns.PerfEnd then ns.PerfEnd("router: stop in a booth", t0) end
     if best then
       local n = #best.pts

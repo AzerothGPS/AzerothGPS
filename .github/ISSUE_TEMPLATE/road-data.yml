@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping the routes! Roads and walls you drew or erased in game: **Options > Help improve > Copy road data...**, press **Ctrl+C**, and paste it below.
+        Thanks for helping the routes! Roads and walls you drew or erased in game: **Options > Help improve > Copy map data...**, press **Ctrl+C**, and paste it below.
         It's plain text with numbers only (no character or realm names).
   - type: input
     id: zones
@@ -17,7 +17,7 @@ body:
     id: roads
     attributes:
       label: Road data
-      description: The text from "Copy road data..." (starts with "AzerothGPS roads").
+      description: The text from "Copy map data..." (starts with "AzerothGPS roads").
       render: text
     validations:
       required: true

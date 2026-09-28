@@ -12,7 +12,7 @@ For WoW Forever client 1.60.1 (interface 16001). New data files are included, so
 - **Caves and mines:** 351 caves and mines on both continents are mapped: routes enter at the mouth and follow the tunnels.
 - **More roads:** many roads the map was missing (Dun Morogh, Desolace, Badlands, Winterspring and more) are now part of the network.
 - **Other faction's towns:** routes keep away from the other faction's guards and go around their towns when there's a way (Options, Routing).
-- **Road tools** (Options, Road tools): draw a road the routes miss, erase a false one (or circle an area), and draw walls routes can't walk through. Share them with **Copy road data...** on the Help improve page.
+- **Road tools** (Options, Road tools): draw a road the routes miss, or erase a false one (or circle an area). **Wall tools** (Options, Wall tools): draw walls routes can't walk through, or erase mountain edges that are really walkable. Share both with **Copy map data...** on the Help improve page.
 - **City locations:** after talking to a guard in a capital, its banks, trainers and other places show on the map. Asking a guard again routes there again, and any banker, auctioneer or trainer finishes that stop.
 - **Continent map:** hover a zone to see its name and level range. Capital icons open the city's map (Ironforge and Undercity show their inside).
 - **Quest route:** an option to use only the quests in the zone you're in; quests in a city now route to the city itself.

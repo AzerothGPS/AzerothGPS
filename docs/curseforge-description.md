@@ -187,7 +187,7 @@ Turn on the road tools (Options > Road tools, or `/agps dev`) and the map gets a
 
 A wall or fence the routes try to walk through? Turn on the **Wall tools** (Options > Wall tools) and left-drag along it: routes go around it like a mountain (roads and flight paths still cross it). Right-drag erases walls; "Show extracted walls" draws them all in red. `/agps draw undo` takes the last one back.
 
-**Share them:** Options > Help improve > **Copy road data...**, then paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) on GitHub. Roads and walls that check out go into a later version for everyone.
+**Share them:** Options > Help improve > **Copy map data...**, then paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) on GitHub. Roads and walls that check out go into a later version for everyone.
 
 ![A drawn road, with a route using it](https://i.imgur.com/6U6bU8C.png)
 

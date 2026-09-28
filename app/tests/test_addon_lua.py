@@ -3111,3 +3111,26 @@ def test_the_wall_eraser_opens_the_terrain_under_it(nav_env):
              % (x - 30, y, x + 30, y))(ns.db)
     P.RefreshWalls()
     assert P.At(1, float(x), float(y)) == 2
+
+
+def test_waiting_counts_roads_and_walls_apart(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Feedback.lua")
+    ns.db = lua.eval("""{ tracks = { { op = 'add', time = 1 }, { op = 'remove', time = 2 },
+      { op = 'wall', time = 3 }, { op = 'unwall', time = 4 }, { op = 'wall', time = 5 } } }""")
+    ns.RoadTracksIn = lua.eval("{ [5] = true }")  # (that one's in the data now)
+    assert tuple(ns.Feedback.DrawnCounts()) == (2, 2)
+
+
+def test_height_hint_is_about_the_next_ride_when_one_comes_first(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua")
+    N = ns.Nav
+    lua.execute("AGPS_CHAR = {} GetSubZoneText = function() return 'Trade Quarter' end")
+    ns.CharDB = lua.eval("function() return AGPS_CHAR end")
+    ns.Geo.PlayerMap = lua.eval("function() return 1458 end")
+    # the stop is up top (a surface quest turn-in); the next thing is a flight boarded down here
+    N.dest = lua.eval("{ x = 2000, y = 300, cont = 0 }")
+    N.route = lua.eval("{ legs = { { walk = true }, { ride = { 10001, 1569, 268, 0, -916, -3497, 60, 'flight' }, from = 1 } } }")
+    way = N.HeightHint(1596.0, 266.0, 10001)
+    assert way != "up" or N.HeightText(1596.0, 266.0, 10001).find("lift") == -1  # not "up a lift" for the flight master

@@ -1602,15 +1602,22 @@ N.HEIGHT_HINT_YD = 6
 function N.HeightHint(px, py, cont)
   local d = N.dest
   if not (d and px and ns.CityLevels) then return nil end
+  -- (what's walked to now: the next stop, or where the next ride (a flight, a lift) is boarded)
+  local tc, tx, ty = d.cont, d.x, d.y
+  local legs = N.route and N.route.legs
+  if legs and legs[1] and legs[1].walk and legs[2] and legs[2].ride then
+    local t, from = legs[2].ride, legs[2].from
+    tc, tx, ty = from == 1 and t[1] or t[4], from == 1 and t[2] or t[5], from == 1 and t[3] or t[6]
+  end
   local lvl = N.PlayerLevel(cont)
-  if Geo.Base(d.cont) ~= Geo.Base(lvl) then return nil end
-  if d.cont ~= lvl then
-    if ns.CityLevels[d.cont] then return "down" end
+  if Geo.Base(tc) ~= Geo.Base(lvl) then return nil end
+  if tc ~= lvl then
+    if ns.CityLevels[tc] then return "down" end
     if ns.CityLevels[lvl] then return "up" end
     return nil
   end
   if not ns.CityLevels[lvl] then return nil end
-  local zs, zp = N.CityFloor(lvl, d.x, d.y), N.CityHeight(lvl, px, py)
+  local zs, zp = N.CityFloor(lvl, tx, ty), N.CityHeight(lvl, px, py)
   if not (zs and zp) or math.abs(zs - zp) < N.HEIGHT_HINT_YD then return nil end
   return zs < zp and "down" or "up", math.abs(zs - zp)
 end

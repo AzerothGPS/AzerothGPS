@@ -213,9 +213,9 @@ O.SHARE_INFO = {
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
   " ",
   "|cffffd100How to share your roads and walls|r",
-  "1. Click |cffffd100Copy road data...|r and press |cffffd100Ctrl+C|r.",
+  "1. Click |cffffd100Copy map data...|r and press |cffffd100Ctrl+C|r.",
   "2. Open the address below in your browser (click it, Ctrl+C, paste it there): it opens a new \"Road data\" issue in the addon's GitHub issues.",
-  "3. Paste your road data, name the zone and say what you fixed, then submit.",
+  "3. Paste your map data, name the zone and say what you fixed, then submit.",
   " ",
   "Roads and walls that check out are added in a later version, for everyone.",
 }
@@ -247,7 +247,7 @@ local function ShowRoadsText()
     tinsert(UISpecialFrames, "AzerothGPSRoadsCopy")
     local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -12)
-    title:SetText("Your road data")
+    title:SetText("Your map data")
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetScript("OnClick", function() f:Hide() end)
     close:SetPoint("TOPRIGHT", 2, 2)
@@ -341,7 +341,7 @@ local function ShowShareInfo()
     local copy = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     copy:SetSize(150, 22)
     copy:SetPoint("TOPLEFT", url, "BOTTOMLEFT", -6, -8)
-    copy:SetText("Copy road data...")
+    copy:SetText("Copy map data...")
     copy:SetScript("OnClick", function() O.ShowRoadsText() end)
     shareInfo = f
   end
@@ -860,7 +860,7 @@ local function BuildWindow()
   ---------------------------------------------------------------- Help improve
   Page("Help improve")
   header("Help improve AzerothGPS", "Kept on your PC only; sharing it is a separate step.")
-  check("Share drawn roads", "Roads you draw or erase are kept for a future road-network update. Addons can't send anything from the game: the data waits in your saved variables until it's uploaded outside the game.",
+  check("Share drawn roads and walls", "Roads and walls you draw or erase are kept for a future road-network update. Addons can't send anything from the game: the data waits in your saved variables until it's uploaded outside the game.",
     function() return GPS().shareRoads end, function(v) GPS().shareRoads = v end)
   check("Share faster trips", "When you reach a stop clearly faster than the estimate (85% of it or less), the way you went is kept (a trace of positions, the estimate and your time), so shortcuts and missing roads can be added. No character or realm names. Kept on your PC until uploaded outside the game.",
     function() return GPS().shareTrips end, function(v) GPS().shareTrips = v end)
@@ -868,11 +868,13 @@ local function BuildWindow()
   place(counts, 18, 4)
   local howBtn = Button(page, "How to share...", 150, ShowShareInfo)
   place(howBtn, 28, 4)
-  local copyBtn = Button(page, "Copy road data...", 150, ShowRoadsText)
+  local copyBtn = Button(page, "Copy map data...", 150, ShowRoadsText)
   copyBtn:SetPoint("LEFT", howBtn, "RIGHT", 6, 0)
   controls[#controls + 1] = function()
-    local r, t = ns.Feedback.Counts()
-    counts:SetText(string.format("Waiting to be shared: %d road%s, %d trip%s", r, r == 1 and "" or "s", t, t == 1 and "" or "s"))
+    local _, t = ns.Feedback.Counts()
+    local r, w = ns.Feedback.DrawnCounts()
+    counts:SetText(string.format("Waiting to be shared: %d road%s, %d wall%s, %d trip%s", r, r == 1 and "" or "s",
+      w, w == 1 and "" or "s", t, t == 1 and "" or "s"))
   end
 
   FinishPage()

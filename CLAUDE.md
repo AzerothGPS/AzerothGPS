@@ -159,7 +159,7 @@ agps feedback          # export opt-in shared roads and trips to data/feedback/
 agps route-check        # routing on random trips in every zone; flags detours and cliff cuts
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps watch-roads       # on every /reload: roads drawn in game go into overrides/ and the data, then install
-agps import-shared <file>  # roads players copied from the share page ("Copy road data...") into the data
+agps import-shared <file>  # roads and walls players copied from the share page ("Copy map data...") into the data
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 ```
 

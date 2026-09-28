@@ -141,6 +141,19 @@ function F.RoadsText()
   return table.concat(lines, "\n"), #lines - 1
 end
 
+-- The drawn roads and walls waiting (not yet in the data): roads, walls (erasers of each count
+-- with them).
+function F.DrawnCounts()
+  local roads, walls = 0, 0
+  local shipped = ns.RoadTracksIn or {}
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    if not shipped[t.time or -1] then
+      if t.op == "wall" or t.op == "unwall" then walls = walls + 1 else roads = roads + 1 end
+    end
+  end
+  return roads, walls
+end
+
 -- For the options: how much is waiting to be shared.
 function F.Counts()
   local fb = ns.db and ns.db.feedback
