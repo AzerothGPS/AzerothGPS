@@ -800,6 +800,87 @@ function BuildGraph(cont)
     -- (the player's recorded and drawn roads, on the roads as merged)
     nodes, edges = R.WithTracks({ n = nodes, e = edges }, tracks, cont)
   end
+  -- Walls (drawn or shipped: Passability.WallLines) cut the roads they cross: a wall is
+  -- drawn on purpose, and a gate is a gap in it. (The terrain's too-steep edges don't: a road
+  -- over one is a pass.)
+  local P = ns.Passability
+  if P and P.HasWalls and P.HasWalls(cont) then
+    if nodes == roads.n then
+      local copy = {}
+      for i = 1, #nodes do copy[i] = nodes[i] end
+      nodes = copy
+    end
+    local kept = {}
+    for k, ed in ipairs(edges) do
+      Breathe(k, 200)
+      local crossed = false
+      for i = 5, #ed - 3, 2 do
+        if P.CrossesWall(cont, ed[i], ed[i + 1], ed[i + 2], ed[i + 3]) then crossed = true break end
+      end
+      if not crossed then
+        kept[#kept + 1] = ed
+      else
+        -- the stretches between the crossings, each a road of its own, cut a yard short of
+        -- the wall either side (ends: new nodes)
+        local run, a = { ed[5], ed[6] }, ed[1]
+        local function flush(b)
+          if #run >= 4 then
+            local e2 = MakeEdge(a, b, run, ed[4])
+            if dropOf[ed] then dropOf[e2] = dropOf[ed] end
+            if caveOf[ed] then caveOf[e2] = true end
+            kept[#kept + 1] = e2
+          end
+        end
+        local skip = 0 -- (yards of the gap still to leave out, past a crossing at a segment's end)
+        for i = 5, #ed - 3, 2 do
+          local x1, y1, x2, y2 = ed[i], ed[i + 1], ed[i + 2], ed[i + 3]
+          local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+          if skip > 0 then
+            if len <= skip then
+              skip = skip - len
+              x1, y1 = x2, y2
+            else
+              local f = skip / len
+              x1, y1 = x1 + (x2 - x1) * f, y1 + (y2 - y1) * f
+              skip = 0
+            end
+            nodes[#nodes] , nodes[#nodes - 1] = y1, x1 -- (the new piece's start node, moved on)
+            run = { x1, y1 }
+          end
+          local guard = 0
+          while skip == 0 do
+            local t = P.WallHit(cont, x1, y1, x2, y2)
+            guard = guard + 1
+            if not t or guard > 20 then break end
+            local L = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+            local g = L > 0 and 1 / L or 0 -- (a yard, as a share of the leg)
+            local ax, ay = x1 + (x2 - x1) * math.max(0, t - g), y1 + (y2 - y1) * math.max(0, t - g)
+            run[#run + 1], run[#run + 2] = ax, ay
+            nodes[#nodes + 1], nodes[#nodes + 2] = ax, ay
+            flush(#nodes / 2)
+            if t + g >= 1 then
+              -- (the gap runs on into the next segment)
+              skip = (t + g - 1) * L
+              nodes[#nodes + 1], nodes[#nodes + 2] = x2, y2
+              run, a = { x2, y2 }, #nodes / 2
+              x1, y1 = x2, y2
+              if skip <= 0 then skip = 1e-6 end
+              break
+            end
+            local bx, by = x1 + (x2 - x1) * (t + g), y1 + (y2 - y1) * (t + g)
+            nodes[#nodes + 1], nodes[#nodes + 2] = bx, by
+            run, a = { bx, by }, #nodes / 2
+            x1, y1 = bx, by
+          end
+          if skip == 0 or x1 ~= x2 or y1 ~= y2 then
+            if not (run[#run - 1] == x2 and run[#run] == y2) then run[#run + 1], run[#run + 2] = x2, y2 end
+          end
+        end
+        flush(ed[2])
+      end
+    end
+    edges = kept
+  end
   local drops, caveEdges = {}, {}
   for ei, ed in ipairs(edges) do
     drops[ei] = dropOf[ed]

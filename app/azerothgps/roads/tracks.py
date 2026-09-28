@@ -125,6 +125,22 @@ def walls(overrides_dir: Path) -> dict[int, list[list[float]]]:
     return out
 
 
+def wall_opens(overrides_dir: Path) -> dict[int, list[dict]]:
+    """The wall erasers drawn in game per continent: they also open the terrain's blocked
+    ground under them (Passability.OpenAreas). { continent: [ {"pts": [[x, y], ...], "area": bool} ] }"""
+    out: dict[int, list] = {}
+    for f in sorted(Path(overrides_dir).glob("roads_*.geojson")):
+        try:
+            cont = int(f.stem.split("_", 1)[1])
+        except ValueError:
+            continue
+        for feat in load_overrides(f)["features"]:
+            props = feat.get("properties", {})
+            if props.get("op") == "unwall":
+                out.setdefault(cont, []).append({"pts": feat["geometry"]["coordinates"], "area": bool(props.get("area"))})
+    return out
+
+
 def shipped_times(overrides_dir: Path) -> list[int]:
     """The times of the drawn roads the overrides have (the addon drops those from its own list)."""
     out = set()

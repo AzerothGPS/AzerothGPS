@@ -179,20 +179,11 @@ G.MAX_SEGMENTS = 1500
 -- world segments { x1, y1, x2, y2, ... } (flat): the borders between blocked and open
 -- samples on a grid of `step` yards (the terrain's cell, coarser zoomed out). Worked out
 -- for a block around the view and kept while the view stays in it.
-G.EDGE_SAMPLES = 60 -- samples across the view's half width, at least
-local edgeCache = {}
-function G.BlockEdges(cont, cx, cy, zoom)
-  local P = ns.Passability
-  local g = ns.Terrain and ns.Terrain[cont]
-  if not (P and P.At and g) then return {} end
-  local step = g.cell
-  while step < zoom / G.EDGE_SAMPLES do step = step * 2 end
-  local chunk = step * 32
-  local reach = zoom * 1.6
-  local x0, x1 = math.floor((cx - reach) / chunk) * chunk, math.ceil((cx + reach) / chunk) * chunk
-  local y0, y1 = math.floor((cy - reach) / chunk) * chunk, math.ceil((cy + reach) / chunk) * chunk
-  local key = string.format("%s:%g:%g:%g:%g:%g", tostring(cont), step, x0, x1, y0, y1)
-  if edgeCache.key == key then return edgeCache.segs end
+G.EDGE_SAMPLES = 48 -- samples across the view's half width, at least
+G.EDGE_MS = 2 -- ms of a frame spent working a new outline out (the old one stays meanwhile)
+local edgeCache, edgeJob = {}, nil
+function G.ClearEdges() edgeCache, edgeJob = {}, nil end -- (walls or wall erasers changed)
+local function EdgeWork(cont, g, P, step, x0, x1, y0, y1)
   local nx, ny = math.floor((x1 - x0) / step), math.floor((y1 - y0) / step)
   local blocked = {}
   for i = 0, nx - 1 do
@@ -200,6 +191,7 @@ function G.BlockEdges(cont, cx, cy, zoom)
     local x = x0 + (i + 0.5) * step
     for j = 0, ny - 1 do row[j] = P.At(cont, x, y0 + (j + 0.5) * step) == 2 end
     blocked[i] = row
+    coroutine.yield()
   end
   local segs = {}
   local function line(ax, ay, bx, by)
@@ -231,8 +223,43 @@ function G.BlockEdges(cont, cx, cy, zoom)
       end
     end
   end
-  edgeCache.key, edgeCache.segs = key, segs
   return segs
+end
+
+function G.BlockEdges(cont, cx, cy, zoom)
+  local P = ns.Passability
+  local g = ns.Terrain and ns.Terrain[cont]
+  if not (P and P.At and g) then return {} end
+  local step = g.cell
+  while step < zoom / G.EDGE_SAMPLES do step = step * 2 end
+  local chunk = step * 32
+  local reach = zoom * 1.4
+  local x0, x1 = math.floor((cx - reach) / chunk) * chunk, math.ceil((cx + reach) / chunk) * chunk
+  local y0, y1 = math.floor((cy - reach) / chunk) * chunk, math.ceil((cy + reach) / chunk) * chunk
+  local key = string.format("%s:%g:%g:%g:%g:%g", tostring(cont), step, x0, x1, y0, y1)
+  if edgeCache.key == key then return edgeCache.segs end
+  -- (a new block: worked out a little each frame, the last one shown until it's done)
+  if not edgeJob or edgeJob.key ~= key then
+    edgeJob = { key = key, co = coroutine.create(EdgeWork) }
+    edgeJob.args = { cont, g, P, step, x0, x1, y0, y1 }
+  end
+  local clock = debugprofilestop
+  local t0 = clock and clock()
+  repeat
+    local ok, res = coroutine.resume(edgeJob.co, (unpack or table.unpack)(edgeJob.args))
+    if not ok then
+      edgeJob = nil
+      return edgeCache.segs or {}
+    end
+    if coroutine.status(edgeJob.co) == "dead" then
+      edgeCache.key, edgeCache.segs, edgeCache.cont = key, res, cont
+      edgeJob = nil
+      return res
+    end
+  until clock and clock() - t0 >= G.EDGE_MS
+  -- (the old outline belongs to another spot: only while it's the same continent)
+  if edgeCache.cont == cont then return edgeCache.segs or {} end
+  return {}
 end
 
 -- Walls near the view (Passability.WallLines, and with `edges` the terrain's impassable
@@ -1993,7 +2020,7 @@ function G.FinishRoad(line, erase, wall)
     zone = info and info.name or "?", time = time(), pts = pts, area = area })
   if wall then
     ns.Print(string.format(erase and "erased the walls %s (#%d). /agps draw undo puts them back."
-      or "saved your wall (#%d, %d yd): routes won't cross it now (roads and flights still may). /agps draw undo takes it back.",
+      or "saved your wall (#%d, %d yd): routes won't cross it now, roads included (leave a gap for a gate). /agps draw undo takes it back.",
       erase and (area and "inside that circle" or "along that stroke") or i, erase and i or math.floor(len + 0.5)))
     elapsed = 1
     return
@@ -2775,7 +2802,7 @@ function G.Init()
         G.ToggleRoadMode()
       end },
     { id = "wallTools", icon = "Interface\\Icons\\Ability_Warrior_ShieldWall", label = "Wall tools", wallDev = true,
-      tip = "Click to turn on, click again when done. On the map: left-drag along a wall, fence or cliff edge the routes try to walk through (blood red): routes go around it like a mountain (roads and flight paths still cross it). Right-drag over walls to erase them (circle an area for all in it), middle-drag to pan. (Shown with the wall tools option)",
+      tip = "Click to turn on, click again when done. On the map: left-drag along a wall, fence or cliff edge the routes try to walk through (blood red): routes go around it like a mountain, and roads it crosses are cut there (leave a gap for a gate; flight paths still cross it). Right-drag over walls to erase them (circle an area for all in it), middle-drag to pan. (Shown with the wall tools option)",
       isOn = function() return G.wallMode end,
       action = function()
         if G.mapMenu then G.mapMenu:Hide() end

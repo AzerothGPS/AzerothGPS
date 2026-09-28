@@ -3053,7 +3053,7 @@ def test_show_walls_outlines_the_mountains(nav_env):
     load(lua, ns, "Data/Terrain.lua", "Passability.lua")
     G, P = ns.GPS, ns.Passability
     # Durotar's hills around Razor Hill: blocked and open ground both near
-    e = G.BlockEdges(1, 300.0, -4700.0, 400.0)
+    e = G.BlockEdges(1, 300.0, -4700.0, 300.0)
     n = len(e) // 4
     assert n > 10
     # each border lies between a blocked and an open sample
@@ -3065,14 +3065,49 @@ def test_show_walls_outlines_the_mountains(nav_env):
         else:
             sides = {P.At(1, mx, my - 4) == 2, P.At(1, mx, my + 4) == 2}
         assert sides == {True, False}
-    assert lua.eval("rawequal")(G.BlockEdges(1, 300.0, -4700.0, 400.0), e)  # (kept while the view stays near)
+    assert lua.eval("rawequal")(G.BlockEdges(1, 300.0, -4700.0, 300.0), e)  # (kept while the view stays near)
 
 
-def test_the_ruins_southern_wall_is_closed(nav_env):
+def test_a_wall_along_the_ruins_edge_closes_it(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Data/Terrain.lua", "Passability.lua")
     P = ns.Passability
+    ns.Walls = lua.eval("{}")  # (not the shipped ones: the player may have changed them)
+    ns.db = lua.eval("{ tracks = { { op = 'wall', drawn = true, continent = 0, time = 1, pts = { 1380,400, 1380,90 } } } }")
     P.RefreshWalls()
     # (from the Ruins' courtyard straight out over the lake: not that way)
     assert P.CrossesWall(0, 1420.0, 240.0, 1330.0, 240.0)
     assert P.SegmentCost(0, 1420.0, 240.0, 1330.0, 240.0) is None
+
+
+def test_a_drawn_wall_cuts_the_road_it_crosses(router):
+    lua, ns = router
+    load(lua, ns, "Passability.lua")
+    P, R = ns.Passability, ns.Router
+    # a wall across the second leg (B (0,-1000) -> C (1000,-1000)) at x = 500
+    ns.db = lua.eval("{ tracks = { { op = 'wall', drawn = true, continent = 1, time = 1, pts = { 500,-1100, 500,-900 } } } }")
+    P.RefreshWalls()
+    R.Reset()
+    edges = R.Edges(1)[0]
+    for e in edges.values():
+        pts = [(e[i], e[i + 1]) for i in range(5, len(e), 2)]
+        assert not any(P.CrossesWall(1, *a, *b) for a, b in zip(pts, pts[1:]))
+    assert len(edges) == 3  # the first leg, and the second in two
+
+
+def test_the_wall_eraser_opens_the_terrain_under_it(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua")
+    P = ns.Passability
+    # a blocked spot in Durotar's hills near Razor Hill
+    spot = next((x, y) for x in range(0, 600, 10) for y in range(-5000, -4400, 10) if P.At(1, float(x), float(y)) == 2)
+    x, y = spot
+    loop = ",".join(f"{x + dx},{y + dy}" for dx, dy in ((-20, -20), (20, -20), (20, 20), (-20, 20), (-20, -20)))
+    ns.db = lua.eval("{ tracks = { { op = 'unwall', area = true, drawn = true, continent = 1, time = 1, pts = { %s } } } }" % loop)
+    P.RefreshWalls()
+    assert P.At(1, float(x), float(y)) == 0 and P.IsOpen(1, float(x), float(y))
+    # a wall drawn over it closes it again (walls win)
+    lua.eval("function(db) db.tracks[2] = { op = 'wall', drawn = true, continent = 1, time = 2, pts = { %s,%s, %s,%s } } end"
+             % (x - 30, y, x + 30, y))(ns.db)
+    P.RefreshWalls()
+    assert P.At(1, float(x), float(y)) == 2

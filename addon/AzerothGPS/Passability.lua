@@ -66,6 +66,10 @@ P.Rows = Rows
 -- closed (wallCells[grid][row * 65536 + col]) and legs crossing them blocked (P.CrossesWall).
 -- Built again when the drawn ones change (P.RefreshWalls: Record.Changed).
 local wallCells, wallSegs, wallsBuilt = {}, {}, false
+-- Blocked ground a wall eraser went over (a mountain's edge the grid has wrong): open
+-- (openCells[grid][row * 65536 + col]). Drawn walls still close their cells.
+local openCells = {}
+P.OPEN_YD = 6 -- an erase stroke opens the blocked ground this close to it
 P.WALL_UNDER_YD = 12 -- an erase stroke takes out the walls this close to it
 P.WALL_BUCKET = 64
 
@@ -74,6 +78,8 @@ local function Cell(g, row, col)
   if row < 1 or row > g.h or col < 1 or col > g.w then return 2 end
   local wc = wallCells[g]
   if wc and wc[row * 65536 + col] then return 2 end
+  local oc = openCells[g]
+  if oc and oc[row * 65536 + col] then return 0 end
   local rc = cache[g]
   if not rc then
     rc = {}
@@ -158,10 +164,25 @@ function P.WallLines(cont)
   return out
 end
 
--- Every continent (and city level) with walls, shipped or drawn.
+-- The wall erasers on `cont` (they open blocked ground too): shipped (ns.WallOpens) and the
+-- player's not yet in the data. { { pts, area }, ... }
+function P.OpenAreas(cont)
+  local out = {}
+  for _, o in ipairs(ns.WallOpens and ns.WallOpens[cont] or {}) do out[#out + 1] = o end
+  local shipped = ns.RoadTracksIn or {}
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    if t.continent == cont and t.op == "unwall" and t.pts and #t.pts >= 4 and not shipped[t.time or -1] then
+      out[#out + 1] = { pts = t.pts, area = t.area }
+    end
+  end
+  return out
+end
+
+-- Every continent (and city level) with walls or wall erasers, shipped or drawn.
 local function WallConts()
   local set = {}
   for c in pairs(ns.Walls or {}) do set[c] = true end
+  for c in pairs(ns.WallOpens or {}) do set[c] = true end
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do
     if t.op == "wall" or t.op == "unwall" then set[t.continent] = true end
   end
@@ -170,7 +191,7 @@ end
 
 -- Build the walls' cells and segments again (after drawing or erasing one).
 function P.RefreshWalls()
-  wallCells, wallSegs = {}, {}
+  wallCells, wallSegs, openCells = {}, {}, {}
   wallsBuilt = true
   local B = P.WALL_BUCKET
   for cont in pairs(WallConts()) do
@@ -202,6 +223,31 @@ function P.RefreshWalls()
     end
     if g then wallCells[g] = cells end
     wallSegs[cont] = segs
+    -- the ground the erasers went over: open (inside a loop; along a stroke, OPEN_YD either side)
+    if g then
+      local open = {}
+      local k = TILE / g.cell
+      for _, o in ipairs(P.OpenAreas(cont)) do
+        local pts = o.pts
+        local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+        for i = 1, #pts - 1, 2 do
+          x0, x1 = math.min(x0, pts[i]), math.max(x1, pts[i])
+          y0, y1 = math.min(y0, pts[i + 1]), math.max(y1, pts[i + 1])
+        end
+        local pad = o.area and 0 or P.OPEN_YD + g.cell
+        local cA, rA = ToCell(g, x1 + pad, y1 + pad)
+        local cB, rB = ToCell(g, x0 - pad, y0 - pad)
+        for r = math.min(rA, rB), math.max(rA, rB) do
+          for c = math.min(cA, cB), math.max(cA, cB) do
+            local x, y = CellCentre(g, c, r)
+            if (o.area and InLoop(pts, x, y)) or (not o.area and NearLine(pts, x, y, P.OPEN_YD + g.cell / 2)) then
+              open[r * 65536 + c] = true
+            end
+          end
+        end
+      end
+      if next(open) then openCells[g] = open end
+    end
   end
 end
 local function EnsureWalls() if not wallsBuilt then P.RefreshWalls() end end
@@ -209,6 +255,40 @@ local function EnsureWalls() if not wallsBuilt then P.RefreshWalls() end end
 local function Orient(ax, ay, bx, by, cx, cy)
   local v = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
   return v > 1e-9 and 1 or v < -1e-9 and -1 or 0
+end
+
+-- Where along the leg (x1, y1)-(x2, y2) it first meets a wall: 0..1, or nil.
+function P.WallHit(cont, x1, y1, x2, y2)
+  EnsureWalls()
+  local segs = wallSegs[cont]
+  if not segs then return nil end
+  local B = P.WALL_BUCKET
+  local best
+  local seen = {}
+  local dx, dy = x2 - x1, y2 - y1
+  for kx = math.floor(math.min(x1, x2) / B), math.floor(math.max(x1, x2) / B) do
+    for ky = math.floor(math.min(y1, y2) / B), math.floor(math.max(y1, y2) / B) do
+      for _, s in ipairs(segs[kx * 65536 + ky] or {}) do
+        if not seen[s] then
+          seen[s] = true
+          local ex, ey = s[3] - s[1], s[4] - s[2]
+          local den = dx * ey - dy * ex
+          if math.abs(den) > 1e-9 then
+            local t = ((s[1] - x1) * ey - (s[2] - y1) * ex) / den
+            local u = ((s[1] - x1) * dy - (s[2] - y1) * dx) / den
+            if t > 1e-9 and t <= 1 and u >= 0 and u <= 1 and (not best or t < best) then best = t end -- (at its end too: a crossing right on a point)
+          end
+        end
+      end
+    end
+  end
+  return best
+end
+
+-- Whether `cont` has any walls.
+function P.HasWalls(cont)
+  EnsureWalls()
+  return wallSegs[cont] ~= nil and next(wallSegs[cont]) ~= nil
 end
 
 -- Whether the leg (x1, y1)-(x2, y2) crosses a wall.
@@ -290,6 +370,14 @@ P.OverlayRaw = OverlayRaw
 local function Overlay(cont, x, y)
   local v = OverlayRaw(cont, x, y)
   if v == 3 then return 0 end
+  if v == 2 then -- (closed there, unless a wall eraser opened it)
+    local g = ns.Terrain and ns.Terrain[cont]
+    local oc = g and openCells[g]
+    if oc then
+      local c, r = ToCell(g, x, y)
+      if oc[r * 65536 + c] then return 0 end
+    end
+  end
   return v
 end
 P.Overlay = Overlay

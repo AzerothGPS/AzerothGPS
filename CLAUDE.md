@@ -68,8 +68,9 @@ The addon is going public, so every change must keep it policy-safe:
     `G.FinishRoad`). The wall tools (Options > Wall tools, `G.wallMode`, the "Wall tools"
     button) draw and erase walls the same way; "Show extracted walls" (`showWalls`). Walls (op
     "wall"/"unwall"; shipped as `ns.Walls` in Roads.lua) are handled in Passability
-    (`WallLines`, `CrossesWall`, wall cells closed on the grid): nothing walks through them;
-    roads and flights ignore them. Saved in
+    (`WallLines`, `CrossesWall`, wall cells closed on the grid): nothing walks through them, and roads
+    they cross are cut there (`BuildGraph`; a gate is a gap); flights ignore them. The terrain's
+    too-steep edges don't cut roads (a road over one is a pass). Saved in
     `ns.db.tracks` on the player's level (`continent` 10001 in Undercity). Routes use them at
     once (`Router.WithTracks`: a drawn road's stretches along an existing road are that road,
     its ends join a road within 25 yd; an erase cuts out the road under it). Drawn roads are

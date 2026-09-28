@@ -49,6 +49,18 @@ def roads_lua(data_dir: Path, continents=None) -> str:
             out.append("    {" + ",".join(f"{x:g},{y:g}" for x, y in w) + "},")
         out.append("  },")
     out.append("}")
+    from .tracks import wall_opens
+
+    opens = wall_opens(RESOURCES / "overrides")
+    out.append("-- wall erasers drawn in game: they open the terrain's blocked ground under them")
+    out.append("ns.WallOpens = {")
+    for cont in sorted(opens):
+        out.append(f"  [{cont}] = {{")
+        for o in opens[cont]:
+            pts = ",".join(f"{x:g},{y:g}" for x, y in o["pts"])
+            out.append(f"    {{ area = {'true' if o['area'] else 'false'}, pts = {{{pts}}} }},")
+        out.append("  },")
+    out.append("}")
     times = shipped_times(RESOURCES / "overrides")
     out.append("-- the roads players drew in game that this data has (by time; the addon drops them from its own list)")
     out.append("ns.RoadTracksIn = {" + ",".join(f"[{t}]=true" for t in times) + "}")

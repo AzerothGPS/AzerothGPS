@@ -32,6 +32,7 @@ end
 -- Tracks changed: rebuild the road network (it includes them) and the route.
 function R.Changed()
   if ns.Passability and ns.Passability.RefreshWalls then ns.Passability.RefreshWalls() end
+  if ns.GPS and ns.GPS.ClearEdges then ns.GPS.ClearEdges() end
   if ns.Router and ns.Router.Reset then ns.Router.Reset() end
   if ns.Nav and ns.Nav.Invalidate then ns.Nav.Invalidate(true, true) end
   if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
