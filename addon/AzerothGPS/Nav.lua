@@ -790,8 +790,23 @@ function N.CityHere()
   return nil
 end
 
+-- The level of an instance map (Data/Instances.lua: LEVEL_BASE + its MapID, base = the map),
+-- or nil: in a dungeon, the game reports its map as the player's continent.
+local instanceOf
+function N.InstanceLevel(cont)
+  if not instanceOf then
+    instanceOf = {}
+    for id, l in pairs(ns.CityLevels or {}) do
+      if l.instance then instanceOf[l.base] = id end
+    end
+  end
+  return cont and instanceOf[cont]
+end
+
 function N.PlayerLevel(cont)
   if not ns.CityLevels or not cont then return cont end
+  local inst = N.InstanceLevel(cont)
+  if inst then return inst end
   local now = GetTime()
   if now - levelAt > 0.5 then
     levelAt, levelCache = now, N.CityHere() or nil
@@ -1574,6 +1589,11 @@ end
 -- Heights in an underground city: its floors' height at (x, y) on `level` (the model's
 -- own, relative), or nil.
 local HTILE = 1600 / 3
+local RUN = {} -- (a run's length character: ALPHABET, 1 to 64)
+do
+  local chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+  for i = 1, #chars do RUN[chars:byte(i)] = i end
+end
 function N.CityHeight(level, x, y)
   local h, g = ns.CityHeights and ns.CityHeights[level], ns.Terrain and ns.Terrain[level]
   if not (h and g and x) then return nil end
@@ -1581,8 +1601,20 @@ function N.CityHeight(level, x, y)
   local col = math.floor(((32 - y / HTILE) - g.tx0) * k) + 1
   local row = math.floor(((32 - x / HTILE) - g.ty0) * k) + 1
   local s = h.rows[row]
+  if s and h.runs then
+    -- (an instance's rows, Data/Instances.lua: runs of a height character and its length;
+    -- a row is spelled out the first time it's read)
+    h.plain = h.plain or {}
+    if not h.plain[row] then
+      local out = {}
+      for i = 1, #s - 1, 2 do out[#out + 1] = s:sub(i, i):rep(RUN[s:byte(i + 1)] or 1) end
+      s = table.concat(out)
+      h.rows[row], h.plain[row] = s, true
+    end
+  end
   local b = s and s:byte(col)
   if not b or b == 46 then return nil end -- (".": no floor)
+  if b > 92 then b = b - 1 end -- (the backslash isn't used)
   return (b - 48) * h.step + h.z0
 end
 

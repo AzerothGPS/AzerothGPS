@@ -21,6 +21,7 @@ Data\Flights.lua
 Data\Cities.lua
 Data\Caves.lua
 Data\Capitals.lua
+Data\Instances.lua
 Data\CityPlaces.lua
 Data\Hostile.lua
 Passability.lua

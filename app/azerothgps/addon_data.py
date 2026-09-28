@@ -383,6 +383,12 @@ def generate(cd: ClientData, addon_dir: Path) -> list[Path]:
         p = data / "Hostile.lua"
         p.write_text(hostile_lua(cd, data_dir()), encoding="utf-8", newline="\n")
         written.append(p)
+        # (dungeons and raids: their entrances and bosses come from the same NPC data)
+        from .instances import build_all as build_instances, instances_lua
+
+        p = data / "Instances.lua"
+        p.write_text(instances_lua(cd, build_instances(cd, data_dir())), encoding="utf-8", newline="\n")
+        written.append(p)
 
     written.append(write_roads_lua(data_dir(), addon_dir))
     return written
