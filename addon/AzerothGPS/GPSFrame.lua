@@ -574,23 +574,20 @@ end
 
 -- A dungeon's map from the game's own minimap art of its models (Data/Instances.lua:
 -- ns.Interiors[its map id]): the player's floor while they're in it and the view is on them
--- (px, py, pz given; found like a building's room), else every floor, the higher ones over the
--- lower. Quads (none: no art for it, the floors' outline instead).
+-- (`band`: one floor, { lo, hi } world height, G.InstanceFloors), else every floor, the higher
+-- ones over the lower. Quads (none: no art for it, the floors' outline instead).
 local ALL_FLOORS = { 0, 0, -1e9, 0, 0, 1e9 }
-function G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, px, py, pz)
+function G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, band)
   local lvl = ns.CityLevels and ns.CityLevels[inst]
   local mapID = lvl and lvl.base
   local list = mapID and ns.Interiors and ns.Interiors[mapID]
   if not list then return {} end
-  if px then
-    local place, wmo, room = G.FindInterior(px, py, pz, mapID, GetMinimapZoneText and GetMinimapZoneText(),
-      IsIndoors and IsIndoors())
-    if place then return G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half, true) end
-  end
   local quads = {}
   for _, p in ipairs(list) do
     local w = ns.WMOs[p[1]]
-    if w then G.LayoutInterior(cx, cy, p, w, ALL_FLOORS, rot, zoom, half, true, quads) end
+    -- (the band in the model's own height; LayoutInterior widens a room's by Z_SLACK)
+    local room = band and { 0, 0, band[1] - p[4] + Z_SLACK, 0, 0, band[2] - p[4] - Z_SLACK } or ALL_FLOORS
+    if w then G.LayoutInterior(cx, cy, p, w, room, rot, zoom, half, true, quads) end
   end
   return quads
 end
@@ -709,6 +706,7 @@ end
 ---------------------------------------------------------------------------
 
 local frame, canvas, lineLayer, arrow, northLabel, infoText, noMapText, recenter
+local floorText -- a dungeon's map: which floor is shown
 local free -- nil while following the player; else the frozen view { x, y, rot }
 local approachZoom, approachFor, approachSkip -- near a stop: the zoom now (animated); for which stop; skipped for (G.UpdateApproach)
 local view = { x = 0, y = 0, rot = 0, s = 1 } -- last drawn view
@@ -757,6 +755,125 @@ local elapsed = 0
 
 local function S() return ns.settings.gps end
 
+-- A dungeon's floors (from its art's rooms): { { lo, hi }, ... } in world height, lowest
+-- first. Rooms are grouped by height (a new floor past FLOOR_GAP yards between rooms' bottoms);
+-- neighbors that aren't over each other (less than FLOOR_STACK of the smaller overlaps: a
+-- cave going down, not a floor over another) are one floor; tiny ones join the one below.
+G.FLOOR_GAP, G.FLOOR_STACK, G.FLOOR_MIN_SHARE, G.FLOOR_HEAD = 4, 0.15, 0.03, 6
+local floorCache = {}
+function G.InstanceFloors(inst)
+  local cached = floorCache[inst]
+  if cached then return cached end
+  local lvl = ns.CityLevels and ns.CityLevels[inst]
+  local list = lvl and ns.Interiors and ns.Interiors[lvl.base]
+  local rooms, total = {}, 0
+  for _, p in ipairs(list or {}) do
+    local w = ns.WMOs[p[1]]
+    local c, sn = math.cos(p[5]), math.sin(p[5])
+    for _, g in ipairs(w and w.groups or {}) do
+      local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+      for _, lx in ipairs({ g[1], g[4] }) do
+        for _, ly in ipairs({ g[2], g[5] }) do
+          local x, y = p[2] + lx * c - ly * sn, p[3] + lx * sn + ly * c
+          x0, y0, x1, y1 = math.min(x0, x), math.min(y0, y), math.max(x1, x), math.max(y1, y)
+        end
+      end
+      local area = (g[4] - g[1]) * (g[5] - g[2])
+      rooms[#rooms + 1] = { p[4] + g[3], area, { x0, y0, x1, y1 } }
+      total = total + area
+    end
+  end
+  table.sort(rooms, function(a, b) return a[1] < b[1] end)
+  local floors = {}
+  for _, r in ipairs(rooms) do
+    local f = floors[#floors]
+    if f and r[1] - f.last <= G.FLOOR_GAP then
+      f.last, f.area = r[1], f.area + r[2]
+      f.boxes[#f.boxes + 1] = r[3]
+    else
+      floors[#floors + 1] = { lo = r[1], last = r[1], area = r[2], boxes = { r[3] } }
+    end
+  end
+  local function overlap(a, b)
+    local t = 0
+    for _, p in ipairs(a.boxes) do
+      for _, q in ipairs(b.boxes) do
+        local w, h = math.min(p[3], q[3]) - math.max(p[1], q[1]), math.min(p[4], q[4]) - math.max(p[2], q[2])
+        if w > 0 and h > 0 then t = t + w * h end
+      end
+    end
+    return t
+  end
+  local function join(i)
+    local a, b = floors[i], floors[i + 1]
+    a.last, a.area = b.last, a.area + b.area
+    for _, bx in ipairs(b.boxes) do a.boxes[#a.boxes + 1] = bx end
+    table.remove(floors, i + 1)
+  end
+  local changed = true
+  while changed and #floors > 1 do
+    changed = false
+    for i = 1, #floors - 1 do
+      if overlap(floors[i], floors[i + 1]) < G.FLOOR_STACK * math.min(floors[i].area, floors[i + 1].area) then
+        join(i)
+        changed = true
+        break
+      end
+    end
+  end
+  for i = #floors, 2, -1 do
+    if floors[i].area < total * G.FLOOR_MIN_SHARE then join(i - 1) end
+  end
+  local out = {}
+  for i, f in ipairs(floors) do out[i] = { f.lo, f.last + G.FLOOR_HEAD } end
+  floorCache[inst] = out
+  return out
+end
+
+-- The floor shown in a dungeon's map: 0 all of them, else counted from the top. Picked with the
+-- mouse wheel (G.FloorWheel); until then the player's (at height pz, in it), else all.
+local floorSel, floorInst, floorBaseZoom
+function G.ShownFloor(inst, pz)
+  local floors = G.InstanceFloors(inst)
+  if #floors < 2 then return 0 end
+  if floorInst ~= inst then floorInst, floorSel, floorBaseZoom = inst, nil, S().zoom end
+  if floorSel then return floorSel end
+  if pz and pz ~= 0 then
+    -- (the highest floor whose bottom is under the player's feet: the one they stand on)
+    local best = 1
+    for i, f in ipairs(floors) do
+      if f[1] - 2 <= pz then best = i end
+    end
+    return #floors - best + 1
+  end
+  return 0
+end
+
+-- The mouse wheel over a dungeon's map with floors: in goes down a floor, out up one (all of
+-- them past the top); past the bottom floor it zooms in, past "all floors" out (and back to
+-- the zoom the floors were stepped at first). True when it did.
+function G.FloorWheel(delta)
+  local inst = view.instance or (free and free.instance)
+  local floors = inst and G.InstanceFloors(inst)
+  local n = floors and #floors or 0
+  if n < 2 then return false end
+  local px, py, _, pz = Geo.PlayerWorld()
+  local k = G.ShownFloor(inst, view.mine and pz or nil)
+  local z, zb = S().zoom, floorBaseZoom or S().zoom
+  if delta > 0 then
+    if z > zb * 1.01 then G.SetZoom(math.max(zb, z * 0.8)) return true end
+    if k >= n then return false end
+    floorSel = k + 1
+  else
+    if z < zb * 0.99 then G.SetZoom(math.min(zb, z * 1.25)) return true end
+    if k <= 0 then return false end
+    floorSel = k - 1
+  end
+  floorBaseZoom = z
+  elapsed = 1
+  return true
+end
+
 -- The continent the view shows: the browsed map's, a free view's (it may be on another
 -- continent, e.g. picked from the world map), else the player's.
 local function ViewCont(cont)
@@ -764,6 +881,7 @@ local function ViewCont(cont)
 end
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
 local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
+local LeaveOpened -- (below: right-click out of such a map)
 
 local function Acquire(i)
   local t = pool[i]
@@ -1117,6 +1235,7 @@ local function DrawPois(pois, zoom)
         b.icon:SetVertexColor(1, 1, 1)
         b.questID = nil
       end
+      b:SetAlpha(p.dim and 0.35 or 1)
       b:ClearAllPoints()
       b:SetPoint("CENTER", poiLayer, "CENTER", p[2], p[3])
       b:Show()
@@ -1241,12 +1360,21 @@ function G.Update()
     place, wmo, room = free.interior[1], free.interior[2], free.interior[3]
   end
   G.inside = place and ((room.n ~= "" and room.n or "?") .. " / " .. place[1]) or nil
-  local instArt = false
+  local instArt, instBand, instFloor = false, nil, 0
+  view.mine = here and onMe
   if inst and not browse then
-    -- the game's minimap art of its models; none: its floors' outline (G.DrawFloors, below)
-    local mine = here and onMe
-    quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, mine and px or nil, py, pz)
+    -- the game's minimap art of its models, one floor or all; none: its floors' outline (G.DrawFloors, below)
+    local floors = G.InstanceFloors(inst)
+    instFloor = G.ShownFloor(inst, view.mine and pz or nil)
+    instBand = instFloor > 0 and floors[#floors - instFloor + 1] or nil
+    quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, instBand)
     instArt = #quads > 0
+    local n = #floors
+    if floorText then
+      floorText:SetText(n < 2 and "" or instFloor == 0
+        and string.format("All %d floors  |cff9d9d9d(scroll in for each)|r", n)
+        or string.format("Floor %d of %d, from the top  |cff9d9d9d(scroll)|r", instFloor, n))
+    end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   elseif browse then
@@ -1266,9 +1394,11 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
+  if floorText then floorText:SetShown(inst ~= nil and not browse) end
   -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
   -- still show where you can walk)
-  G.DrawFloors(inst and not browse, inst and not browse and G.BlockEdges(inst, cx, cy, zoom) or nil, cx, cy, rot, s)
+  G.DrawFloors(inst and not browse, inst and not browse and not instBand and G.BlockEdges(inst, cx, cy, zoom) or nil,
+    cx, cy, rot, s)
   ns.PerfEnd("redraw: tiles", pt)
   pt = ns.PerfStart()
   segN = 0
@@ -1443,7 +1573,9 @@ function G.Update()
       add({ 8, 0, 0, "Way out: " .. info.name, e[4], e[5], exit = e })
     end
     for _, b in ipairs(info.bosses or {}) do
-      add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional })
+      -- (on another floor than the one shown: faint)
+      local off = instBand and b[5] and (b[5] < instBand[1] - G.FLOOR_HEAD or b[5] > instBand[2] + G.FLOOR_HEAD)
+      add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional, dim = off })
     end
     DrawPois(DropUnderStops(pois), zoom)
   elseif (not place or browse) and not worldView then
@@ -1787,7 +1919,7 @@ function G.Browse(id, cont)
   browse, browseCont, browseBounds = id, c, b
   browseZoom = math.max(b[3] - b[1], b[4] - b[2]) / 2 * 1.02
   free = { x = (b[1] + b[3]) / 2, y = (b[2] + b[4]) / 2, rot = 0, cross = true }
-  recenter:Show()
+  if recenter then recenter:Show() end
   elapsed = 1
 end
 
@@ -1937,7 +2069,7 @@ end
 -- to come back to (a zone's or continent's map, or the terrain view). From one opened map to
 -- another, still the first.
 local function RememberView()
-  if view.instance or (free and free.city) then return end
+  if view.instance or (free and (free.city or free.instance)) then return end
   openedFrom = { browse = browse, browseZoom = browseZoom, browseCont = browseCont, browseBounds = browseBounds,
     fromTerrain = fromTerrain, free = free, zoom = S().zoom }
 end
@@ -2018,8 +2150,8 @@ end
 -- Right-click in a city's or dungeon's map opened from its icon: back to the view it was
 -- opened from (a zone's map, the terrain view); in a dungeon's the player is in, out at its
 -- (first) entrance.
-local function LeaveOpened()
-  local inst = view.instance
+LeaveOpened = function()
+  local inst = view.instance or (free and free.instance)
   if not (inst or (free and free.city)) then return false end
   local from = openedFrom
   if from then
@@ -2134,6 +2266,7 @@ end
 function G.RouteHere()
   local px, py, cont = Geo.PlayerWorld()
   if not px or not free then return end
+  if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   local viewCont = ViewCont(cont)
   ns.Nav.SetDestination(free.x, free.y, viewCont)
   StartTour(px, py, cont, viewCont, false)
@@ -2234,6 +2367,7 @@ local drawHint
 
 -- `kind`: "farm" (a loop round nodes, the default) or "road" (a road to suggest).
 function G.StartDrawing(kind)
+  if (kind or "farm") == "farm" and ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   G.drawMode, G.lasso, G.drawKind = true, nil, kind or "farm"
   if drawHint then
     drawHint:SetText(G.drawKind == "road" and "Drag along the road  |cff9d9d9d(right-click cancels)|r"
@@ -2401,6 +2535,7 @@ end
 function G.AddStopAt(x, y, name, stopCont, tex)
   local px, _, cont = Geo.PlayerWorld()
   if not px then return false end
+  if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return false end
   local max = ns.Nav.loop and ns.Nav.MAX_LOOP_STOPS or ns.Nav.MAX_STOPS
   if #ns.Nav.stops + #pending >= max then
     ns.Print("at most " .. max .. " stops per route")
@@ -2577,6 +2712,7 @@ end
 -- The quest route button: stops for the quest log's objectives and turn-ins, in the
 -- fastest order, as the route.
 function G.QuestRoute()
+  if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   if InCombatLockdown and InCombatLockdown() then
     ns.Print("Quest route: not in combat (the game hides quest locations then).")
     return
@@ -2625,7 +2761,7 @@ function G.BossStops(lvl)
 end
 
 -- The boss route: the dungeon whose map is shown, else the one the player is in.
-function G.BossRoute()
+function G.BossRoute(quiet)
   local lvl = view.instance or ns.Nav.CurrentInstance()
   local info = lvl and ns.Instances and ns.Instances[lvl]
   if not info then
@@ -2637,10 +2773,66 @@ function G.BossRoute()
     ns.Print(string.format("Boss route: %s's bosses are all down.", info.name))
     return
   end
-  ns.Nav.SetStops(stops, false) -- (the usual order: kept)
+  ns.Nav.SetStops(stops, false, true) -- (the usual order: kept)
   G.RouteChanged()
-  ns.Print(string.format("Boss route: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
-    info.name, #stops, #stops == 1 and "" or "es", dead > 0 and string.format(" (%d already down)", dead) or ""))
+  ns.Print(string.format("%s: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
+    quiet and "Dungeon route" or "Boss route", info.name, #stops, #stops == 1 and "" or "es",
+    dead > 0 and string.format(" (%d already down)", dead) or ""))
+end
+
+-- Whether the route is a boss route in instance level `lvl` (any, with nil).
+local function OnBossRoute(lvl)
+  for _, d in ipairs(ns.Nav.stops) do
+    if d.boss and (not lvl or d.cont == lvl) then return true end
+  end
+  return false
+end
+
+-- Into a dungeon or raid (PLAYER_ENTERING_WORLD, Core.lua): with the dungeon route on, its
+-- boss route (unless it's already set: a /reload in there), when the game gives the player's
+-- position in there. Out of one: its boss route goes (it would lead back in).
+local lastInstance -- (the dungeon the player was last in: leaving it ends its boss route)
+function G.DungeonEntered()
+  local lvl = ns.Nav.CurrentInstance()
+  local left = lastInstance
+  lastInstance = lvl
+  if not lvl then
+    -- (a boss route planned from outside, looking at a dungeon's map, stays)
+    if left and OnBossRoute(left) then
+      local keep = {}
+      for _, d in ipairs(ns.Nav.stops) do
+        if not (d.boss and d.cont == left) then keep[#keep + 1] = d end
+      end
+      if #keep > 0 then ns.Nav.SetStops(keep, false, true) else ns.Nav.Clear() end
+      G.RouteChanged()
+    end
+    return
+  end
+  if S().dungeonRoute == false or OnBossRoute(lvl) then return end
+  if not Geo.PlayerWorld() then
+    ns.Print("Dungeon route: the game doesn't give your position in here, so it isn't started (/agps bosses starts it anyway).")
+    return
+  end
+  G.BossRoute(true)
+end
+
+-- The dungeon route on or off (the option, the map menu's toggle): on in a dungeon starts its
+-- boss route; off ends it (other routes can be set again).
+function G.SetDungeonRoute(on)
+  S().dungeonRoute = on and true or false
+  local lvl = ns.Nav.CurrentInstance()
+  if on then
+    ns.Print("Dungeon route on: entering a dungeon or raid starts its boss route.")
+    if lvl and not OnBossRoute(lvl) then G.BossRoute(true) end
+  else
+    if lvl and OnBossRoute(lvl) then
+      ns.Nav.Clear()
+      G.RouteChanged()
+    end
+    ns.Print("Dungeon route off: routes are yours again (the Boss route button still makes one).")
+  end
+  if G.LayoutQuick then G.LayoutQuick() end
+  elapsed = 1
 end
 
 -- Background terrain searches and road data (Router.Pump), ~1 ms a frame (WARM_MS while a
@@ -2663,6 +2855,7 @@ function G.IsVisible() return frame ~= nil and frame:IsVisible() end
 -- view, and the world point under the mouse pointer (nil unless it's over the map).
 function G.Canvas() return canvas end
 function G.TopLayer() return topLayer end
+function G.BrowseState() return browse, free end -- (for the tests)
 function G.ViewState()
   return view.x, view.y, view.cont, view.rot, view.s, canvas and canvas:GetWidth() / 2 or 0
 end
@@ -2808,6 +3001,7 @@ function G.Init()
   frame:SetScript("OnMouseWheel", function(_, delta)
     tour = nil
     lastActivity = GetTime()
+    if not browseZoom and G.FloorWheel(delta) then return end -- (a dungeon's floors)
     local f = delta > 0 and 0.8 or 1.25
     if browseZoom then
       browseZoom = math.max(MIN_ZOOM, browseZoom * f)
@@ -3225,6 +3419,10 @@ function G.Init()
         if G.mapMenu then G.mapMenu:Hide() end
         G.BossRoute()
       end },
+    { id = "dungeonRoute", icon = "Interface\\Icons\\INV_Misc_Key_13", label = "Dungeon route",
+      tip = "On: entering a dungeon or raid starts its boss route (in the usual order, each stop done when its boss dies), and other routes wait until it's done. Off: routes are yours in there too.",
+      isOn = function() return S().dungeonRoute ~= false end,
+      action = function() G.SetDungeonRoute(S().dungeonRoute == false) end },
     { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
       tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
     { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
@@ -3263,13 +3461,15 @@ function G.Init()
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
   G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight", offroad = "hidden",
-    city = "hidden", instances = "menuUp", bossRoute = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
+    city = "hidden", dungeonsG = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {
     { id = "styles", label = "Map style", members = { "style_minimap", "style_zone", "style_nospoiler" },
       tip = "The map's look: click to choose." },
     { id = "questsG", label = "Quests", members = { "quests", "questAreas" }, tip = "Quests and quest areas on the map." },
+    { id = "dungeonsG", label = "Dungeons and raids", members = { "instances", "dungeonRoute", "bossRoute" },
+      tip = "Dungeon and raid entrances on the map, the dungeon route, and a boss route." },
     { id = "gather", label = "Herbs, ore and farming", members = { "herbs", "ore", "farm" },
       tip = "Herb and ore nodes on the map, and drawing a farming area." },
   }
@@ -3777,6 +3977,9 @@ function G.Init()
 
   noMapText = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   noMapText:SetPoint("CENTER")
+  floorText = top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  floorText:SetPoint("TOPLEFT", 8, -8)
+  floorText:SetShadowOffset(1, -1)
 
   -- Hidden (closed, a key, combat) with stops placed but not confirmed yet: they become the
   -- route now (the 5 s auto-confirm runs only while the map shows), so the direction arrow

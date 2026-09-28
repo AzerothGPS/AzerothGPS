@@ -191,7 +191,17 @@ The addon is going public, so every change must keep it policy-safe:
     and where it has no art fills its floors (the open runs `BlockEdges` also returns,
     `edges.fill`) and outlines them. Right-click in a city's
     or dungeon's map opened from its icon goes back to the view it was opened from
-    (`openedFrom`, `RememberView`). **Boss route** (quick button, `/agps bosses`,
+    (`openedFrom`, `RememberView`; kept over a /reload by `SaveView`). **Floors:** a dungeon's
+    art rooms grouped by height into floors that lie over each other (`G.InstanceFloors`:
+    `FLOOR_GAP`, `FLOOR_STACK`, `FLOOR_MIN_SHARE`); the mouse wheel steps them (`G.FloorWheel`:
+    in = down a floor, out = up, all floors past the top; past the ends it zooms, and zooming
+    back returns to where the floors were stepped); the player in it sees their floor by height
+    (`G.ShownFloor`); bosses on other floors are faint. **Dungeon route** (option
+    `dungeonRoute`, the map menu's toggle, `/agps dungeonroute`): entering a dungeon or raid
+    (PLAYER_ENTERING_WORLD → `G.DungeonEntered`) starts its boss route when the game gives the
+    position in there, leaving it ends it; while it's set in there, other routes are held off
+    (`Nav.DungeonLocked`: `SetStops`/`AddStop`/`SetLoop` refuse unless `force`, the map's route
+    buttons say why). **Boss route** (quick button, `/agps bosses`,
     `G.BossRoute`/`G.BossStops`): the bosses in `order`, optional and dead ones left out, kept
     in that order; a stop with `boss` (its NPC entry) is done when it dies, not on arrival
     (`Nav.BossKilled` from ENCOUNTER_END / BOSS_KILL by DungeonEncounter id or name, and the
@@ -254,6 +264,11 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 - **Test pure Lua with lupa** in `app/tests/test_addon_lua.py`. Frames aren't available
   there; keep logic in plain functions (e.g. `G.FadeTarget`, `N.KeepOld`) so it can be
   tested.
+- **A file-level `local` is only visible below its declaration.** A function written above
+  it (e.g. a map handler calling a `local function` defined further down) reads a nil
+  global instead, and fails only when called, so a load-only test won't catch it. Declare
+  the local first (`local Foo` near the top, `Foo = function() ... end` later), and test the
+  handler by calling it.
 - **Lua 5.5 in the tests, 5.1 in the game:**
   - Loop variables are read-only.
   - `%d` needs integers.

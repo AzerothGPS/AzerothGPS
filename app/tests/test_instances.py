@@ -210,8 +210,110 @@ def test_instance_maps_use_the_games_minimap_art(inst_env):
         zoom = max(x1 - x0, y1 - y0) / 2
         assert len(G.LayoutInstanceArt(cx, cy, lvl, 0, zoom, 200)) > 0, ns.Instances[lvl].name
     assert "Shadowfang Keep" in with_art and "Deadmines" in with_art and len(with_art) >= 20
-    # in it: the player's floor only (VanCleef's ship), fewer images than every floor
-    x0, x1, y0, y1 = P.GridBounds(DM)
-    every = len(G.LayoutInstanceArt(VANCLEEF[0], VANCLEEF[1], DM, 0, 150, 200))
-    mine = len(G.LayoutInstanceArt(VANCLEEF[0], VANCLEEF[1], DM, 0, 150, 200, VANCLEEF[0], VANCLEEF[1], 40.0))
-    assert 0 < mine <= every
+    # floors: stacked ones apart (Shadowfang Keep's), a cave going down one (the Stockade's)
+    SFK = 20033
+    floors = G.InstanceFloors(SFK)
+    assert len(floors) >= 3 and len(G.InstanceFloors(20034)) == 1
+    lows = [floors[i][1] for i in range(1, len(floors) + 1)]
+    assert lows == sorted(lows)
+    # one floor's art is less than all of them
+    x0, x1, y0, y1 = P.GridBounds(SFK)
+    cx, cy, zoom = (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0) / 2
+    every = len(G.LayoutInstanceArt(cx, cy, SFK, 0, zoom, 200))
+    top = len(G.LayoutInstanceArt(cx, cy, SFK, 0, zoom, 200, floors[len(floors)]))
+    assert 0 < top < every
+    # the player's floor, by height: the one they stand on (counted from the top)
+    ns.settings = lua.eval("{ gps = { zoom = 150 } }")
+    assert G.ShownFloor(SFK, floors[1][1] + 1) == len(floors)
+    assert G.ShownFloor(SFK, floors[len(floors)][1] + 1) == 1
+    assert G.ShownFloor(SFK, None) == 0  # (not in it: all of them)
+
+
+def test_right_click_leaves_a_dungeons_map_for_the_view_it_came_from(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G = ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500 } }")
+    # from the terrain view, looking somewhere (not following)
+    lua.eval("function(G) G.BrowseToTerrain() end")(G)  # (no browse: nothing happens)
+    G.ShowEntrance(lua.table(0, -11208.7, 1675.9))  # the Deadmines' entrance, terrain view
+    G.SetZoom(700)
+    G.ShowInstance(DM)
+    browse, free = G.BrowseState()
+    assert free.instance == DM and free.cont == DM
+    G.TerrainZoomOut()  # right-click (terrain style)
+    browse, free = G.BrowseState()
+    assert browse is None and free.cont == 0 and free.x == pytest.approx(-11208.7)
+    assert ns.settings.gps.zoom == pytest.approx(700)  # (its zoom too)
+    # from a zone's map (World Map style): back to that map
+    westfall = next(k for k in ns.Maps.keys() if ns.Maps[k].name == "Westfall" and ns.Maps[k].type == 3)
+    G.Browse(westfall)
+    G.ShowInstance(DM)
+    assert G.BrowseState()[0] is None
+    G.ZoomOut()  # right-click (map style)
+    assert G.BrowseState()[0] == westfall
+    # following the player: back to following
+    G.Follow()
+    G.ShowInstance(DM)
+    G.TerrainZoomOut()
+    assert G.BrowseState()[1] is None
+
+
+def test_mouse_wheel_steps_a_dungeons_floors(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "Data/Interiors.lua", "Data/Instances.lua", "GPSFrame.lua")
+    G = ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500 } }")
+    lua.execute("UnitPosition = function() return nil end")
+    SFK = 20033
+    n = len(G.InstanceFloors(SFK))
+    G.ShowInstance(SFK)
+    fit = ns.settings.gps.zoom
+    assert G.ShownFloor(SFK, None) == 0  # all floors
+    # scrolling in: each floor down from the top, the zoom kept
+    for k in range(1, n + 1):
+        assert G.FloorWheel(1)
+        assert G.ShownFloor(SFK, None) == k and ns.settings.gps.zoom == pytest.approx(fit)
+    assert not G.FloorWheel(1)  # past the bottom floor: the usual zoom in
+    G.SetZoom(fit * 0.64)
+    # scrolling out: back to where the floors were stepped, then up them, then all, then zoom out
+    assert G.FloorWheel(-1) and G.FloorWheel(-1)
+    assert ns.settings.gps.zoom == pytest.approx(fit) and G.ShownFloor(SFK, None) == n
+    for k in range(n - 1, -1, -1):
+        assert G.FloorWheel(-1) and G.ShownFloor(SFK, None) == k
+    assert not G.FloorWheel(-1)
+    # one floor only (the Stockade): the wheel zooms
+    G.ShowInstance(20034)
+    assert not G.FloorWheel(1)
+
+
+def test_dungeon_route_holds_off_other_routes(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    N, G = ns.Nav, ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500, dungeonRoute = true } }")
+    ns.Print = lua.eval("function() end")
+    lua.execute('GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end')
+    lua.execute("UnitPosition = function() return -14.6, -385.5, 62, 36 end")
+    G.DungeonEntered()  # in: its boss route
+    assert N.stops[1].name == "Rhahk'Zor" and N.DungeonLocked()
+    other = lua.table(x=-100.0, y=-500.0, cont=DM, name="somewhere")
+    assert not N.SetStops(lua.table(other))  # held off
+    assert not N.AddStop(other)
+    assert N.stops[1].name == "Rhahk'Zor"
+    G.DungeonEntered()  # (a /reload in there: kept, not started over)
+    assert N.stops[1].name == "Rhahk'Zor"
+    G.SetDungeonRoute(False)  # off: routes are the player's
+    assert len(N.stops) == 0 and not N.DungeonLocked()
+    assert N.SetStops(lua.table(other))
+    G.SetDungeonRoute(True)  # back on in there: the boss route again
+    assert N.stops[1].name == "Rhahk'Zor"
+    # out of the dungeon: its boss route ends
+    lua.execute('GetInstanceInfo = function() return "Westfall", "none", 0, "", 0, 0, false, 0 end')
+    G.DungeonEntered()
+    assert len(N.stops) == 0 and not N.DungeonLocked()
+    # the position hidden in there: not started
+    lua.execute('GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end')
+    lua.execute("UnitPosition = function() return nil end")
+    G.DungeonEntered()
+    assert len(N.stops) == 0

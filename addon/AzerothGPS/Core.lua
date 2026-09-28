@@ -40,6 +40,7 @@ ns.DEFAULTS = {
     reopenFollow = false, -- hidden while looking around the map (a route set): reopens on the player
     questing = true, -- a stop in a quest area is done when the quest's objectives are
     questZoneOnly = false, -- the quest route: only the quests in the zone you're in
+    dungeonRoute = true, -- entering a dungeon or raid starts its boss route (other routes held off while on)
     useHearthstone = true, -- start a route with the hearthstone (or Astral Recall) when faster
     useTeleports = true, -- ... or a class teleport (mage teleports, Teleport: Moonglade)
     useFlights = true, -- take flights between the flight masters this character knows
@@ -233,6 +234,10 @@ do
         if inside ~= combatLog then
           combatLog = inside
           pcall(inside and f.RegisterEvent or f.UnregisterEvent, f, "COMBAT_LOG_EVENT_UNFILTERED")
+        end
+        -- (in or out of a dungeon: its boss route started or ended, once the position settles)
+        if ns.GPS and ns.GPS.DungeonEntered then
+          if C_Timer and C_Timer.After then C_Timer.After(1.5, ns.GPS.DungeonEntered) else ns.GPS.DungeonEntered() end
         end
         return
       end

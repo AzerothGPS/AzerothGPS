@@ -99,7 +99,36 @@ function N.KeepCityOrder()
   return false
 end
 
-function N.SetStops(stops, fastest)
+-- In a dungeon or raid with the dungeon route on (option `dungeonRoute`) and its boss route
+-- set: other routes wait (the quest route, stops added on the map, shared routes) until it's
+-- done or turned off. `force`: the boss route itself.
+function N.DungeonLocked()
+  local gps = ns.settings and ns.settings.gps
+  if not gps or gps.dungeonRoute == false then return false end
+  local lvl = N.CurrentInstance and N.CurrentInstance()
+  if not lvl then return false end
+  for _, d in ipairs(N.stops) do
+    if d.boss and d.cont == lvl then return true end
+  end
+  return false
+end
+
+local lockSaidAt = -100
+function N.SayLocked()
+  local now = GetTime and GetTime() or 0
+  if now - lockSaidAt < 5 then return end
+  lockSaidAt = now
+  ns.Print("In a dungeon the dungeon route is on: other routes wait until its bosses are down. Turn it off in the map menu (Dungeon route) or with /agps dungeonroute.")
+end
+
+local function Locked(force)
+  if force or not N.DungeonLocked() then return false end
+  N.SayLocked()
+  return true
+end
+
+function N.SetStops(stops, fastest, force)
+  if Locked(force) then return false end
   N.stops, N.loop = {}, false
   for i, d in ipairs(stops) do
     if i > N.MAX_STOPS then break end
@@ -109,10 +138,12 @@ function N.SetStops(stops, fastest)
   end
   Changed()
   if fastest and #N.stops > 1 and not N.KeepCityOrder() then N.OrderStops() end
+  return true
 end
 
 -- Add a stop at the end of the route (then reorder if `fastest`).
-function N.AddStop(d, fastest)
+function N.AddStop(d, fastest, force)
+  if Locked(force) then return false end
   if #N.stops >= (N.loop and N.MAX_LOOP_STOPS or N.MAX_STOPS) then return false end
   local c = Copy(d)
   c.icon = c.icon or N.NextMarker(N.stops)
@@ -164,6 +195,7 @@ end
 -- A farming loop through `nodes` ({ x, y, cont, name }): visited round and round, each
 -- reached one moving to the end. Starts at the node nearest the player.
 function N.SetLoop(nodes, px, py)
+  if Locked() then return false end
   local order = N.LoopOrder(nodes, px or nodes[1].x, py or nodes[1].y)
   N.stops = {}
   for k, i in ipairs(order) do
