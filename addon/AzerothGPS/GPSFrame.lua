@@ -107,8 +107,9 @@ end
 -- the character has explored).
 function G.IsMapStyle(style) return style == "zone" or style == "nospoiler" end
 
--- `noSpoiler`: only the explored overlays (what this character has discovered).
-function G.LayoutZone(px, py, mapID, rot, zoom, half, bounds, noSpoiler)
+-- `noSpoiler`: only the explored overlays (what this character has discovered). `layer`: drawn
+-- this many sublayers up (an inset over another map's art).
+function G.LayoutZone(px, py, mapID, rot, zoom, half, bounds, noSpoiler, layer)
   local quads = {}
   local m = ns.Maps and ns.Maps[mapID]
   while m and not m.tiles do
@@ -132,13 +133,30 @@ function G.LayoutZone(px, py, mapID, rot, zoom, half, bounds, noSpoiler)
       if c then quads[#quads + 1] = c end
     end
   end
-  add(m.tiles, 0)
+  layer = layer or 0
+  add(m.tiles, layer)
   if noSpoiler then
-    add(G.ExploredOverlays(mapID), 1)
+    add(G.ExploredOverlays(mapID), layer + 1)
   else
-    add(m.overlays, 1) -- explored areas draw over the base art
+    add(m.overlays, layer + 1) -- explored areas draw over the base art
   end
   return quads
+end
+
+-- Maps not on the world map's art (Zephras Isle, an island in the sky) shown on it as an inset:
+-- their own map in a rectangle of the world map (fractions of it, left to right and top to
+-- bottom), framed and named; a click opens it.
+G.WORLD_INSETS = { { map = 2521, u0 = 0.415, v0 = 0.05, u1 = 0.545, v1 = 0.18 } }
+-- An inset's rectangle in world yards { minX, minY, maxX, maxY }, on a world map drawn over `b`.
+function G.InsetBounds(it, b)
+  local W, H = b[4] - b[2], b[3] - b[1]
+  return { b[3] - it.v1 * H, b[4] - it.u1 * W, b[3] - it.v0 * H, b[4] - it.u0 * W }
+end
+-- The inset at world map fractions (u, v), or nil.
+function G.InsetAt(u, v)
+  for _, it in ipairs(G.WORLD_INSETS) do
+    if ns.Maps and ns.Maps[it.map] and u >= it.u0 and u <= it.u1 and v >= it.v0 and v <= it.v1 then return it end
+  end
 end
 
 -- Per-continent edge bounding boxes for culling: { minX, maxX, minY, maxY, edge }.
@@ -1689,6 +1707,16 @@ function G.Update()
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
   elseif browse then
     quads = G.LayoutZone(cx, cy, browse, rot, zoom, half, browseBounds, st.style == "nospoiler")
+    local bm = ns.Maps[browse]
+    if bm and bm.worldFrames and browseBounds then -- (the insets: maps not on the world map's art)
+      for _, it in ipairs(G.WORLD_INSETS) do
+        if ns.Maps[it.map] then
+          for _, q in ipairs(G.LayoutZone(cx, cy, it.map, rot, zoom, half, G.InsetBounds(it, browseBounds), false, 3)) do
+            quads[#quads + 1] = q
+          end
+        end
+      end
+    end
   elseif G.IsMapStyle(st.style) or zoom > G.MINIMAP_MAX_ZOOM then
     -- The player's zone map, or a bigger map (continent, world) when zoomed out past it.
     -- (the view moved off somewhere else: the zone there, not the player's)
@@ -1715,6 +1743,7 @@ function G.Update()
   ns.PerfEnd("redraw: tiles", pt)
   pt = ns.PerfStart()
   segN = 0
+  G.DrawInsetFrames(cx, cy, rot, s)
   -- (the roads of the continent in view, the player's or another)
   local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
   if (st.showRoads or forced) and not place then
@@ -2341,6 +2370,10 @@ function G.Browse(id, cont)
     local _, _, pc = Geo.PlayerWorld()
     c = cont or browseCont or pc or 0
     b = Geo.WorldArtBounds(c)
+    if not b then -- (a continent with no place on the world map's art: drawn for one that has)
+      c = m.worldFrames[0] and 0 or next(m.worldFrames)
+      b = c and Geo.WorldArtBounds(c)
+    end
   end
   if not b then return end
   browse, browseCont, browseBounds = id, c, b
@@ -2382,6 +2415,11 @@ local function OnMapClick(dxUI, dyUI)
   if m.worldFrames then
     local b = browseBounds
     local u, v = (b[4] - y) / (b[4] - b[2]), (b[3] - x) / (b[3] - b[1])
+    local it = G.InsetAt(u, v)
+    if it then
+      G.Browse(it.map) -- (an inset: its map; from the terrain view, then a spot on it)
+      return
+    end
     for c, wf in pairs(m.worldFrames) do
       if u >= wf[5] and u <= wf[7] and v >= wf[6] and v <= wf[8] then
         for id, o in pairs(ns.Maps) do
@@ -4722,18 +4760,96 @@ function G.ZoneHoverText(id, name, playerLevel)
   return name, lo == hi and ("Level " .. lo) or ("Level " .. lo .. "-" .. hi), r, g, b
 end
 
--- On a continent's map: the zone under the mouse, and its levels, as text beside the cursor.
+-- The insets' frames (gold under the mouse) and names, on the world map.
+function G.DrawInsetFrames(cx, cy, rot, s)
+  local bm = browse and ns.Maps[browse]
+  local on = bm and bm.worldFrames and browseBounds and true
+  G.insetLabels = G.insetLabels or {}
+  for i, it in ipairs(G.WORLD_INSETS) do
+    local label = G.insetLabels[i]
+    if on and ns.Maps[it.map] then
+      local ib = G.InsetBounds(it, browseBounds)
+      local pts = {}
+      for _, c in ipairs({ { ib[3], ib[4] }, { ib[3], ib[2] }, { ib[1], ib[2] }, { ib[1], ib[4] } }) do
+        local dx, dy = Geo.ScreenOffset(cx, cy, c[1], c[2])
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        pts[#pts + 1] = { dx, dy }
+      end
+      local hot = G.hoverInset == it
+      for k = 1, 4 do
+        local a, b = pts[k], pts[k % 4 + 1]
+        AddSeg(a[1], a[2], b[1], b[2], hot and { 1, 0.82, 0 } or { 0.3, 0.22, 0.12 }, hot and 3 or 2, 1, true)
+      end
+      if not label then
+        label = lineLayer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetShadowOffset(1, -1)
+        G.insetLabels[i] = label
+      end
+      label:SetText(ns.Maps[it.map].name)
+      label:ClearAllPoints()
+      label:SetPoint("BOTTOM", canvas, "CENTER", (pts[1][1] + pts[2][1]) / 2, (pts[1][2] + pts[2][2]) / 2 + 2)
+      label:Show()
+    elseif label then
+      label:Hide()
+    end
+  end
+end
+
+-- The zone under the mouse lit up, as on the game's own map: C_Map.GetMapHighlightInfoAtPosition
+-- gives the zone's highlight art and where it goes, in fractions of the map ({ u0, v0, u1, v1 }).
+local highlight
+local function PlaceHighlight()
+  local t = G.zoneHighlight
+  if not t then return end
+  local b = browseBounds
+  if not (highlight and b and view.rot == 0) then
+    t:Hide()
+    return
+  end
+  local function At(u, v)
+    local dx, dy = Geo.ScreenOffset(view.x, view.y, b[3] - v * (b[3] - b[1]), b[4] - u * (b[4] - b[2]))
+    return dx * view.s, dy * view.s
+  end
+  local x0, y0 = At(highlight[1], highlight[2])
+  local x1, y1 = At(highlight[3], highlight[4])
+  t:ClearAllPoints()
+  t:SetPoint("TOPLEFT", canvas, "CENTER", x0, y0)
+  t:SetPoint("BOTTOMRIGHT", canvas, "CENTER", x1, y1)
+  t:Show()
+end
+local function FindHighlight(mapID, u, v)
+  highlight = nil
+  if not (C_Map and C_Map.GetMapHighlightInfoAtPosition and tileLayer) then return end
+  local ok, fid, _, tu, tv, w, h, sx, sy = pcall(C_Map.GetMapHighlightInfoAtPosition, mapID, u, v)
+  if not (ok and fid and fid ~= 0 and w and w > 0 and h and h > 0) then return end
+  if not G.zoneHighlight then
+    G.zoneHighlight = tileLayer:CreateTexture(nil, "ARTWORK", nil, 7)
+    G.zoneHighlight:SetBlendMode("ADD")
+  end
+  G.zoneHighlight:SetTexture(fid)
+  G.zoneHighlight:SetTexCoord(0, tu, 0, tv)
+  highlight = { sx, sy, sx + w, sy + h }
+end
+
+-- On a continent's map: the zone under the mouse, lit up, and its levels as text beside the
+-- cursor. On the world map: an inset under the mouse (its frame gold, its name and levels).
 local hoverZone, hoverAt = nil, 0
 function G.UpdateZoneHover()
   local label = G.zoneLabel
   if not label then return end
   local m = browse and ns.Maps and ns.Maps[browse]
-  local over = m and m.type == 2 and frame:IsMouseOver() and not drag and not G.lasso
+  local over = m and (m.type == 2 or m.worldFrames) and frame:IsMouseOver() and not drag and not G.lasso
   if not over then
     if hoverZone then label:Hide() end
-    hoverZone = nil
+    hoverZone, highlight = nil, nil
+    PlaceHighlight()
+    if G.hoverInset then
+      G.hoverInset = nil
+      G.Redraw()
+    end
     return
   end
+  PlaceHighlight()
   local mx, my = GetCursorPosition()
   local sc = canvas:GetEffectiveScale()
   local ccx, ccy = canvas:GetCenter()
@@ -4746,6 +4862,28 @@ function G.UpdateZoneHover()
   local x, y = G.ScreenToWorld(view.x, view.y, dx, dy, view.rot, view.s)
   local id, name
   local b = browseBounds
+  local u, v = b and (b[4] - y) / (b[4] - b[2]), b and (b[3] - x) / (b[3] - b[1])
+  if b then FindHighlight(browse, u, v) end
+  if m.worldFrames then -- (the world map: its insets only)
+    local it = b and G.InsetAt(u, v)
+    if it ~= G.hoverInset then
+      G.hoverInset = it
+      G.Redraw()
+    end
+    if it then highlight = nil end -- (the inset's own frame lights up instead)
+    id = it and it.map
+    name = it and ns.Maps[it.map].name
+    if id == hoverZone then return end
+    hoverZone = id
+    if not id then
+      label:Hide()
+      return
+    end
+    local zn, lv, r, g, bl = G.ZoneHoverText(id, name, UnitLevel and UnitLevel("player"))
+    label:SetText(lv and string.format("%s\n|cff%02x%02x%02x%s|r", zn, math.floor(r * 255), math.floor(g * 255), math.floor(bl * 255), lv) or zn)
+    label:Show()
+    return
+  end
   if b and C_Map and C_Map.GetMapInfoAtPosition then
     local ok, info = pcall(C_Map.GetMapInfoAtPosition, browse, (b[4] - y) / (b[4] - b[2]), (b[3] - x) / (b[3] - b[1]))
     if ok and info and info.mapType == 3 then id, name = info.mapID, info.name end

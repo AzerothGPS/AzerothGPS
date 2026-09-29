@@ -388,3 +388,24 @@ def test_show_world_browses_the_world_map(inst_env):
     assert browse is not None and ns.Maps[browse].worldFrames  # (the world map: both continents)
     G.Follow()
     assert G.BrowseState()[0] is None
+
+
+def test_zephras_isle_is_an_inset_on_the_world_map(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G = ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500 } }")
+    it = G.InsetAt(0.48, 0.1)  # (in the sea north of the Maelstrom)
+    assert it is not None and ns.Maps[it.map].name == "Zephras Isle" and ns.Maps[it.map].continent == 2991
+    assert G.InsetAt(0.2, 0.5) is None  # (Kalimdor)
+    b = lua.table(-100.0, -200.0, 900.0, 1300.0)
+    ib = G.InsetBounds(it, b)  # (its rectangle inside the world map's, north-west corner at u0, v0)
+    assert ib[4] == pytest.approx(1300 - it.u0 * 1500) and ib[3] == pytest.approx(900 - it.v0 * 1000)
+    # the world map opens for a character on Zephras Isle too (no place of its own on the art)
+    ns.Geo.PlayerWorld = lua.eval("function() return 3000, 1000, 2991 end")
+    G.ShowWorld()
+    browse, _ = G.BrowseState()
+    assert browse is not None and ns.Maps[browse].worldFrames
+    G.Browse(it.map)  # (what a click on the inset does)
+    assert G.BrowseState()[0] == it.map
+    G.Follow()

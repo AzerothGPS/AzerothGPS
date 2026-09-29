@@ -113,6 +113,9 @@ mode's node links (up to 36k line checks on a long route after a /reload) are mo
 Road display zoomed out: roads no longer vanish past the 1500-line cap (drawn roads first, only
 on-screen parts, lines on a screen grid drawn once, a coarser grid when crowded, scaled with the
 zoom); walls drawn before the terrain's edges.
+World map: Zephras Isle (no place on the world art, nor a link in the client) as a framed inset
+of its own map (G.WORLD_INSETS), clicked to open it; continents' zones light up under the mouse
+(C_Map.GetMapHighlightInfoAtPosition, as the game's map).
 
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.
