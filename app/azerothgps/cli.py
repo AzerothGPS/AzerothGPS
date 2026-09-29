@@ -332,10 +332,29 @@ def cmd_import_shared(args) -> int:
         return 1
     n = import_shared(text, RESOURCES / "overrides", per)
     print(f"{n} new road(s): {per}")
+    from .instances import merge_entrances, parse_shared_entrances
+
+    ne = merge_entrances(parse_shared_entrances(text))
+    if ne:
+        print(f"{ne} new dungeon way(s) in: agps instances --write to put them in the data")
     if n:
         reapply_overrides(DATA, [c for c in per if c in CONTINENTS])
         write_roads_lua(DATA, ADDON_DIR)
         print("in the road data (city levels: run agps gen-addon-data for Cities.lua)")
+    return 0
+
+
+def cmd_entrances(args) -> int:
+    """Dungeons' ways in the addon learned in game (SavedVariables) into
+    overrides/instance_entrances.json."""
+    from .instances import merge_entrances, saved_entrances
+    from .savedvars.parser import load_savedvariables
+
+    base = wtf_account_dir(Path(args.wow_path), args.flavor)
+    n = 0
+    for f in sorted(base.glob("*/SavedVariables/AzerothGPS.lua")):
+        n += merge_entrances(saved_entrances(load_savedvariables(f)))
+    print(f"{n} new dungeon way(s) in" + (": agps instances --write to put them in the data" if n else ""))
     return 0
 
 
@@ -375,6 +394,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--mode", choices=("offroad", "road", "both"), default="offroad",
                     help="route with offroad shortcuts, along the roads, or both")
     sp.set_defaults(fn=cmd_route_check)
+
+    sp = sub.add_parser("entrances", help="dungeons' ways in the addon learned in game into overrides/")
+    sp.add_argument("--wow-path", default=str(DEFAULT_WOW))
+    sp.add_argument("--flavor", default=DEFAULT_FLAVOR)
+    sp.set_defaults(fn=cmd_entrances)
 
     sp = sub.add_parser("route-sweep", help="random trips in random zones, routed as in game: snapbacks, U-turns, spikes")
     sp.add_argument("--trips", type=int, default=60)

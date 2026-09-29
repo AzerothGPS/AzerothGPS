@@ -236,6 +236,11 @@ do
           combatLog = inside
           pcall(inside and f.RegisterEvent or f.UnregisterEvent, f, "COMBAT_LOG_EVENT_UNFILTERED")
         end
+        -- (into a dungeon: its way in is where the player last stood outside, Taxi.NoteEntrance)
+        if inside and ns.Taxi and ns.Taxi.NoteEntrance and GetInstanceInfo then
+          local ok, _, _, _, _, _, _, _, mapID = pcall(GetInstanceInfo)
+          if ok then pcall(ns.Taxi.NoteEntrance, mapID, GetTime()) end
+        end
         -- (in or out of a dungeon: its boss route started or ended, once the position settles)
         if ns.GPS and ns.GPS.DungeonEntered then
           if C_Timer and C_Timer.After then C_Timer.After(1.5, ns.GPS.DungeonEntered) else ns.GPS.DungeonEntered() end

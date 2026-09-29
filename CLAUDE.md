@@ -236,7 +236,18 @@ The addon is going public, so every change must keep it policy-safe:
     entrances' 6th value. In `Router` such a level is `layered`: roads only, the start and stop
     snapped to roads at their heights (`opts.z`/`opts.tz`, `NearestEdges(..., z)`, `LAYER_Z`), gap
     links only on one floor, straight only on one floor; routes carry `zs`, and
-    `G.FloorChanges` puts stairs icons (up/down) where the route climbs a floor. Entrances, bosses (the server's encounters
+    `G.FloorChanges` puts stairs icons (up/down) where the route climbs a floor. **In through another dungeon** (Blackwing
+    Lair, from Upper Blackrock Spire's orb): its entrance is a portal on that dungeon's level (the
+    server's teleport from a trigger inside it), its icon on the continent at the client's ghost
+    way in (`ghost`), and `Nav.Plan` allows the chain (a portal into a dungeon that holds the
+    destination's way in). **WoW Forever's own dungeons and raids** (`instances.terrain_instances`):
+    no spawns or entrances in the server data, none in the client (its encounter journal tables
+    are empty), so their map only: the terrain's minimap tiles (`ns.MinimapTiles[map id]`, drawn
+    by `G.LayoutMinimap`; `G.InstanceBounds` from the tiles), bosses from DungeonEncounter
+    (names, IDs, order; no spots: no icons or boss route, kills counted by name, `Nav.BossKey`),
+    entrances from `overrides/instance_entrances.json` (researched, and learned in game:
+    `Taxi.NoteEntrance` records where the player stood before the loading screen, shared as
+    "E map continent x,y" lines, `agps entrances` / `import-shared` merge them). Entrances, bosses (the server's encounters
     and rank 3 NPCs, positions from their spawns) come from the CMaNGOS dump under
     `data/thirdparty`; the AreaTrigger and DungeonEncounter layouts this client has are in
     `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into

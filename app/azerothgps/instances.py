@@ -158,11 +158,15 @@ def entrances(cd: ClientData, inst: Instance, server: dict, triggers: list) -> l
     outs = [t for t in tele if t["map"] in (0, 1)]
     by_id = {t["ID"]: t for t in triggers}
     out = []
+    inner = []  # ways in from another instance (Blackrock Spire's orb into Blackwing Lair)
     for t in ins:
-        # (a teleport from another instance, Blackrock Spire into Blackwing Lair: not a way in
-        # from the continent)
         src = by_id.get(t["id"])
         if src is not None and src["ContinentID"] not in (0, 1):
+            # (from inside another instance: its level, where its trigger is; used when there's
+            # no way in from a continent)
+            if src["ContinentID"] != inst.map_id:
+                inner.append((level_id(src["ContinentID"]), src["Pos"][0], src["Pos"][1], src["Pos"][2],
+                              t["x"], t["y"], t["z"], t["name"]))
             continue
         spot = None
         # the way back out: a trigger inside, near where you appear, taking you out
@@ -196,7 +200,7 @@ def entrances(cd: ClientData, inst: Instance, server: dict, triggers: list) -> l
                math.hypot(e[1] - spot[1], e[2] - spot[2]) < 20 for e in out):
             continue  # (the same way in twice)
         out.append((spot[0], spot[1], spot[2], spot[3], t["x"], t["y"], t["z"], t["name"]))
-    return out
+    return out or inner
 
 
 def bosses(cd: ClientData, inst: Instance, server: dict) -> list:
@@ -535,9 +539,58 @@ def order_bosses(inst: Instance, orders: list, server: dict | None = None) -> li
             continue
         if b.get("order") is None:
             b["order"], b["optional"] = i, bool(s.get("optional"))
+    # an elite there that's neither in the order nor an encounter (Lord Victor Nefarius, who
+    # starts Nefarian's fight): shown, but not a stop of the boss route
+    for b in inst.bosses:
+        if b.get("order") is None and not b["enc"]:
+            b["optional"] = True
     inst.bosses.sort(key=lambda b: (b.get("order") is None, b.get("order") or 0,
                                     b["index"] if b["index"] is not None else 1e9))
     return missing
+
+
+ENTRANCES = Path(__file__).resolve().parents[2] / "overrides" / "instance_entrances.json"
+TERRAIN_SKIP = {2720, 2921, 3002}  # The Searing Basin (its one boss "Testwerk"), a second Naxxramas (one
+# event boss), the Half-Pint Tavern (unannounced: no place in the world yet)
+
+
+def terrain_instances(cd: ClientData, built_maps: set, log=print) -> list:
+    """Dungeons and raids with no walk network here (WoW Forever's own: no spawns or entrances
+    in the server data or the client), but with terrain and minimap tiles: their map in the
+    addon (the tiles) and their bosses (names, DungeonEncounter IDs and order; no spots).
+    Entrances from overrides/instance_entrances.json (learned in game or researched):
+    {map id: [[continent, x, y], ...]}. Each: dict(map, name, raid, tiles, bosses, entrances)."""
+    import json
+
+    known = {}
+    if ENTRANCES.exists():
+        known = {int(k): v for k, v in json.loads(ENTRANCES.read_text(encoding="utf-8")).items()}
+    enc = defaultdict(list)
+    for r in cd.table("DungeonEncounter"):
+        enc[r["MapID"]].append(r)
+    out = []
+    for r in instance_maps(cd):
+        mid = r["ID"]
+        if mid in built_maps or mid in SKIP_MAPS or mid in TERRAIN_SKIP or not enc.get(mid):
+            continue
+        wdt_fid = r["WdtFileDataID"]
+        if not wdt_fid or not cd.casc.has(wdt_fid):
+            continue
+        wdt = adt.parse_wdt(cd.casc.read(wdt_fid))
+        tiles = sorted((tx * 64 + ty, t.minimap) for (tx, ty), t in wdt.tiles.items() if t.minimap)
+        if not tiles:
+            continue
+        bosses, seen = [], set()
+        for e in sorted(enc[mid], key=lambda e: (e["F4"] if e["F3"] in (0, 201) else 1000, e["ID"])):
+            if e["Name_lang"] in seen:
+                continue
+            seen.add(e["Name_lang"])
+            bosses.append({"name": e["Name_lang"], "enc": sorted(x["ID"] for x in enc[mid] if x["Name_lang"] == e["Name_lang"])})
+        out.append({"map": mid, "name": r["MapName_lang"], "raid": r["InstanceType"] == 2, "tiles": tiles,
+                    "bosses": bosses, "entrances": known.get(mid, [])})
+        log(f"  {r['MapName_lang']} ({mid} -> {level_id(mid)}): its map only, {len(bosses)} bosses (no spots), "
+            f"{len(known.get(mid, []))} entrance(s) known")
+    return out
 
 
 def instances_lua(cd: ClientData, built: list, log=print) -> str:
@@ -578,6 +631,10 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
             bl.append(f"    {{ {_lua_str(b['name'])}, {b['npc']}, {b['x']:.1f}, {b['y']:.1f}, {b['z']:.1f}, enc = {{ {enc} }}{order} }},")
         out.append(f"ns.Instances[{L}] = {{ name = {_lua_str(inst.name)}, map = {inst.map_id}, raid = {str(inst.raid).lower()},")
         out.append(f"  entrances = {{ {ents} }},")
+        if inst.corpse and inst.entrances and inst.entrances[0][0] not in (0, 1):
+            # (in through another instance: its icon on the continent where the ghost's way in is)
+            c, x, y = inst.corpse
+            out.append(f"  ghost = {{ {c}, {x:.1f}, {y:.1f} }},")
         out.append("  bosses = {")
         out += bl
         out.append("  } }")
@@ -618,10 +675,29 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         out.append("  },")
         out.append("}")
         out.append(f"ns.RoadDrops[{L}] = {{ " + ", ".join(f"[{i + 1}] = {h}" for i, h in sorted(drops.items())) + " }")
+        names = {i.level: i.name for i, _u in built}
         for c, x, y, _z, ix, iy, iz, _n in inst.entrances:
-            place = zone_name(cd, c, x, y, zcache) or inst.name
+            place = names.get(c) if c >= LEVEL_BASE else (zone_name(cd, c, x, y, zcache) or inst.name)
+            if c >= LEVEL_BASE and c not in names:
+                continue  # (from an instance not built: no way in)
             out.append(f"ns.Transports[#ns.Transports + 1] = {{ {c}, {x:.1f}, {y:.1f}, {L}, {ix:.1f}, {iy:.1f}, "
                        f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(inst.name)}, \"portal\", iz = {iz:.1f} }}")
+    # dungeons and raids with their map only (WoW Forever's own): the terrain's minimap tiles,
+    # their bosses without spots, entrances when known
+    out.append("-- dungeons and raids with their map only (no walk network): ns.MinimapTiles[map id], bosses")
+    out.append("-- without spots (kills still count), ns.Instances[level].terrain = true")
+    out.append("ns.MinimapTiles = ns.MinimapTiles or {}")
+    for t in terrain_instances(cd, {inst.map_id for inst, _u in built}, log=log):
+        L = level_id(t["map"])
+        out.append(f"-- {t['name']} (map {t['map']}, {'raid' if t['raid'] else 'dungeon'}, its map only)")
+        out.append(f"ns.CityLevels[{L}] = {{ base = {t['map']}, name = {_lua_str(t['name'])}, instance = true, terrain = true"
+                   f"{', raid = true' if t['raid'] else ''} }}")
+        ents = ", ".join(f"{{ {c}, {x:.1f}, {y:.1f} }}" for c, x, y in t["entrances"])
+        bl = ", ".join(f"{{ {_lua_str(b['name'])}, 0, enc = {{ {','.join(str(e) for e in b['enc'])} }}, order = {i + 1} }}"
+                       for i, b in enumerate(t["bosses"]))
+        out.append(f"ns.Instances[{L}] = {{ name = {_lua_str(t['name'])}, map = {t['map']}, raid = {str(t['raid']).lower()}, "
+                   f"terrain = true, entrances = {{ {ents} }}, bosses = {{ {bl} }} }}")
+        out.append(f"ns.MinimapTiles[{t['map']}] = {{ " + " ".join(f"[{k}]={v}," for k, v in t["tiles"]) + " }")
     # the game's own minimap art of each instance's models (its map in the addon; the floors'
     # outline where there's none), like the buildings' in Interiors.lua, keyed by its map id
     out.append("-- ns.WMOs / ns.Interiors[map id]: the instances' interior maps (Interiors.lua's format)")
@@ -816,3 +892,55 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
                        f"through closed cells, 3D jump {jump:.0f} yd" + (f" ({where[0]} at {where[1]}, {where[2]})" if where else ""))
             log(out[-1])
     return out
+
+
+# --- entrances learned in game ------------------------------------------------------------
+
+
+def merge_entrances(found: dict, log=print) -> int:
+    """Add dungeons' ways in (learned in game: {map id: [[continent, x, y], ...]}) to
+    overrides/instance_entrances.json, one per spot (within 40 yd of a known one: the same)."""
+    doc = {}
+    if ENTRANCES.exists():
+        doc = {int(k): v for k, v in json.loads(ENTRANCES.read_text(encoding="utf-8")).items()}
+    added = 0
+    for mid, spots in found.items():
+        have = doc.setdefault(int(mid), [])
+        for c, x, y in spots:
+            if any(h[0] == c and math.hypot(h[1] - x, h[2] - y) <= 40 for h in have):
+                continue
+            have.append([int(c), round(float(x), 1), round(float(y), 1)])
+            added += 1
+            log(f"  map {mid}: a way in at continent {c} ({x:.0f}, {y:.0f})")
+    if added:
+        ENTRANCES.parent.mkdir(parents=True, exist_ok=True)
+        ENTRANCES.write_text(json.dumps({str(k): v for k, v in sorted(doc.items())}, indent=1), encoding="utf-8")
+    return added
+
+
+def parse_shared_entrances(text: str) -> dict:
+    """The "E map-id continent x,y" lines of the share page's text (Feedback.RoadsText)."""
+    out: dict = defaultdict(list)
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 4 or parts[0] != "E":
+            continue
+        try:
+            mid, c = int(parts[1]), int(parts[2])
+            x, y = (float(v) for v in parts[3].split(","))
+        except ValueError:
+            continue
+        out[mid].append((c, x, y))
+    return dict(out)
+
+
+def saved_entrances(savedvars: dict) -> dict:
+    """The ways in the addon learned (AzerothGPSDB.entrances: {map id: {{cont, x, y, n}}})."""
+    out: dict = defaultdict(list)
+    for mid, spots in (savedvars.get("AzerothGPSDB", {}).get("entrances") or {}).items():
+        for s in (spots.values() if isinstance(spots, dict) else spots):
+            if isinstance(s, dict):
+                s = [s.get(1), s.get(2), s.get(3)]
+            if s and len(s) >= 3 and None not in s[:3]:
+                out[int(mid)].append((int(s[0]), float(s[1]), float(s[2])))
+    return dict(out)

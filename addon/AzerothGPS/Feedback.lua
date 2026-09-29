@@ -136,11 +136,33 @@ function F.RoadsText()
   end
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do add(t) end
   for _, t in ipairs(ns.db and ns.db.feedback and ns.db.feedback.roads or {}) do add(t) end
+  -- dungeons' ways in learned (Taxi.NoteEntrance), those the data doesn't have yet:
+  -- "E map-id continent x,y"
+  for mapID, list in pairs(ns.db and ns.db.entrances or {}) do
+    local known = F.KnownEntrances(mapID)
+    for _, e in ipairs(list) do
+      local have = false
+      for _, k in ipairs(known) do
+        if k[1] == e[1] and math.sqrt((k[2] - e[2]) ^ 2 + (k[3] - e[3]) ^ 2) <= 40 then have = true end
+      end
+      if not have then lines[#lines + 1] = string.format("E %d %d %.1f,%.1f", mapID, e[1], e[2], e[3]) end
+    end
+  end
   if #lines == 0 then return "", 0 end
   local v, b = "", ""
   if GetBuildInfo then v, b = GetBuildInfo() end
   table.insert(lines, 1, string.format("%s (addon %s, game %s.%s)", F.TEXT_HEADER, tostring(ns.VERSION or "?"), tostring(v), tostring(b)))
   return table.concat(lines, "\n"), #lines - 1
+end
+
+-- The ways in the data has for dungeon map `mapID`: { { cont, x, y }, ... } (its entrances on a
+-- continent, and a ghost spot).
+function F.KnownEntrances(mapID)
+  local out = {}
+  local info = ns.Instances and ns.Instances[20000 + mapID]
+  for _, e in ipairs(info and info.entrances or {}) do out[#out + 1] = e end
+  if info and info.ghost then out[#out + 1] = info.ghost end
+  return out
 end
 
 -- The drawn roads and walls waiting (not yet in the data): roads, walls (erasers of each count

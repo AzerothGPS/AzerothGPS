@@ -3671,3 +3671,28 @@ def test_a_route_walking_through_a_zone_too_high_asks_first(nav_env):
     N.redOk = lua.table()
     N.redOk[zone("Alterac Mountains")] = True
     assert N.RedOnRoute(route, brill[0], brill[1], 0) is None
+
+
+def test_a_dungeons_way_in_is_learned_and_shared(env, tmp_path, monkeypatch):
+    lua, ns = env
+    lua.execute("CreateFrame = function() return { RegisterEvent = function() end, SetScript = function() end } end")
+    lua.execute("GetBuildInfo = function() return '1.60.1', '70009' end")
+    ns.db = lua.eval("{}")
+    ns.Nav = lua.eval("{ CurrentInstance = function() return nil end }")
+    load(lua, ns, "Taxi.lua", "Feedback.lua")
+    T, F = ns.Taxi, ns.Feedback
+    # walking up to Karazhan Crypts' door, then the loading screen into it (map 2875)
+    T.NoteOutside(10.0, -11050.0, -1990.0, 0)
+    T.NoteOutside(10.5, -11055.0, -1995.0, 0)
+    assert T.NoteEntrance(2875, 20.0)
+    assert T.NoteEntrance(2875, 30.0)  # (again, the same door: counted, not a second one)
+    e = ns.db.entrances[2875]
+    assert len(e) == 1 and e[1][1] == 0 and e[1][2] == -11055.0 and e[1].n == 2
+    assert not T.NoteEntrance(2875, 1000.0)  # (the spot outside too old: nothing)
+    text, n = F.RoadsText()
+    assert "E 2875 0 -11055.0,-1995.0" in text
+    # into the data (overrides/instance_entrances.json)
+    from azerothgps import instances as X
+    monkeypatch.setattr(X, "ENTRANCES", tmp_path / "instance_entrances.json")
+    assert X.merge_entrances(X.parse_shared_entrances(text), log=lambda *a: None) == 1
+    assert X.merge_entrances(X.parse_shared_entrances(text), log=lambda *a: None) == 0  # (known now)

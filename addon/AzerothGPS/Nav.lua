@@ -509,9 +509,16 @@ function N.Plan(cont, px, py, speed, d, teleports)
   for _, row in ipairs(teleports or {}) do
     nodes[#nodes + 1] = { row[4], row[5], row[6], tp = row }
   end
+  -- (a dungeon's way in only for a trip from or to inside it, never through one as a shortcut;
+  -- and the dungeon one is entered from, Blackrock Spire's for Blackwing Lair)
+  local inside = { [cont] = true, [d.cont] = true }
+  for _ = 1, 2 do
+    for _, t in ipairs(ns.Transports or {}) do
+      if t[8] == "portal" and inside[t[4]] and ns.CityLevels and ns.CityLevels[t[1]] then inside[t[1]] = true end
+    end
+  end
   for i, t in ipairs(ns.Transports or {}) do
-    -- (a dungeon's way in only for a trip from or to inside it: never through one as a shortcut)
-    if (t[8] ~= "portal" or t[4] == cont or t[4] == d.cont) and N.TransportUsable(t) then
+    if (t[8] ~= "portal" or inside[t[4]]) and N.TransportUsable(t) then
       nodes[#nodes + 1] = { t[1], t[2], t[3], t = i, side = 1 }
       nodes[#nodes + 1] = { t[4], t[5], t[6], t = i, side = 2 }
     end
@@ -968,6 +975,9 @@ function N.CurrentInstance()
   return N.InstanceLevel(mapID)
 end
 
+-- A boss's key in the kills: its NPC entry, or its name (WoW Forever's own dungeons: no entry).
+function N.BossKey(b) return (b[2] and b[2] ~= 0) and b[2] or b[1] end
+
 -- The bosses of instance level `lvl` matching a kill: by NPC entry, DungeonEncounter id or
 -- name. Returns how many were marked dead.
 function N.BossKilled(lvl, npc, encounter, name)
@@ -985,8 +995,9 @@ function N.BossKilled(lvl, npc, encounter, name)
     for _, e in ipairs(encounter and b.enc or {}) do
       if e == encounter then hit = true end
     end
-    if hit and not k.npcs[b[2]] then
-      k.npcs[b[2]] = true
+    local key = N.BossKey(b)
+    if hit and not k.npcs[key] then
+      k.npcs[key] = true
       n = n + 1
     end
   end

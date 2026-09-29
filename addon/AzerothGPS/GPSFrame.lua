@@ -863,8 +863,10 @@ function G.SuggestedPath(inst)
   local x, y, z = e[4], e[5], e[6]
   for _, b in ipairs(G.BossOrder(inst)) do
     local first = #pts / 2 + 1
-    -- (from floor to floor: the heights say which, the stairs between them in the route)
-    local ok, r = pcall(R.Route, inst, x, y, b[3], b[4], { offroad = false, z = z, tz = b[5] })
+    -- (from floor to floor: the heights say which, the stairs between them in the route; no
+    -- spot, no stretch)
+    local ok, r = false, nil
+    if b[3] then ok, r = pcall(R.Route, inst, x, y, b[3], b[4], { offroad = false, z = z, tz = b[5] }) end
     if ok and r and r.pts then
       pending = pending or r.pending
       for i = 1, #r.pts - 1, 2 do
@@ -873,7 +875,7 @@ function G.SuggestedPath(inst)
       end
     end
     legs[#legs + 1] = { first, #pts / 2, b }
-    x, y, z = b[3], b[4], b[5]
+    if b[3] then x, y, z = b[3], b[4], b[5] end
   end
   suggested[inst] = { pts = pts, zs = zs, legs = legs, at = now, done = not pending }
   return pts, zs, legs
@@ -883,7 +885,7 @@ end
 -- G.BossOrder, and its row), or nil when all are down. (Kills: Nav.BossKilled.)
 function G.NextBoss(inst)
   for i, b in ipairs(G.BossOrder(inst)) do
-    if not ns.Nav.BossDead({ cont = inst, boss = b[2] }) then return i, b end
+    if not ns.Nav.BossDead({ cont = inst, boss = ns.Nav.BossKey(b) }) then return i, b end
   end
   return nil
 end
@@ -1472,7 +1474,7 @@ function G.Update()
     if inst then
       hidden = inst
       if not free or hiddenShown ~= inst then
-        local x0, x1, y0, y1 = ns.Passability.GridBounds(inst)
+        local x0, x1, y0, y1 = G.InstanceBounds(inst)
         browse, browseZoom, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil, nil
         free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cont = inst, instance = inst }
         st.zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
@@ -1550,6 +1552,9 @@ function G.Update()
     view.floor = instFloor
     instBand = instFloor > 0 and floors[#floors - instFloor + 1] or nil
     quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, instBand)
+    if #quads == 0 and ns.CityLevels[inst].terrain then -- (its map only: the terrain's minimap tiles)
+      quads = G.LayoutMinimap(cx, cy, ns.CityLevels[inst].base, rot, zoom, half)
+    end
     instArt = #quads > 0
     local n = #floors
     if fl.text then
@@ -1785,7 +1790,7 @@ function G.Update()
     end
     local info = ns.Instances[inst]
     for _, e in ipairs(info.entrances or {}) do
-      add({ 8, 0, 0, "Way out: " .. info.name, e[4], e[5], exit = e })
+      if e[4] then add({ 8, 0, 0, "Way out: " .. info.name, e[4], e[5], exit = e }) end
     end
     -- stairs to another floor: along the usual way through, and the route's next one
     local function stairs(list, next_)
@@ -1805,11 +1810,13 @@ function G.Update()
     end
     local _, nextBoss = G.NextBoss(inst)
     for _, b in ipairs(info.bosses or {}) do
+      if b[3] then
       -- (on another floor than the one shown: faint; down already: faint, and said so)
       local off = instBand and b[5] and (b[5] < instBand[1] - G.FLOOR_HEAD or b[5] > instBand[2] + G.FLOOR_HEAD)
-      local dead = ns.Nav.BossDead({ cont = inst, boss = b[2] })
+      local dead = ns.Nav.BossDead({ cont = inst, boss = ns.Nav.BossKey(b) })
       add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional,
         dim = off or dead, dead = dead, next = nextBoss == b })
+      end
     end
     DrawPois(DropUnderStops(pois), zoom)
   elseif (not place or browse) and not worldView then
@@ -2381,7 +2388,9 @@ function G.InstanceEntrances(cont)
   table.sort(levels)
   for _, lvl in ipairs(levels) do
     local info = ns.Instances[lvl]
-    for _, e in ipairs(info.entrances or {}) do
+    -- (in through another dungeon, Blackwing Lair: its icon where the ghost's way in is)
+    local list_ = info.ghost and { { info.ghost[1], info.ghost[2], info.ghost[3] } } or info.entrances or {}
+    for _, e in ipairs(list_) do
       if e[1] == cont then
         local shared = false
         for _, o in ipairs(list) do
@@ -2395,11 +2404,30 @@ function G.InstanceEntrances(cont)
   return list
 end
 
+-- A dungeon's extent: x0, x1, y0, y1 (its floor grid, else its map's minimap tiles: WoW
+-- Forever's own dungeons, their map only), or nil.
+function G.InstanceBounds(lvl)
+  local P = ns.Passability
+  if P and P.GridBounds then
+    local x0, x1, y0, y1 = P.GridBounds(lvl)
+    if x0 then return x0, x1, y0, y1 end
+  end
+  local l = ns.CityLevels and ns.CityLevels[lvl]
+  local tiles = l and ns.MinimapTiles and ns.MinimapTiles[l.base]
+  if not tiles then return nil end
+  local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+  for k in pairs(tiles) do
+    local tx, ty = math.floor(k / 64), k % 64
+    local mx, my = (32 - ty) * TILE, (32 - tx) * TILE -- (the tile's north-west corner)
+    x0, x1, y0, y1 = math.min(x0, mx - TILE), math.max(x1, mx), math.min(y0, my - TILE), math.max(y1, my)
+  end
+  if x0 == math.huge then return nil end
+  return x0, x1, y0, y1
+end
+
 -- A dungeon's map: its floors, bosses and ways out, fitted in the view.
 function G.ShowInstance(lvl)
-  local P = ns.Passability
-  local x0, x1, y0, y1
-  if P and P.GridBounds then x0, x1, y0, y1 = P.GridBounds(lvl) end
+  local x0, x1, y0, y1 = G.InstanceBounds(lvl)
   if not x0 then return end
   RememberView()
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
@@ -3018,9 +3046,9 @@ end
 function G.BossStops(lvl)
   local stops, dead = {}, 0
   for _, b in ipairs(G.BossOrder(lvl)) do
-    if ns.Nav.BossDead({ cont = lvl, boss = b[2] }) then
+    if ns.Nav.BossDead({ cont = lvl, boss = ns.Nav.BossKey(b) }) then
       dead = dead + 1
-    else
+    elseif b[3] then -- (a boss with no spot, WoW Forever's own dungeons: not a stop)
       stops[#stops + 1] = { x = b[3], y = b[4], z = b[5], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
     end
   end
@@ -3037,7 +3065,11 @@ function G.BossRoute(quiet)
   end
   local stops, dead = G.BossStops(lvl)
   if #stops == 0 then
-    ns.Print(string.format("Boss route: %s's bosses are all down.", info.name))
+    if G.NextBoss(lvl) then -- (bosses up, but none with a spot: WoW Forever's own dungeons, their map only)
+      ns.Print(string.format("Boss route: %s's bosses have no spots on its map yet; the map still shows which is next.", info.name))
+    else
+      ns.Print(string.format("Boss route: %s's bosses are all down.", info.name))
+    end
     return
   end
   ns.Nav.SetStops(stops, false, true) -- (the usual order: kept)

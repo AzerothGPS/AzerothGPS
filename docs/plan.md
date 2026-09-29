@@ -92,6 +92,13 @@ counts as arriving at that stop.
 
 ## 1.0.8: More dungeons and raids
 
+Done so far: Blackwing Lair (in through Blackrock Spire); WoW Forever's Karazhan Crypts, Demon
+Fall Canyon, Scarlet Enclave, Storm Cliffs, The Tainted Scar, The Crystal Vale, Nightmare Grove,
+City of Dalaran, Ruins of Lordaeron, The Hall of Thanes and Excavation Site: Wetlands with their
+map, bosses (no spots) and researched entrances; entrances learned in game. Not in this client:
+The Drowned City, Krol'Dok Stronghold, Alcaz Island Prison, Blackmaw Hold, Shaper's Terrace
+(announced), Hyjal Summit, Barrow Deeps; Half-Pint Tavern and Manor Mistmantle are unannounced.
+
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.
 - **WoW Forever's new dungeons and raids** (Karazhan Crypts, Demon Fall Canyon, Scarlet Enclave,

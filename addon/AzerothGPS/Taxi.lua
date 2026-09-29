@@ -220,6 +220,39 @@ function T.TransportTimes(i, side, serverNow)
   return nextAfter(arr0), nextAfter(dep0), serverNow - s.at
 end
 
+---------------------------------------------------------------------------
+-- Dungeon and raid entrances, learned: where the player stood (outside) just before the
+-- loading screen into one. Kept account-wide (ns.db.entrances[map id] = { { cont, x, y, n } }),
+-- shared with "Copy map data" (Feedback.RoadsText) for the data (WoW Forever's own dungeons
+-- have none in the client or the server data).
+---------------------------------------------------------------------------
+T.ENTRANCE_FRESH = 120 -- seconds: the last spot outside this recent counts
+T.ENTRANCE_SAME_YD = 40 -- one within this of a known one is the same way in
+local outside -- { cont, x, y, at }
+
+function T.NoteOutside(now, px, py, cont)
+  if px and cont and not (ns.CityLevels and ns.CityLevels[cont]) and cont < 20000 then
+    local inInstance = ns.Nav and ns.Nav.CurrentInstance and ns.Nav.CurrentInstance()
+    if not inInstance then outside = { cont, px, py, at = now } end
+  end
+end
+
+-- Just into a dungeon or raid (its map id): its way in is where the player last stood outside.
+function T.NoteEntrance(mapID, now)
+  if not (mapID and outside and ns.db) or now - outside.at > T.ENTRANCE_FRESH then return false end
+  ns.db.entrances = ns.db.entrances or {}
+  local list = ns.db.entrances[mapID] or {}
+  ns.db.entrances[mapID] = list
+  for _, e in ipairs(list) do
+    if e[1] == outside[1] and math.sqrt((e[2] - outside[2]) ^ 2 + (e[3] - outside[3]) ^ 2) <= T.ENTRANCE_SAME_YD then
+      e.n = (e.n or 1) + 1
+      return true
+    end
+  end
+  list[#list + 1] = { outside[1], outside[2], outside[3], n = 1 }
+  return true
+end
+
 do
   local function tick()
     local ok, px, py, _, cont = pcall(UnitPosition, "player")
@@ -227,6 +260,7 @@ do
     local sok, speed = pcall(GetUnitSpeed, "player")
     if not sok or (ns.IsSecret and ns.IsSecret(speed)) then speed = nil end
     pcall(T.TransportTick, GetTime(), GetServerTime and GetServerTime() or time(), px, py, cont, speed)
+    pcall(T.NoteOutside, GetTime(), px, py, cont)
   end
   if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(0.5, tick) end
 end

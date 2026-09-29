@@ -351,3 +351,28 @@ def test_a_kill_moves_the_dungeons_map_on_to_the_next_boss(inst_env):
     for row in G.BossOrder(DM).values():
         N.BossKilled(DM, row[2])
     assert G.NextBoss(DM) is None  # (all down)
+
+
+def test_wow_forevers_own_dungeons_have_their_map_bosses_and_entrances(inst_env):
+    # Karazhan Crypts (map 2875): no walk network (no spawns anywhere), but its terrain's minimap
+    # tiles for its map, its bosses from the client's encounters (no spots), its way in (researched)
+    lua, ns = inst_env
+    load(lua, ns, "Data/Minimap.lua", "Data/Interiors.lua", "Data/Instances.lua", "GPSFrame.lua")
+    G, N = ns.GPS, ns.Nav
+    KC = 22875
+    lvl = ns.CityLevels[KC]
+    assert lvl and lvl.instance and lvl.terrain and lvl.base == 2875
+    assert ns.MinimapTiles[2875] is not None
+    x0, x1, y0, y1 = G.InstanceBounds(KC)
+    assert x1 - x0 > 500 and y1 - y0 > 500  # (its tiles)
+    ents = G.InstanceEntrances(0)
+    kc = [ents[i] for i in range(1, len(ents) + 1) if ents[i].level == KC]
+    assert kc and kc[0].x == pytest.approx(-11100.0, abs=1)  # (Deadwind Pass, behind Karazhan)
+    # the bosses: no spots, so no boss route, but the next one and kills (by name) count
+    lua.execute("time = function() return 1000 end")
+    i, b = G.NextBoss(KC)
+    assert i == 1 and b[3] is None
+    stops, dead = G.BossStops(KC)
+    assert len(stops) == 0 and dead == 0
+    assert N.BossKilled(KC, None, None, b[1]) == 1
+    assert G.NextBoss(KC)[0] == 2  # (on to the second: the first's name counted it, not all of them)
