@@ -706,7 +706,9 @@ end
 ---------------------------------------------------------------------------
 
 local frame, canvas, lineLayer, arrow, northLabel, infoText, noMapText, recenter
-local floorText, floorBar, floorUp, floorDown -- a dungeon's map: which floor is shown, and "+" / "-" for another
+-- a dungeon's map: which floor is shown (text), and "+" / "-" for another (up, down), on a bar
+-- (one table: G.Init is near Lua 5.1's 60 outside variables a function may use)
+local fl = {}
 local free -- nil while following the player; else the frozen view { x, y, rot }
 local approachZoom, approachFor, approachSkip -- near a stop: the zoom now (animated); for which stop; skipped for (G.UpdateApproach)
 local view = { x = 0, y = 0, rot = 0, s = 1 } -- last drawn view
@@ -1550,17 +1552,17 @@ function G.Update()
     quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, instBand)
     instArt = #quads > 0
     local n = #floors
-    if floorText then
+    if fl.text then
       local route = st.layerInstances ~= false and "\n|cffffc726Gold: the usual way through, boss by boss|r" or ""
-      floorText:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0
+      fl.text:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0
         and string.format("All %d floors", n)
         or string.format("Floor %d of %d, from the top", instFloor, n)) .. route)
-      floorUp:SetShown(n >= 2)
-      floorDown:SetShown(n >= 2)
-      floorUp:SetAlpha(instFloor > 0 and 1 or 0.4)
-      floorDown:SetAlpha(instFloor < n and 1 or 0.4)
-      floorText:ClearAllPoints()
-      floorText:SetPoint("TOPLEFT", floorBar, "TOPLEFT", n >= 2 and 40 or 0, -1)
+      fl.up:SetShown(n >= 2)
+      fl.down:SetShown(n >= 2)
+      fl.up:SetAlpha(instFloor > 0 and 1 or 0.4)
+      fl.down:SetAlpha(instFloor < n and 1 or 0.4)
+      fl.text:ClearAllPoints()
+      fl.text:SetPoint("TOPLEFT", fl.bar, "TOPLEFT", n >= 2 and 40 or 0, -1)
     end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
@@ -1581,7 +1583,7 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
-  if floorBar then floorBar:SetShown(inst ~= nil and not browse) end
+  if fl.bar then fl.bar:SetShown(inst ~= nil and not browse) end
   -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
   -- still show where you can walk)
   G.DrawFloors(inst and not browse, inst and not browse and not instBand and G.BlockEdges(inst, cx, cy, zoom) or nil,
@@ -1941,12 +1943,12 @@ function G.Update()
   -- closed with its X: hidden until the route changes (unless the X clears the route)
   navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version())
   -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
-  if floorBar and floorBar:IsShown() then
-    floorBar:ClearAllPoints()
+  if fl.bar and fl.bar:IsShown() then
+    fl.bar:ClearAllPoints()
     if navPanel:IsShown() then
-      floorBar:SetPoint("TOPLEFT", navPanel, "BOTTOMLEFT", 6, -4)
+      fl.bar:SetPoint("TOPLEFT", navPanel, "BOTTOMLEFT", 6, -4)
     else
-      floorBar:SetPoint("TOPLEFT", floorBar:GetParent(), "TOPLEFT", 8, -8)
+      fl.bar:SetPoint("TOPLEFT", fl.bar:GetParent(), "TOPLEFT", 8, -8)
     end
   end
   ns.PerfEnd("redraw: text", pt)
@@ -4284,12 +4286,12 @@ function G.Init()
   noMapText = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   noMapText:SetPoint("CENTER")
   -- a dungeon's map: "+" up a floor (all of them past the top), "-" down one, and which is shown
-  floorBar = CreateFrame("Frame", nil, top)
-  floorBar:SetSize(220, 18)
-  floorBar:SetPoint("TOPLEFT", 8, -8)
-  floorBar:Hide()
+  fl.bar = CreateFrame("Frame", nil, top)
+  fl.bar:SetSize(220, 18)
+  fl.bar:SetPoint("TOPLEFT", 8, -8)
+  fl.bar:Hide()
   local function FloorButton(text, tip, up)
-    local b = CreateFrame("Button", nil, floorBar)
+    local b = CreateFrame("Button", nil, fl.bar)
     b:SetSize(16, 16)
     local edge = b:CreateTexture(nil, "BACKGROUND")
     edge:SetAllPoints()
@@ -4313,14 +4315,14 @@ function G.Init()
     b:SetScript("OnLeave", GameTooltip_Hide)
     return b
   end
-  floorUp = FloorButton("+", "Up a floor (all of them past the top one)", true)
-  floorUp:SetPoint("TOPLEFT", 0, 0)
-  floorDown = FloorButton("-", "Down a floor", false)
-  floorDown:SetPoint("LEFT", floorUp, "RIGHT", 4, 0)
-  floorText = floorBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  floorText:SetPoint("TOPLEFT", 40, -1)
-  floorText:SetJustifyH("LEFT")
-  floorText:SetShadowOffset(1, -1)
+  fl.up = FloorButton("+", "Up a floor (all of them past the top one)", true)
+  fl.up:SetPoint("TOPLEFT", 0, 0)
+  fl.down = FloorButton("-", "Down a floor", false)
+  fl.down:SetPoint("LEFT", fl.up, "RIGHT", 4, 0)
+  fl.text = fl.bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  fl.text:SetPoint("TOPLEFT", 40, -1)
+  fl.text:SetJustifyH("LEFT")
+  fl.text:SetShadowOffset(1, -1)
 
   -- Hidden (closed, a key, combat) with stops placed but not confirmed yet: they become the
   -- route now (the 5 s auto-confirm runs only while the map shows), so the direction arrow

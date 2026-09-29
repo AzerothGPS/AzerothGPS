@@ -3618,3 +3618,17 @@ def test_boats_and_zeppelins_only_of_the_players_faction(nav_env):
     store.faction = "Horde"
     legs = N.Plan(0, 2066.0, 290.0, 7.0, d)[0]
     assert any(legs[i].ride and legs[i].ride[10] == "Brill, Tirisfal Glades" for i in range(1, len(legs) + 1))
+
+
+def test_every_addon_file_compiles_under_the_games_lua_5_1():
+    # The tests run Lua 5.5; the game runs 5.1, whose limits are tighter (a function may use at
+    # most 60 variables from outside it: G.Init went over once and the whole map failed to load).
+    lua51 = pytest.importorskip("lupa.lua51")
+    lua = lua51.LuaRuntime()
+    comp = lua.eval("function(src, name) local f, err = loadstring(src, '@' .. name) return err end")
+    errors = []
+    for p in sorted(ADDON.rglob("*.lua")):
+        err = comp(p.read_text(encoding="utf-8"), p.name)
+        if err:
+            errors.append(err)
+    assert not errors, errors
