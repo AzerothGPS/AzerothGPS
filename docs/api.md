@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 3) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 4) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -54,5 +54,9 @@ center, +x right and +y up.
   middle to the edge. "Back to your position" or `Follow()` returns to the player.
 - `Follow()`: back to following the player.
 - `ShowMap()`: shows the map window when the player has it hidden.
+- `TopPanelInset()`: the left inset (pixels) the top panel starts at: past the window frame's
+  portrait when the frame is on, else 4. Line up a panel of your own there with it.
+- `OnLayout(owner, fn)`: `fn(inset)` is called when that inset changes (the window frame turned
+  on or off); `fn = nil` stops.
 - `Redraw()`: the map redraws on its next frame. The map skips redraws when nothing it knows
   about changed, so call this after changing what your overlay draws.

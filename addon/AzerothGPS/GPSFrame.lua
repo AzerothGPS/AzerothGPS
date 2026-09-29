@@ -1095,6 +1095,9 @@ G.overlays, G.roadOwners = {}, {}
 -- stops' pins, the crosshair with Confirm Route and the top panel aren't shown, and a
 -- double-click goes to the holder instead of making a stop.
 G.holders = {}
+-- Called with the top panel's left inset when it changes (the window frame on or off):
+-- G.layoutHooks[owner] = fn(inset). G.topInset: the inset now.
+G.layoutHooks, G.topInset = {}, 4
 function G.Held() return next(G.holders) ~= nil end
 local function HeldClick(x, y, cont)
   for _, h in pairs(G.holders) do
@@ -2132,10 +2135,15 @@ function G.ApplySettings()
   local st = S()
   -- the window frame (option, locked or not); without it, an unlocked map has the Move tab
   local framed = G.chrome ~= nil and st.windowFrame ~= false
+  local inset = framed and CHROME_PORTRAIT_INSET or 4
   if G.chrome then
     G.chrome:SetShown(framed)
     -- the portrait hangs over the map's top-left corner: the top panel starts right of it
-    navPanel:SetPoint("TOPLEFT", framed and CHROME_PORTRAIT_INSET or 4, -4)
+    navPanel:SetPoint("TOPLEFT", inset, -4)
+  end
+  if inset ~= G.topInset then
+    G.topInset = inset
+    for _, fn in pairs(G.layoutHooks) do pcall(fn, inset) end
   end
   if G.moveTab then G.moveTab:SetShown(not st.locked and not framed) end
   frame:SetSize(st.size, st.size)

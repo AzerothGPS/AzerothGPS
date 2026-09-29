@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 3 }
+local API = { version = 4 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -139,6 +139,18 @@ function API.ShowMap()
   if not (ns.settings and ns.settings.gps) then return end
   ns.settings.gps.shown = true
   if ns.Options and ns.Options.Apply then ns.Options.Apply() elseif GPS() then GPS().ApplySettings() end
+end
+
+-- The left inset (pixels from the map's left edge) the top panel starts at now: past the window
+-- frame's portrait when the frame is on, else 4. A panel of your own there can line up with it.
+function API.TopPanelInset()
+  local G = GPS()
+  return G and G.topInset or 4
+end
+-- fn(inset) is called when that inset changes (the window frame turned on or off); fn = nil stops.
+function API.OnLayout(owner, fn)
+  local G = GPS()
+  if G then G.layoutHooks[owner] = fn end
 end
 
 -- Redraw the map on its next frame (after changing what an overlay draws).
