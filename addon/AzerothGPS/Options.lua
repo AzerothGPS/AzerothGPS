@@ -203,8 +203,9 @@ end
 ---------------------------------------------------------------------------
 
 -- "How to share": what's kept, where, and how to send it (a GitHub issue with the road
--- data pasted in; `agps import-shared --github` reads them).
+-- data pasted in, `agps import-shared --github` reads them; or the AzerothGPS Discord).
 O.SHARE_URL = "https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml"
+O.DISCORD_URL = "https://discord.gg/gktYHzs2c"
 O.SHARE_INFO = {
   "|cffffd100What is kept|r",
   "Roads and walls you draw or erase with the road tools (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions only: no character or realm names.",
@@ -214,8 +215,10 @@ O.SHARE_INFO = {
   " ",
   "|cffffd100How to share your roads and walls|r",
   "1. Click |cffffd100Copy map data...|r and press |cffffd100Ctrl+C|r.",
-  "2. Open the address below in your browser (click it, Ctrl+C, paste it there): it opens a new \"Road data\" issue in the addon's GitHub issues.",
-  "3. Paste your map data, name the zone and say what you fixed, then submit.",
+  "2. Paste it in either place (click an address below, Ctrl+C, and open it in your browser):",
+  "    |cffffd100GitHub|r: the first address opens a new \"Road data\" issue.",
+  "    |cffffd100Discord|r: the second is the AzerothGPS Discord.",
+  "3. Name the zone and say what you fixed.",
   " ",
   "Roads and walls that check out are added in a later version, for everyone.",
 }
@@ -284,7 +287,7 @@ local function ShowRoadsText()
   end
   if shareInfo then shareInfo:Hide() end -- (one window at a time: it was on top of this one)
   roadsCopy.text = text
-  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue (see How to share).",
+  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue or on the AzerothGPS Discord (see How to share).",
     n, n == 1 and "" or "s"))
   roadsCopy.edit:SetText(text)
   roadsCopy:Show()
@@ -322,25 +325,29 @@ local function ShowShareInfo()
     text:SetJustifyH("LEFT")
     text:SetSpacing(2)
     f.text = text
-    -- the address, to copy (the game can't open links): selected when clicked, not editable
-    local url = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    url:SetHeight(20)
-    url:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 6, -10)
-    url:SetPoint("RIGHT", -16, 0)
-    url:SetAutoFocus(false)
-    url:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-    url:SetScript("OnMouseUp", function(self) self:HighlightText() end)
-    url:SetScript("OnTextChanged", function(self, user)
-      if user then
-        self:SetText(O.SHARE_URL)
-        self:HighlightText()
-      end
-    end)
-    url:SetScript("OnEscapePressed", function() f:Hide() end)
-    f.url = url
+    -- the addresses, to copy (the game can't open links): selected when clicked, not editable
+    local function Address(value, below, gap)
+      local url = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+      url:SetHeight(20)
+      url:SetPoint("TOPLEFT", below, "BOTTOMLEFT", gap, -8)
+      url:SetPoint("RIGHT", -16, 0)
+      url:SetAutoFocus(false)
+      url:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+      url:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+      url:SetScript("OnTextChanged", function(self, user)
+        if user then
+          self:SetText(value)
+          self:HighlightText()
+        end
+      end)
+      url:SetScript("OnEscapePressed", function() f:Hide() end)
+      return url
+    end
+    f.url = Address(O.SHARE_URL, text, 6)
+    f.discord = Address(O.DISCORD_URL, f.url, 0)
     local copy = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     copy:SetSize(150, 22)
-    copy:SetPoint("TOPLEFT", url, "BOTTOMLEFT", -6, -8)
+    copy:SetPoint("TOPLEFT", f.discord, "BOTTOMLEFT", -6, -8)
     copy:SetText("Copy map data...")
     copy:SetScript("OnClick", function() O.ShowRoadsText() end)
     shareInfo = f
@@ -348,7 +355,9 @@ local function ShowShareInfo()
   shareInfo.text:SetText(table.concat(O.SHARE_INFO, "\n"))
   shareInfo.url:SetText(O.SHARE_URL)
   shareInfo.url:SetCursorPosition(0)
-  shareInfo:SetHeight(shareInfo.text:GetStringHeight() + 64 + 64)
+  shareInfo.discord:SetText(O.DISCORD_URL)
+  shareInfo.discord:SetCursorPosition(0)
+  shareInfo:SetHeight(shareInfo.text:GetStringHeight() + 64 + 92)
   shareInfo:Show()
 end
 O.ShowShareInfo = ShowShareInfo

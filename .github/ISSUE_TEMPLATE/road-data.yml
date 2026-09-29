@@ -8,6 +8,7 @@ body:
       value: |
         Thanks for helping the routes! Roads and walls you drew or erased in game: **Options > Help improve > Copy map data...**, press **Ctrl+C**, and paste it below.
         It's plain text with numbers only (no character or realm names).
+        (Rather not use GitHub? Paste it on the [AzerothGPS Discord](https://discord.gg/gktYHzs2c) instead.)
   - type: input
     id: zones
     attributes:

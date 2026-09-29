@@ -44,6 +44,11 @@ included), quests on the map, and TomTom `/way` import and sharing.
 and extract the `AzerothGPS` folder into `_classic_beta_\Interface\AddOns`. In game,
 `/agps` opens the options and `/agps help` lists the commands.
 
+**Documentation:** every feature, option and command is in the [wiki](https://github.com/AzerothGPS/AzerothGPS/wiki).
+
+**Community:** questions, news and road or wall fixes on the [AzerothGPS Discord](https://discord.gg/gktYHzs2c).
+Bugs and road data can also go in [GitHub issues](https://github.com/AzerothGPS/AzerothGPS/issues).
+
 ## Repository
 
 - `addon/AzerothGPS` is the addon. It is display-only: it never moves your

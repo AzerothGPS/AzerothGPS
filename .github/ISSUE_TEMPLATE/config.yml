@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: AzerothGPS Discord
+    url: https://discord.gg/gktYHzs2c
+    about: Questions, ideas and news. Road and wall fixes can be posted there too.
+  - name: AzerothGPS wiki
+    url: https://github.com/AzerothGPS/AzerothGPS/wiki
+    about: How every feature, option and command works.
