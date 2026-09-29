@@ -110,6 +110,9 @@ Walk searches by blocks (prepared offline, as Shortest Path Forever's): 5x faste
 no way through known at once (was up to 1.2 s of flooding); straightening by jumps (5x); line
 checks skip the overlay lookups away from cities and look each cell up once (1.8x). Left: offroad
 mode's node links (up to 36k line checks on a long route after a /reload) are most of what's left.
+Road display zoomed out: roads no longer vanish past the 1500-line cap (drawn roads first, only
+on-screen parts, lines on a screen grid drawn once, a coarser grid when crowded, scaled with the
+zoom); walls drawn before the terrain's edges.
 
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.

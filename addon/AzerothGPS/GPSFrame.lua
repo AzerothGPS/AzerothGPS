@@ -319,22 +319,8 @@ function G.LayoutWalls(px, py, cont, rot, zoom, half, edges)
   if not (P and P.WallLines) then return segs end
   local s = half / zoom
   local reach = zoom * 1.5
-  if edges then
-    local e = G.BlockEdges(cont, px, py, zoom)
-    for i = 1, #e - 3, 4 do
-      local ax, ay, bx, by = e[i], e[i + 1], e[i + 2], e[i + 3]
-      if math.abs(ax - px) <= reach or math.abs(bx - px) <= reach then
-        if math.abs(ay - py) <= reach or math.abs(by - py) <= reach then
-          local dx1, dy1 = Geo.ScreenOffset(px, py, ax, ay)
-          dx1, dy1 = Geo.Rotate(dx1 * s, dy1 * s, rot)
-          local dx2, dy2 = Geo.ScreenOffset(px, py, bx, by)
-          dx2, dy2 = Geo.Rotate(dx2 * s, dy2 * s, rot)
-          segs[#segs + 1] = { dx1, dy1, dx2, dy2, edge = true }
-          if #segs >= G.MAX_SEGMENTS then return segs end
-        end
-      end
-    end
-  end
+  -- the walls first (drawn and shipped: never the ones left out), then the terrain's edges up to
+  -- MAX_SEGMENTS in all
   for _, w in ipairs(P.WallLines(cont)) do
     local lx, ly
     for i = 1, #w - 1, 2 do
@@ -347,13 +333,37 @@ function G.LayoutWalls(px, py, cont, rot, zoom, half, edges)
       lx, ly = dx, dy
     end
   end
+  if edges then
+    local e = G.BlockEdges(cont, px, py, zoom)
+    for i = 1, #e - 3, 4 do
+      if #segs >= G.MAX_SEGMENTS then break end
+      local ax, ay, bx, by = e[i], e[i + 1], e[i + 2], e[i + 3]
+      if math.abs(ax - px) <= reach or math.abs(bx - px) <= reach then
+        if math.abs(ay - py) <= reach or math.abs(by - py) <= reach then
+          local dx1, dy1 = Geo.ScreenOffset(px, py, ax, ay)
+          dx1, dy1 = Geo.Rotate(dx1 * s, dy1 * s, rot)
+          local dx2, dy2 = Geo.ScreenOffset(px, py, bx, by)
+          dx2, dy2 = Geo.Rotate(dx2 * s, dy2 * s, rot)
+          segs[#segs + 1] = { dx1, dy1, dx2, dy2, edge = true }
+        end
+      end
+    end
+  end
   return segs
 end
 
 -- Road segments near the player: list of { x1, y1, x2, y2, source } in UI units
 -- relative to the frame center. source: 0 road (the player's drawn ones too), 1 bridged
--- gap, 3 a drop off a ledge.
+-- gap, 3 a drop off a ledge. At most MAX_SEGMENTS: the player's drawn roads first, only the
+-- parts on screen, laid on a grid of ROAD_STEP_UI cells (a line within one cell is too small
+-- to see; one between two cells is drawn once, whichever road it's from: zoomed out, a road of
+-- many short pieces still draws whole; a road all within one cell, one short line there, once
+-- a cell, so none goes missing). When a view still has more (zoomed out over a dense
+-- network, a capital's streets), the grid is made coarser (twice, and again) rather than whole
+-- roads left out. The grid is kept for the frames after (scaled with the zoom).
 local RECORDED = 9 -- (Router.SOURCE_RECORDED)
+G.ROAD_STEP_UI = 2
+local roadCoarse = {} -- [cont] = { zoom, k }: the spacing that fitted last
 function G.LayoutRoads(px, py, cont, rot, zoom, half)
   local segs = {}
   -- (the road graph not built yet, after a /reload: built in the background, drawn once ready)
@@ -367,30 +377,70 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
   end
   local s = half / zoom
   local reach = zoom * 1.5
-  local minStep = 2 / s -- skip points closer than ~2 UI units when zoomed out
-  for _, b in ipairs(RoadIndex(cont)) do
-    if b[2] > px - reach and b[1] < px + reach and b[4] > py - reach and b[3] < py + reach then
-      local e = b[5]
-      -- (drawn roads are truth: roads like any, before they're in the data too)
-      local src = (e[4] == 2 or e[4] == RECORDED) and 0 or e[4]
-      local lx, ly -- last emitted point (screen)
-      local wx0, wy0
-      local n = #e
-      for i = 5, n, 2 do
-        local wx, wy = e[i], e[i + 1]
-        local last = i >= n - 1
-        if not wx0 or last or math.abs(wx - wx0) + math.abs(wy - wy0) >= minStep then
-          local dx, dy = Geo.ScreenOffset(px, py, wx, wy)
-          dx, dy = Geo.Rotate(dx * s, dy * s, rot)
-          if lx then
-            segs[#segs + 1] = { lx, ly, dx, dy, src }
-            if #segs >= G.MAX_SEGMENTS then return segs end
+  local edge = half * 1.45 -- (the view's corners, turned heading-up)
+  local idx = RoadIndex(cont)
+  local function Lay(k)
+    local out, seen = {}, {}
+    local cell = G.ROAD_STEP_UI * k
+    for round = 1, 2 do -- the player's drawn roads first, then the rest
+      for _, b in ipairs(idx) do
+        if b[2] > px - reach and b[1] < px + reach and b[4] > py - reach and b[3] < py + reach then
+          local e = b[5]
+          -- (drawn roads are truth: roads like any, before they're in the data too)
+          local drawn = e[4] == 2 or e[4] == RECORDED
+          if (round == 1) == drawn then
+            local src = drawn and 0 or e[4]
+            local lx, ly, lc -- last point kept (screen) and its grid cell
+            local fx, fy, any -- the first point, and whether any line was kept
+            for i = 5, #e, 2 do
+              local dx, dy = Geo.ScreenOffset(px, py, e[i], e[i + 1])
+              dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+              local c = (math.floor(dx / cell) + 2048) * 4096 + math.floor(dy / cell) + 2048
+              if c ~= lc then
+                -- (not a piece wholly off one side of the view, nor one drawn already)
+                if lx and not ((lx < -edge and dx < -edge) or (lx > edge and dx > edge)
+                    or (ly < -edge and dy < -edge) or (ly > edge and dy > edge)) then
+                  local key = lc < c and lc * 16777216 + c or c * 16777216 + lc
+                  any = true
+                  if not seen[key] then
+                    seen[key] = true
+                    out[#out + 1] = { lx, ly, dx, dy, src }
+                    if #out >= G.MAX_SEGMENTS then return out, true end
+                  end
+                end
+                if not lx then fx, fy = dx, dy end
+                lx, ly, lc = dx, dy, c
+              end
+              if i >= #e - 1 and not any and lx and math.abs(lx) <= edge and math.abs(ly) <= edge then
+                -- (all of it within one cell: one short line in that cell, once)
+                local key = lc * 16777216 + lc
+                if not seen[key] then
+                  seen[key] = true
+                  out[#out + 1] = { fx, fy, dx, dy, src }
+                  if #out >= G.MAX_SEGMENTS then return out, true end
+                end
+              end
+            end
           end
-          lx, ly, wx0, wy0 = dx, dy, wx, wy
         end
       end
     end
+    return out, false
   end
+  -- (the grid that fitted last, scaled with the zoom: coarser zoomed out, finer zoomed back in)
+  local c = roadCoarse[cont]
+  local k = 1
+  if c then
+    local want = c.k * zoom / c.zoom
+    while k * 2 <= want do k = k * 2 end
+  end
+  local full
+  segs, full = Lay(k)
+  while full and k < 16 do
+    k = k * 2
+    segs, full = Lay(k)
+  end
+  roadCoarse[cont] = { zoom = zoom, k = k }
   return segs
 end
 
