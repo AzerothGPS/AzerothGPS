@@ -106,6 +106,10 @@ the walked part of the route trimmed off behind the player every 2 yd between re
 Deeprun Tram as a ride between Stormwind and Ironforge (its ways in from the client's AreaTrigger,
 its time from the cars' TransportAnimation: 130 s end to end; Alliance cities at both ends, so
 the faction check leaves it to the Alliance), the route held while in its map.
+Walk searches by blocks (prepared offline, as Shortest Path Forever's): 5x faster over 160 trips,
+no way through known at once (was up to 1.2 s of flooding); straightening by jumps (5x); line
+checks skip the overlay lookups away from cities and look each cell up once (1.8x). Left: offroad
+mode's node links (up to 36k line checks on a long route after a /reload) are most of what's left.
 
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.

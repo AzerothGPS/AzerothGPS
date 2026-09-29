@@ -230,13 +230,23 @@ def cmd_instances(args) -> int:
     return 0
 
 
+def cmd_terrain_hpa(args) -> int:
+    from .hpa import write
+
+    print(f"wrote {write()}")
+    return 0
+
+
 def cmd_install_addon(args) -> int:
     import shutil
+
+    from .hpa import refresh
 
     dst = Path(args.wow_path) / args.flavor / "Interface" / "AddOns" / "AzerothGPS"
     if not dst.parent.is_dir():
         print(f"no AddOns folder at {dst.parent}")
         return 1
+    refresh()  # (the terrain's blocks, when the terrain or the shipped walls changed: Data/TerrainHPA.lua)
     # Copy over the installed addon, then remove files the addon no longer has (a clean copy
     # without deleting everything first: a file another program has open can't stop halfway
     # and leave the folder half empty).
@@ -458,6 +468,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--interval", type=float, default=3.0, help="seconds between checks")
     sp.add_argument("--once", action="store_true", help="check once and stop")
     sp.set_defaults(fn=cmd_watch_roads)
+
+    sp = sub.add_parser("terrain-hpa", help="prepare the terrain's blocks for the walk search (Data/TerrainHPA.lua)")
+    sp.set_defaults(fn=cmd_terrain_hpa)
 
     sp = sub.add_parser("install-addon", help="copy the addon into the WoW AddOns folder")
     sp.add_argument("--wow-path", default=str(DEFAULT_WOW))

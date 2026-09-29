@@ -21,6 +21,8 @@ def load(lua, ns, *names, data=None):
     for name in names:
         src = (ADDON / name).read_text(encoding="utf-8")
         loader(src, name)("AzerothGPS", ns)
+        if name == "Data/Terrain.lua":  # (the grids by blocks with them, as the toc loads them)
+            loader((ADDON / "Data/TerrainHPA.lua").read_text(encoding="utf-8"), "Data/TerrainHPA.lua")("AzerothGPS", ns)
 
 
 @pytest.fixture

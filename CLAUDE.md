@@ -47,7 +47,16 @@ The addon is going public, so every change must keep it policy-safe:
   - `Geo.lua`: world coordinates and screen maths.
   - `Router.lua`: A* over the road graph, off-road legs, joins across gaps in the road
     network, background terrain searches.
-  - `Passability.lua`: terrain grid and walk-around search (coroutines).
+  - `Passability.lua`: terrain grid and walk-around search (coroutines). Long walks (start and
+    stop `HPA_MIN_CELLS` apart) are searched by blocks, as Shortest Path Forever does: the grid cut
+    into 32 x 32-cell blocks, each with its ways through to its neighbors and the walks between
+    them inside it, prepared offline (`Data/TerrainHPA.lua`, `agps terrain-hpa`,
+    `app/azerothgps/hpa.py`); then only the cells across the blocks on the way (straight lines over
+    open ground). No way through the blocks: nil at once (it used to flood the whole box). Blocks
+    the player's own walls or erasers change, and their neighbors, are worked out in game
+    (`BuildBlock`, the same rule as hpa.py's: keep them in step). The prepared data has a `stamp`
+    of what it's made from (the grid, the grids laid over it, the shipped walls): `install-addon`
+    prepares it again when that changed, and a test fails when it's stale.
   - `Nav.lua`: stops, planning across transports, flights (including from unlearned flight
     masters of your faction) and teleports, following and
     rerouting (keeps the current route when a recalculation is clearly longer), farming
@@ -295,6 +304,7 @@ agps caves             # build the caves (renders + summary in data/debug/caves/
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)
 agps watch-roads       # on every /reload: roads drawn in game go into overrides/ and the data, then install
+agps terrain-hpa        # prepare the terrain's blocks for the walk search (install-addon does it when stale)
 agps import-shared <file>  # roads and walls players copied from the share page ("Copy map data...") into the data
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 ```
