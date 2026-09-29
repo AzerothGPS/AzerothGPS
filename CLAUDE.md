@@ -51,7 +51,11 @@ The addon is going public, so every change must keep it policy-safe:
   - `Nav.lua`: stops, planning across transports, flights (including from unlearned flight
     masters of your faction) and teleports, following and
     rerouting (keeps the current route when a recalculation is clearly longer), farming
-    loops, questing stops (done when their quest areas' quests are), steps text, ETAs.
+    loops, questing stops (done when their quest areas' quests are), steps text, ETAs. Speeds
+    (`N.Speeds`): the plain run speed (seen on foot, the Speed stat in it), mounts, and movement
+    abilities (`N.MOVE_ABILITIES`, `N.MoveAbility`: its time beside walking; while on, it's the
+    walking speed; learned per character in `moveSpeeds`). The walked part behind the player is
+    trimmed off every `TRIM_MOVED_YD` between recalculations (`Follow(r, x, y, ahead)`).
   - `Turns.lua`: turn-by-turn maneuvers.
   - `Arrow.lua`: the direction arrow window.
   - `GPSFrame.lua`: the map window (layers, fade while moving, click-through, window

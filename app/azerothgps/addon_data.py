@@ -315,8 +315,24 @@ def transports_lua(cd: ClientData) -> str:
                     f'{_lua_str(place_name(c1, x1, y1))}, {_lua_str(place_name(c2, x2, y2))}, '
                     f'cycle = {cycle:.1f}, ride1 = {ride1:.1f}, ride2 = {ride2:.1f}, wait1 = {wait1}, wait2 = {wait2}'
                     f'{", server = true" if pid in periods else ""} }},')
+    # The Deeprun Tram: its own map (369), in by an area trigger at each end (Stormwind, Ironforge)
+    triggers = {r["ID"]: r for r in cd.table("AreaTrigger")}
+    a, b = triggers.get(TRAM_TRIGGERS[0]), triggers.get(TRAM_TRIGGERS[1])
+    if a and b:
+        (x1, y1), (x2, y2) = a["Pos"][:2], b["Pos"][:2]
+        rows.append(f'  {{ {a["ContinentID"]}, {x1:.1f}, {y1:.1f}, {b["ContinentID"]}, {x2:.1f}, {y2:.1f}, {TRAM_SECONDS:.0f}, '
+                    f'"tram", "Stormwind City", "Ironforge", "Deeprun Tram" }},')
     return "\n".join([_header(cd, "Zeppelins and boats: docks, ride + average wait; the timetable: cycle (s), ride1 (dock 1"
-                              " to 2), ride2 (back round), wait1 / wait2 (at each dock)."), "ns.Transports = {", *rows, "}"]) + "\n"
+                              " to 2), ride2 (back round), wait1 / wait2 (at each dock). And the Deeprun Tram."),
+                      "ns.Transports = {", *rows, "}"]) + "\n"
+
+
+# The Deeprun Tram's ways in (AreaTrigger ids: Stormwind's, Ironforge's) and its time end to end:
+# the loading screens (2 x 5 s), the walks between the way in and the platforms (about 90 yd at
+# each end), the wait for a train (two trains, one leaving each station every 71.7 s: 36 s on
+# average) and the ride (58.6 s between the stations; the cars' TransportAnimation: a 143.3 s loop).
+TRAM_TRIGGERS = (2173, 2175)
+TRAM_SECONDS = 2 * 5 + 2 * 90 / 7 + 36 + 58.6
 
 
 def flights_lua(cd: ClientData) -> str:

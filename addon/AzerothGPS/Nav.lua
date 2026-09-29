@@ -18,6 +18,12 @@ local OFF_ROUTE_YD = 30 -- further than this from the route: recalculate it
 local SEARCH_RECALC_SECONDS = 3
 local searchDirty, searchRecalcAt = false, -math.huge
 local FOLLOW_MAX_AGE = 20 -- following the route: recalculate this often anyway
+-- The walked part behind the player is trimmed off as they go (every TRIM_MOVED_YD), apart
+-- from recalculations (at most every REROUTE_SECONDS and REROUTE_MOVED_YD): the route shrinks
+-- behind them smoothly instead of in jumps. Only the next TRIM_AHEAD_YD of it is searched.
+N.TRIM_MOVED_YD = 2
+N.TRAM_MAP = 369 -- the Deeprun Tram's own map (Data/Transports.lua: its ride)
+N.TRIM_AHEAD_YD = 120
 -- A recalculation that comes out clearly longer while the player is still on the current
 -- route (e.g. a terrain search near an obstacle hasn't finished yet) keeps the current
 -- route: while the new one is provisional, or for up to KEEP_SECONDS if it's final.
@@ -662,12 +668,14 @@ local kept -- the last route, kept through Invalidate to compare a recalculation
 -- Following the route like a car GPS: while the player stays near the first part (the
 -- walk from them), trim what's behind them and count the distances down, without
 -- recalculating anything. False when they're off the route (then it's recalculated).
-local function Follow(r, px, py)
+local function Follow(r, px, py, ahead)
   local full = r.fullFirst
   if not full then return false end
   local pts, kinds, cum = full.pts, full.kinds, r.cum
   local best, bi, bt
+  local upTo = ahead and (r.consumed or 0) + ahead
   for i = r.followIdx, #pts / 2 - 1 do
+    if upTo and cum[i] > upTo then break end -- (trimming only: the stretch just ahead)
     local ax, ay, bx, by = pts[2 * i - 1], pts[2 * i], pts[2 * i + 1], pts[2 * i + 2]
     local vx, vy = bx - ax, by - ay
     local L2 = vx * vx + vy * vy
@@ -1091,6 +1099,8 @@ function N.Route(px, py, cont)
     end
     if r then return r end -- flying somewhere we can't tell (e.g. after a reload): keep the route
   end
+  -- in the Deeprun Tram (its own map): the route kept as it is until out at the other end
+  if cont == N.TRAM_MAP then return r end
   if r and r.flying then r, kept = nil, nil end -- just landed: work the route out afresh
   -- the continent's road data is still being built in the background (a moment)
   -- (and the levels the stops are on: a city's, down a lift)
@@ -1126,11 +1136,17 @@ function N.Route(px, py, cont)
   local age = r and now - N.routeTime or math.huge
   local same = r and N.routeOffroad == offroad and N.routeCont == cont
   if same and age < REROUTE_STALE and (age < REROUTE_SECONDS or moved <= REROUTE_MOVED_YD ^ 2) then
+    -- (not recalculated yet: the walked part behind the player trimmed off meanwhile)
+    local tx, ty = N.trimX or N.routeX, N.trimY or N.routeY
+    if age < FOLLOW_MAX_AGE and (px - tx) ^ 2 + (py - ty) ^ 2 >= N.TRIM_MOVED_YD ^ 2
+        and Follow(r, px, py, N.TRIM_AHEAD_YD) then
+      N.trimX, N.trimY = px, py
+    end
     return r
   end
   -- moving along the route: just follow it (no recalculation)
   if same and age < FOLLOW_MAX_AGE and Follow(r, px, py) then
-    N.routeX, N.routeY = px, py
+    N.routeX, N.routeY, N.trimX, N.trimY = px, py, px, py
     return r
   end
   -- the route so far, to compare with (also after Invalidate)
@@ -1161,6 +1177,7 @@ function N.Route(px, py, cont)
   end
   kept = N.route
   N.routeX, N.routeY, N.routeTime, N.routeOffroad, N.routeCont = px, py, now, offroad, cont
+  N.trimX, N.trimY = px, py
   if t0 then ns.PerfEnd("route calculation", t0) end
   N.CheckRedRoute(px, py, cont, now)
   return N.route
@@ -1382,7 +1399,124 @@ end
 -- Speeds
 ---------------------------------------------------------------------------
 
-local lastRun = DEFAULT_RUN
+local lastRun = DEFAULT_RUN -- the plain run speed: on foot, no speed ability on (items and the Speed stat in it)
+local plainSeen -- (lastRun was seen, not guessed)
+
+-- Movement abilities (not items): the spell, the share of the run speed it adds, talents adding
+-- more (their spells by rank, `per` rank), and whether it only works outdoors. A known one's
+-- time is shown beside walking; while it's on, it's the walking speed. Its speed is learned
+-- the first time it's seen on (the server's own numbers), else estimated from these.
+N.MOVE_ABILITIES = {
+  { spell = 783, add = 0.40, outdoors = true },   -- Travel Form (druid)
+  { spell = 2645, add = 0.40, outdoors = true },  -- Ghost Wolf (shaman)
+  { spell = 768, add = 0, talent = { 17002, 24866 }, per = 0.15, outdoors = true }, -- Cat Form, with Feline Swiftness
+  { spell = 5118, add = 0.30, talent = { 19559, 19560 }, per = 0.03 },  -- Aspect of the Cheetah (Pathfinding)
+  { spell = 13159, add = 0.30, talent = { 19559, 19560 }, per = 0.03 }, -- Aspect of the Pack (Pathfinding)
+}
+
+local function Known(spell)
+  if IsPlayerSpell then
+    local ok, v = pcall(IsPlayerSpell, spell)
+    if ok and v then return true end
+  end
+  if IsSpellKnown then
+    local ok, v = pcall(IsSpellKnown, spell)
+    if ok and v then return true end
+  end
+  return false
+end
+
+-- A talent's rank: its rank spells known, else found by name in the talent tabs.
+local function TalentRank(ids)
+  for rank = #ids, 1, -1 do
+    if Known(ids[rank]) then return rank end
+  end
+  local want = ns.SpellName and ns.SpellName(ids[1])
+  if not (want and GetNumTalentTabs and GetNumTalents and GetTalentInfo) then return 0 end
+  local ok, rank = pcall(function()
+    for tab = 1, GetNumTalentTabs() do
+      for i = 1, GetNumTalents(tab) do
+        local name, _, _, _, r = GetTalentInfo(tab, i)
+        if name == want then return r or 0 end
+      end
+    end
+    return 0
+  end)
+  return ok and rank or 0
+end
+
+-- Whether a spell's aura (or shapeshift form) is on the player.
+local function AuraOn(spell)
+  local ok, on = pcall(function()
+    if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+      local a = C_UnitAuras.GetPlayerAuraBySpellID(spell)
+      if a then return true end
+    end
+    if GetNumShapeshiftForms and GetShapeshiftFormInfo then
+      for i = 1, GetNumShapeshiftForms() do
+        local _, active, _, id = GetShapeshiftFormInfo(i)
+        if active and id == spell then return true end
+      end
+    end
+    if UnitBuff then
+      for i = 1, 40 do
+        local name, _, _, _, _, _, _, _, _, id = UnitBuff("player", i)
+        if not name then break end
+        if id == spell then return true end
+      end
+    end
+    return false
+  end)
+  return ok and on == true
+end
+
+-- The movement ability to show: the one on, else the fastest known. { spell, name, icon,
+-- speed, active } or nil. Checked at most every half second (the auras) and 10 s (the
+-- spells and talents known).
+local abilities, abilitiesAt, abilityNow, abilityAt
+local function AbilitySpeed(a, cdb)
+  local learned = cdb and cdb.moveSpeeds and cdb.moveSpeeds[a.spell]
+  if learned then return learned end
+  return lastRun * (1 + a.add + (a.rank or 0) * (a.per or 0))
+end
+function N.MoveAbility()
+  local now = GetTime()
+  if not abilities or now - abilitiesAt >= 10 then
+    abilities, abilitiesAt = {}, now
+    for _, a in ipairs(N.MOVE_ABILITIES) do
+      if Known(a.spell) then
+        local rank = a.talent and TalentRank(a.talent) or 0
+        if a.add + rank * (a.per or 0) > 0 then
+          abilities[#abilities + 1] = { spell = a.spell, add = a.add, per = a.per, rank = rank, outdoors = a.outdoors }
+        end
+      end
+    end
+    abilityAt = nil
+  end
+  if #abilities == 0 then return nil end
+  if abilityNow and abilityAt and now - abilityAt < 0.5 then return abilityNow end
+  local cdb = ns.CharDB and ns.CharDB()
+  local best, on
+  for _, a in ipairs(abilities) do
+    a.speed = AbilitySpeed(a, cdb)
+    if AuraOn(a.spell) then on = a end
+    if not best or a.speed > best.speed then best = a end
+  end
+  local a = on or best
+  if not a.name then
+    local name = ns.SpellName and ns.SpellName(a.spell) or "Ability"
+    a.name = name:gsub("^Aspect of the ", "")
+    a.icon = ns.SpellIcon and ns.SpellIcon(a.spell)
+  end
+  a.active = on ~= nil
+  abilityNow, abilityAt = a, now
+  return a
+end
+
+-- "Ghost Wolf" with its icon, for the times line.
+function N.AbilityLabel(a)
+  return a.icon and string.format("|T%s:12|t %s", a.icon, a.name) or a.name
+end
 
 -- Riding skill rank (0 if not learned). Classic keeps riding as a skill line.
 local riding, ridingAt -- cached: Speeds() runs every redraw
@@ -1400,17 +1534,38 @@ function N.RidingRank()
   return riding
 end
 
--- current speed, walking (run) speed, mounted speed or nil if the player can't ride, mounted?
+-- current speed, walking (run) speed, mounted speed or nil if the player can't ride, mounted?,
+-- and the movement ability (N.MoveAbility) or nil. The walking speed is the plain run speed
+-- (the Speed stat and items in it), or the ability's while it's on.
 -- GetUnitSpeed is secret in combat; the last values seen are used then.
 function N.Speeds()
   local cur, run
   local ok, a, b = pcall(GetUnitSpeed, "player")
   if ok and a and not ns.IsSecret(a) then cur, run = a, b end
-  if run and run > 0 then lastRun = run end
   -- a flight counts as mounted to the game: not here (and its speed isn't a mount's)
   local onTaxi = UnitOnTaxi and UnitOnTaxi("player") or false
   local mounted = not onTaxi and IsMounted and IsMounted() or false
   local cdb = ns.CharDB and ns.CharDB()
+  local ability = N.MoveAbility()
+  if run and run > 0 and not onTaxi and not mounted then
+    if ability and ability.active then
+      -- (its speed as the server has it, kept per character)
+      if cdb and run > lastRun + 0.2 then
+        cdb.moveSpeeds = cdb.moveSpeeds or {}
+        cdb.moveSpeeds[ability.spell] = run
+      end
+    else
+      lastRun, plainSeen = run, true
+    end
+  end
+  if not plainSeen and GetSpeed then
+    -- (not seen on foot yet: the base run speed and the Speed stat, a percentage)
+    local sok, pct = pcall(GetSpeed)
+    if sok and type(pct) == "number" and not ns.IsSecret(pct) and pct >= 0 and pct < 100 then
+      lastRun = DEFAULT_RUN * (1 + pct / 100)
+    end
+  end
+  if ability then ability.speed = AbilitySpeed(ability, cdb) end
   -- a mounted time only for characters that have learned to ride
   local rank = N.RidingRank()
   if mounted then rank = math.max(rank, 75) end -- on a mount (the skill list may be collapsed)
@@ -1427,7 +1582,8 @@ function N.Speeds()
       mount = lastRun * (rank >= 150 and 2.0 or 1.6)
     end
   end
-  return cur, lastRun, mount, mounted and mount ~= nil
+  local walk = (ability and ability.active and not mounted) and ability.speed or lastRun
+  return cur, walk, mount, mounted and mount ~= nil, ability
 end
 
 ---------------------------------------------------------------------------
@@ -1787,7 +1943,7 @@ function N.Status(px, py, cont)
   local d = N.dest
   local r = N.Route(px, py, cont)
   if not r then return N.warming and "Working out the route..." or "No way there found" end
-  local cur, walk, mount, mounted = N.Speeds()
+  local cur, walk, mount, mounted, ability = N.Speeds()
   local head = N.FormatDistance(r.length)
   local multi = #N.stops > 1
   if multi then head = string.format("|T%s:14|t 1/%d  %s", N.StopIcon(d), #N.stops, head) end
@@ -1814,11 +1970,16 @@ function N.Status(px, py, cont)
     local planned = N.PlannedStops()
     line = (planned < #N.stops and not N.loop) and string.format("Next %d stops: ", planned) or "All stops: "
   end
-  -- mounted: just the mounted time; on foot: walking, and mounted if the character can ride
+  -- mounted: just the mounted time; on foot: walking (or the movement ability while it's on),
+  -- the ability's time when one is known, and mounted if the character can ride
   if mount and mounted then
     line = line .. "Mount " .. N.FormatTime(yards / mount + ride)
   else
-    line = line .. "Walk " .. N.FormatTime(yards / walk + ride)
+    local on = ability and ability.active
+    line = line .. (on and N.AbilityLabel(ability) or "Walk") .. " " .. N.FormatTime(yards / walk + ride)
+    if ability and not on then
+      line = line .. "    " .. N.AbilityLabel(ability) .. " " .. N.FormatTime(yards / ability.speed + ride)
+    end
     if mount then line = line .. "    Mount " .. N.FormatTime(yards / mount + ride) end
   end
   -- in another quest's area on the way: its objectives first (the times line stays last:

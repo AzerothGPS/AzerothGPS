@@ -99,6 +99,14 @@ map, bosses (no spots) and researched entrances; entrances learned in game. Not 
 The Drowned City, Krol'Dok Stronghold, Alcaz Island Prison, Blackmaw Hold, Shaper's Terrace
 (announced), Hyjal Summit, Barrow Deeps; Half-Pint Tavern and Manor Mistmantle are unannounced.
 
+Also done: movement abilities in the times (Ghost Wolf, Travel Form, Cat Form with Feline
+Swiftness, Aspect of the Cheetah / Pack with Pathfinding: shown beside walking when known, the
+walking time while on; their speed learned when seen, the plain run speed with the Speed stat);
+the walked part of the route trimmed off behind the player every 2 yd between recalculations.; the
+Deeprun Tram as a ride between Stormwind and Ironforge (its ways in from the client's AreaTrigger,
+its time from the cars' TransportAnimation: 130 s end to end; Alliance cities at both ends, so
+the faction check leaves it to the Alliance), the route held while in its map.
+
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.
 - **WoW Forever's new dungeons and raids** (Karazhan Crypts, Demon Fall Canyon, Scarlet Enclave,

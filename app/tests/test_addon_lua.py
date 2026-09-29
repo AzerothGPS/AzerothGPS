@@ -2085,6 +2085,31 @@ def test_following_the_route_trims_instead_of_recalculating(nav_env):
     assert not same(r3, r)
 
 
+def test_the_walked_part_is_trimmed_off_between_recalculations(nav_env):
+    lua, ns = nav_env
+    N = ns.Nav
+    lua.execute("now = 0; GetTime = function() return now end")
+    N.SetStops(stops(lua, (-600.0, -4180.0), (-440.0, -4700.0)))
+    r = N.Route(-800.0, -4400.0, 1)
+    base = r.walkYards
+    same = lua.eval("rawequal")
+    # a few yards along it, well before a recalculation is due (under 2 s, under 15 yd moved)
+    pts = [r.pts[i] for i in range(1, len(r.pts) + 1)]
+    (ax, ay), (bx, by) = (pts[0], pts[1]), (pts[2], pts[3])
+    seg = math.hypot(bx - ax, by - ay)
+    step = min(6.0, seg * 0.8)
+    x, y = ax + (bx - ax) / seg * step, ay + (by - ay) / seg * step
+    lua.execute("now = 0.5")
+    r2 = N.Route(x, y, 1)
+    assert same(r2, r)  # not recalculated
+    assert (r2.pts[1], r2.pts[2]) == pytest.approx((x, y), abs=0.5)  # drawn from the player on
+    assert r2.walkYards == pytest.approx(base - step, abs=0.5)
+    # under TRIM_MOVED_YD further: left as it is
+    lua.execute("now = 0.6")
+    r3 = N.Route(x + 0.5, y, 1)
+    assert (r3.pts[1], r3.pts[2]) == pytest.approx((x, y), abs=0.01)
+
+
 # ---- Turn-by-turn (Turns.lua) --------------------------------------------------------------
 
 @pytest.fixture
@@ -2688,9 +2713,54 @@ def test_no_mount_time_without_riding(nav_env):
       IsMounted = function() return AGPS_TAXI end
     """)
     lua.execute("AGPS_TAXI = true")  # on a flight: the game says mounted, at flight speed
-    _, _, mount, mounted = ns.Nav.Speeds()
+    _, _, mount, mounted, _ = ns.Nav.Speeds()
     assert mount is None and not mounted
     assert ns.CharDB().mountSpeed is None  # the flight's speed isn't kept as a mount's
+
+
+def test_movement_ability_time_shown_and_used_while_on(nav_env):
+    lua, ns = nav_env
+    lua.execute("""
+      AGPS_T = 0; GetTime = function() return AGPS_T end
+      GetNumSkillLines = function() return 0 end
+      UnitOnTaxi = function() return false end
+      IsMounted = function() return false end
+      AGPS_RUN = 7.35  -- (a 5% Speed stat)
+      GetUnitSpeed = function() return AGPS_RUN, AGPS_RUN, 7, 4.7 end
+      IsPlayerSpell = function(id) return id == 2645 end  -- a shaman with Ghost Wolf
+      AGPS_WOLF = false
+      C_UnitAuras = { GetPlayerAuraBySpellID = function(id) if AGPS_WOLF and id == 2645 then return {} end end }
+    """)
+    N = ns.Nav
+    cur, walk, mount, mounted, ab = N.Speeds()
+    assert walk == pytest.approx(7.35)  # the plain run speed, the Speed stat in it
+    assert ab.spell == 2645 and not ab.active
+    assert ab.speed == pytest.approx(7.35 * 1.4)  # estimated until seen
+    # turned on: the server's speed learned, and it's the walking speed now
+    lua.execute("AGPS_WOLF = true AGPS_RUN = 10.5 AGPS_T = 1")
+    cur, walk, mount, mounted, ab = N.Speeds()
+    assert ab.active and walk == pytest.approx(10.5)
+    assert ns.CharDB().moveSpeeds[2645] == pytest.approx(10.5)
+    # off again: walking at the plain speed, the wolf's learned time beside it
+    lua.execute("AGPS_WOLF = false AGPS_RUN = 7.35 AGPS_T = 2")
+    cur, walk, mount, mounted, ab = N.Speeds()
+    assert walk == pytest.approx(7.35) and not ab.active and ab.speed == pytest.approx(10.5)
+    # no ability known: none
+    lua.execute("IsPlayerSpell = function() return false end AGPS_T = 20")
+    assert N.MoveAbility() is None
+
+
+def test_cat_form_counts_only_with_feline_swiftness(nav_env):
+    lua, ns = nav_env
+    lua.execute("""
+      GetTime = function() return 0 end
+      AGPS_KNOWN = { [768] = true }
+      IsPlayerSpell = function(id) return AGPS_KNOWN[id] or false end
+    """)
+    assert ns.Nav.MoveAbility() is None  # Cat Form alone adds no speed
+    lua.execute("AGPS_KNOWN[24866] = true GetTime = function() return 30 end")  # Feline Swiftness rank 2
+    ab = ns.Nav.MoveAbility()
+    assert ab.spell == 768 and ab.speed == pytest.approx(7 * 1.3)
 
 
 def test_reorders_stops_when_another_order_becomes_clearly_faster(nav_env):
@@ -3634,6 +3704,24 @@ def test_boats_and_zeppelins_only_of_the_players_faction(nav_env):
     store.faction = "Horde"
     legs = N.Plan(0, 2066.0, 290.0, 7.0, d)[0]
     assert any(legs[i].ride and legs[i].ride[10] == "Brill, Tirisfal Glades" for i in range(1, len(legs) + 1))
+
+
+def test_stormwind_to_ironforge_takes_the_deeprun_tram_for_the_alliance(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Hostile.lua")
+    N = ns.Nav
+    store = lua.eval("{}")
+    ns.CharDB = lua.eval("function(s) return function() return s end end")(store)
+    d = lua.table(cont=0, x=-4900.0, y=-1100.0)  # Ironforge
+    store.faction = "Alliance"
+    legs, secs = N.Plan(0, -8500.0, 600.0, 7.0, d)  # Stormwind's Dwarven District
+    rides = [legs[i].ride for i in range(1, len(legs) + 1) if legs[i].ride]
+    assert len(rides) == 1 and rides[0][8] == "tram" and rides[0][10] == "Ironforge"
+    assert secs < 8 * 60
+    # the Horde doesn't ride it (both its ends in Alliance cities)
+    store.faction = "Horde"
+    legs, _ = N.Plan(0, -8500.0, 600.0, 7.0, d)
+    assert not any(legs[i].ride and legs[i].ride[8] == "tram" for i in range(1, len(legs) + 1))
 
 
 def test_every_addon_file_compiles_under_the_games_lua_5_1():
