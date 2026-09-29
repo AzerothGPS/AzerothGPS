@@ -12,6 +12,9 @@ does it (terrain searches in the background, the player moving meanwhile), looki
                SPIKE_YD (not at the stop)
   * zigzag:    ZIGZAG_TURNS or more turns of over 60 degrees within ZIGZAG_YD on the terrain
 
+Each trip is for a random faction (the other one's guards avoided) and level 1-60 (zones too high
+for it avoided); a U-turn those explain (gone with both options off) isn't flagged.
+
 Writes data/debug/route-sweep/report.json (flagged trips with their coordinates and zone,
 worst first). Flagged trips can be turned into regression tests in app/tests.
 """
@@ -24,6 +27,7 @@ import random
 import time
 from pathlib import Path
 
+from .paths import ADDON_DIR
 from .routecheck import _in_cave, _pts, _runtime
 
 AWAY_COS = -0.3  # a first stretch heading this far from the stop's direction: "away"
@@ -92,6 +96,13 @@ def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log
 
     seed = seed if seed is not None else random.randrange(1 << 30)
     lua, ns = _runtime()
+    # (the other faction's guards and the zones' levels, for a character of a random faction and level)
+    loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
+    for name in ("Data/Hostile.lua", "Data/Zones.lua"):
+        loader((ADDON_DIR / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
+    lua.execute('SWEEP_SIDE, SWEEP_LEVEL = "A", 60; UnitLevel = function() return SWEEP_LEVEL end')
+    ns.Nav = lua.eval("{ Faction = function() return SWEEP_SIDE end }")
+    ns.settings = lua.eval("{ gps = {} }")
     P, R = ns.Passability, ns.Router
     limits = (P.PATH_MAX_EXPANSIONS, P.PATH_MAX_CELLS)
     now = lua.eval("function() return os.clock() * 1000 end")
@@ -127,6 +138,8 @@ def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log
             continue
         grid = ref[0] if isinstance(ref, tuple) else ref
         done += 1
+        side, level = rnd.choice(("A", "H")), rnd.randint(1, 60)
+        lua.globals().SWEEP_SIDE, lua.globals().SWEEP_LEVEL = side, level
         for offroad in (True, False):
             issues = []
             opts = lua.table(offroad=offroad, transient=True)
@@ -161,7 +174,15 @@ def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log
                 issues.append("flipflop")
             rise = _rise(spts, tx, ty)
             if rise > max(UTURN_RISE_YD, UTURN_SHARE * dist) and settled.length > grid * UTURN_REF_SHARE + 50:
-                issues.append("uturn")
+                # (going round the other faction's guards or a zone too high for the level: meant)
+                gps = ns.settings.gps
+                gps.avoidHostile, gps.avoidHighZones = False, False
+                R.Reset()
+                plain = R.Route(cont, sx, sy, tx, ty, lua.table(offroad=offroad))
+                gps.avoidHostile, gps.avoidHighZones = None, None
+                ppts, _ = _pts(plain)
+                if _rise(ppts, tx, ty) > max(UTURN_RISE_YD, UTURN_SHARE * dist) and plain.length > grid * UTURN_REF_SHARE + 50:
+                    issues.append("uturn")
             hair, zig = _angles(spts, tx, ty)
             if hair:
                 issues.append("hairpin")
@@ -169,12 +190,13 @@ def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log
                 issues.append("zigzag")
             if issues:
                 flagged.append({"zone": name, "uiMap": mid, "cont": cont, "mode": "offroad" if offroad else "road",
+                                "faction": side, "level": level,
                                 "issues": issues, "start": [round(sx, 1), round(sy, 1)], "stop": [round(tx, 1), round(ty, 1)],
                                 "straight_yd": round(dist), "grid_walk_yd": round(grid),
                                 "first_yd": round(first.length), "settled_yd": round(settled.length),
                                 "first_heading": round(h_first, 2), "settled_heading": round(h_settled, 2),
                                 "flips": flips, "rise_yd": round(rise), "hairpins": hair, "zigzag": zig})
-                log(f"  {name}: {'offroad' if offroad else 'road'} {', '.join(issues)} "
+                log(f"  {name}: {'offroad' if offroad else 'road'} ({side} {level}) {', '.join(issues)} "
                     f"({sx:.0f}, {sy:.0f}) -> ({tx:.0f}, {ty:.0f})")
     rank = {"snapback": 0, "flipflop": 1, "uturn": 2, "hairpin": 3, "zigzag": 4}
     flagged.sort(key=lambda f: min(rank[i] for i in f["issues"]))
