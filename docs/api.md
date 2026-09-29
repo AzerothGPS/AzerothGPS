@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 4) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 5) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -52,6 +52,8 @@ center, +x right and +y up.
   icons calls `onDoubleClick(x, y, continent)` instead of making a stop. `on = false` lets go.
 - `LookAt(cont, x, y, zoom)`: centers the map on that spot, north up, `zoom` yards from the
   middle to the edge. "Back to your position" or `Follow()` returns to the player.
+- `ShowWorld()`: the world map, as right-clicking out to the top level (from the terrain view, a
+  click on a continent and then on a spot comes back to the terrain view there).
 - `Follow()`: back to following the player.
 - `ShowMap()`: shows the map window when the player has it hidden.
 - `TopPanelInset()`: the left inset (pixels) the top panel starts at: past the window frame's

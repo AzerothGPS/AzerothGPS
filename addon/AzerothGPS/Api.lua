@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 4 }
+local API = { version = 5 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -129,6 +129,10 @@ end
 -- to the edge. "Back to your position" (or API.Follow) returns to the player.
 function API.LookAt(cont, x, y, zoom)
   if GPS() then GPS().LookAt(cont, x, y, zoom) end
+end
+-- The world map (both continents), as right-clicking out to the top level.
+function API.ShowWorld()
+  if GPS() then GPS().ShowWorld() end
 end
 -- Back to following the player.
 function API.Follow()

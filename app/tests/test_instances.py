@@ -376,3 +376,15 @@ def test_wow_forevers_own_dungeons_have_their_map_bosses_and_entrances(inst_env)
     assert len(stops) == 0 and dead == 0
     assert N.BossKilled(KC, None, None, b[1]) == 1
     assert G.NextBoss(KC)[0] == 2  # (on to the second: the first's name counted it, not all of them)
+
+
+def test_show_world_browses_the_world_map(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G = ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500 } }")
+    G.ShowWorld()
+    browse, free = G.BrowseState()
+    assert browse is not None and ns.Maps[browse].worldFrames  # (the world map: both continents)
+    G.Follow()
+    assert G.BrowseState()[0] is None

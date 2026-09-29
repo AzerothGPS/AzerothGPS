@@ -3468,9 +3468,9 @@ def test_public_api_exposes_documented_functions(api):
     for name in ("Instance", "InstanceFloors", "PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
                  "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
-                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout"):
+                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld"):
         assert A[name] is not None, name
-    assert A.version == 4
+    assert A.version == 5
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 

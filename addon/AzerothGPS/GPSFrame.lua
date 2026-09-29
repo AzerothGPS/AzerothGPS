@@ -2379,6 +2379,17 @@ function G.ContinentMap(c)
   return best
 end
 
+-- The world map (another addon's view): as right-clicking up to the top. From the terrain view,
+-- a continent and then a spot on it lead back to the terrain view there.
+function G.ShowWorld()
+  local w = WorldMapID()
+  if not w then return end
+  local _, _, cont = Geo.PlayerWorld()
+  openedFrom = nil
+  fromTerrain = not G.IsMapStyle(S().style) or nil
+  G.Browse(w, ViewCont(cont))
+end
+
 function G.TerrainZoomOut()
   if not browse and LeaveOpened() then return end
   local m = browse and ns.Maps[browse]
