@@ -724,8 +724,6 @@ local function BuildWindow()
   header("Routes")
   check("Avoid zones too high for your level", "Routes go around zones whose levels are red for your character (their lowest level more than 4 above yours) when there's another way, like the other faction's towns. The zones you start and end in don't count.",
     function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.Invalidate() end)
-  check("Dungeon route", "Entering a dungeon or raid starts a route through its bosses in the usual order (each stop done when its boss dies), and other routes (quest route, stops you add) wait until it's done or you turn this off. Map menu: Dungeon route.",
-    function() return GPS().dungeonRoute ~= false end, function(v) ns.GPS.SetDungeonRoute(v) end)
   check("Off-road shortcuts", "Riskier but faster: heads straight across open ground and only uses roads where the terrain forces it (mountains, cliffs), then straight again. Off: routes take you to the nearest road and follow the roads.",
     function() return GPS().offroad end, function(v) GPS().offroad = v ns.Nav.OffroadSetByPlayer() end)
   check("Use flight paths", "Routes take flights (connecting ones too) between the flight masters this character knows, when that's faster. The addon learns which ones you know from the flight map: open it once at any flight master.",

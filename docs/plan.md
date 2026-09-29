@@ -24,7 +24,16 @@ client files can be read offline.
 | **A5 Flight paths** | Known nodes from the flight map, learned flight times, flight edges and a toggle | A long route flies when that is faster, and only via known nodes |
 | **A6 Polish** | Options panel, boats and zeppelins, minimap/world-map integration, packaging for CurseForge/Wago, a checklist for the Forever launch data refresh | |
 
-## 1.0.7: Dungeons and raids
+## 1.0.7: Dungeons and raids (released)
+
+Done: 25 dungeons and raids as their own levels (floors in layers with stairs, the game's
+minimap art, floor buttons), boss order and the gold "usual way", boss route and kill
+tracking, the map in dungeons while the game hides the position there (probed in Ragefire
+Chasm: position, facing and uiMap hidden; speed given), zones too high for the level avoided
+and asked about, zeppelin and boat docks with learned timetables, faction-aware transports,
+the public API (v2 for dungeon maps). The "dungeon route" (starting the boss route on
+entering) is built but off the menus: it needs the position, which this client hides.
+
 
 Goal: every dungeon and raid on the open continents viewable and routed like a city: its
 own walk network, its bosses on the map, and a suggested boss route where killing a boss
@@ -81,7 +90,23 @@ counts as arriving at that stop.
    Blackfathom Deeps, the Stockade).
 3. Addon side, then the rest of the dungeons and the raids.
 
-## Risks
+## 1.0.8: More dungeons and raids
+
+- **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
+  client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.
+- **WoW Forever's new dungeons and raids** (Karazhan Crypts, Demon Fall Canyon, Scarlet Enclave,
+  Storm Cliffs, The Tainted Scar, The Crystal Vale, Nightmare Grove, City of Dalaran, Ruins of
+  Lordaeron, The Hall of Thanes, Excavation Site: Wetlands, Half-Pint Tavern, Manor Mistmantle,
+  Hyjal Summit, Barrow Deeps): the client has their models and boss names (DungeonEncounter),
+  not their entrances, boss spots or order (its encounter-journal tables are empty). Entrances:
+  learned in game (where the player stood before the loading screen), shared with Copy map data;
+  boss spots and order: public guides.
+- **Zeppelin and boat timers shared** with guild and group (addon messages, opt-in): one ride
+  by anyone starts everyone's countdowns.
+- **The 3D dungeon check** (`agps instances --check`) for the floor layers: route with heights,
+  walk over the layers' floors.
+- **Boss kills:** confirm which events this client sends (the probe logs them).
+
 - **Texture rotation (A1):** heading-up relies on `Texture:SetRotation` turning the whole
   quad. If it only rotates texture coordinates inside an axis-aligned box, fall back to
   north-up for tiles (the arrow still rotates) or find another technique.

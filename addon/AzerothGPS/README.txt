@@ -1,4 +1,4 @@
-AzerothGPS 1.0.6
+AzerothGPS 1.0.7
 ================
 
 Car-GPS style navigation for World of Warcraft: a map window with routes along the roads,
@@ -32,6 +32,14 @@ Getting started
 - The Sprint button (next to the Hearthstone button): a route through your quest log's
   objectives and turn-ins, in the fastest order.
 - Released as a ghost: a red route to your body (skull) comes first, then the rest.
+- Dungeons and raids: click an entrance icon for its map (the + and - buttons change floor),
+  with its bosses in the usual order; the Boss route button (map menu) routes through them,
+  each stop done when its boss dies. The game hides your position inside, so the map shows
+  the dungeon and your progress rather than you on it.
+- Zeppelin and boat docks show on the map; after you ride one once, they count down to its
+  next arrival. Double-click one to add it as a stop.
+- Routes keep out of zones too high for your level when there's another way, and ask before
+  taking you through or into one.
 - Options, Opacity: fade while moving, click-through while moving or in combat, and
   hiding or dimming the map and the arrow in combat.
 

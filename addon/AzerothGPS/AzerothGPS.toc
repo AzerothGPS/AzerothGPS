@@ -4,7 +4,7 @@
 ## Author: AzerothGPS
 ## X-License: All Rights Reserved
 ## X-Copyright: Copyright (c) 2026 AzerothGPS
-## Version: 1.0.6
+## Version: 1.0.7
 ## IconTexture: Interface\AddOns\AzerothGPS\Media\Device
 ## SavedVariables: AzerothGPSDB
 

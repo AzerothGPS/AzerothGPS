@@ -3790,10 +3790,8 @@ function G.Init()
         if G.mapMenu then G.mapMenu:Hide() end
         G.BossRoute()
       end },
-    { id = "dungeonRoute", icon = "Interface\\Icons\\INV_Misc_Key_13", label = "Dungeon route",
-      tip = "On: entering a dungeon or raid starts its boss route (in the usual order, each stop done when its boss dies), and other routes wait until it's done. Off: routes are yours in there too.",
-      isOn = function() return S().dungeonRoute ~= false end,
-      action = function() G.SetDungeonRoute(S().dungeonRoute == false) end },
+    -- (the dungeon route toggle ("dungeonRoute": G.SetDungeonRoute) is left off the map menu: this
+    -- client hides the player's position in dungeons, so the route it starts never can)
     { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
       tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
     { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
@@ -3839,8 +3837,8 @@ function G.Init()
     { id = "styles", label = "Map style", members = { "style_minimap", "style_zone", "style_nospoiler" },
       tip = "The map's look: click to choose." },
     { id = "questsG", label = "Quests", members = { "quests", "questAreas" }, tip = "Quests and quest areas on the map." },
-    { id = "dungeonsG", label = "Dungeons and raids", members = { "instances", "dungeonRoute", "bossRoute" },
-      tip = "Dungeon and raid entrances on the map, the dungeon route, and a boss route." },
+    { id = "dungeonsG", label = "Dungeons and raids", members = { "instances", "bossRoute" },
+      tip = "Dungeon and raid entrances on the map, and a route through a dungeon's bosses." },
     { id = "gather", label = "Herbs, ore and farming", members = { "herbs", "ore", "farm" },
       tip = "Herb and ore nodes on the map, and drawing a farming area." },
   }

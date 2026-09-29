@@ -2,6 +2,39 @@
 
 Each version's section is its release notes (GitHub and CurseForge).
 
+## 1.0.7
+
+For WoW Forever client 1.60.1 (interface 16001). New data and image files are included, so fully restart the game after updating, rather than just /reload.
+
+### New
+
+- **Dungeons and raids:** 25 of them (from Ragefire Chasm to Naxxramas) have entrance icons on every map style (the map menu's "Dungeons and raids" group turns them on and off). Click one for its map:
+  - the game's own map of it, floor by floor with the **+** and **-** buttons at the top left (the mouse wheel still zooms);
+  - its bosses, numbered in the usual kill order (optional ones marked);
+  - a gold line for the usual way through, boss by boss, with stairs icons where it goes up or down a floor.
+
+  Right-click goes back to the map you came from.
+- **Boss route** (map menu): a route through a dungeon's bosses in the usual order. Each stop is done when its boss dies, not when you get there, and a boss already down is left out.
+- **Inside a dungeon** the game hides your position from addons, so the map shows the dungeon itself: the bosses you've killed fade, the stretch of the gold line to the next boss lights up, and the panel says which boss is next ("Next: Sneed (2 of 6)").
+- **Zones too high for your level** (Options → Routing, on by default): routes go around zones whose levels are red for you, when there's another way. Routing to a stop in one, or along the only way there through one, asks first, on the map.
+- **Zeppelin and boat docks** show on the map with points of interest (double-click one for a stop). After you've ridden one once, its icon counts down to its next arrival, from its timetable and when you saw it leave.
+- **Boats, zeppelins, lifts and dungeon portals** are only used when your faction can take them.
+- **City icons on the terrain view:** Undercity's and Ironforge's open their inside maps.
+- **For other addons:** a public `AzerothGPS` API (map geometry, the point under the mouse, drawing on the map; dungeons' maps too). See docs/api.md.
+
+### Fixed
+
+- Long routes without flight paths froze the game for seconds (off-road shortcuts are now worked out in the background).
+- A route could turn back to a road the other way (a U-turn) while the way around a rock or a steep patch was still being searched, and kept doing it as you walked.
+- Right-clicking out of a city's or dungeon's map went to the wrong place.
+- An error inside dungeons (a tooltip the game hides from addons).
+
+### Known limits
+
+- Blackwing Lair and WoW Forever's new dungeons and raids aren't in yet.
+- In some dungeons with floors over floors (Blackrock Spire and Depths, Temple of Ahn'Qiraj) the gold line can still jump between floors in places.
+- Zeppelin and boat countdowns start once you've ridden that one (the game doesn't tell addons where they are).
+
 ## 1.0.6
 
 For WoW Forever client 1.60.1 (interface 16001). New data files are included, so fully restart the game after updating, rather than just /reload.

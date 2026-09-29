@@ -14,7 +14,8 @@ _Double-click where you want to go, confirm, and follow the arrow._
 
 - **Real routes:** along the roads, around mountains and in through the passes, with optional off-road shortcuts.
 - **Inside cities and caves:** every capital's streets (Undercity's floors, stairs and lifts too), and 351 caves and mines, entered at the mouth.
-- **Keeps you out of trouble:** routes go around the other faction's towns and guards.
+- **Dungeons and raids:** 25 of them, with the game's own map floor by floor, the bosses in the usual order, a boss route, and your progress as bosses fall.
+- **Keeps you out of trouble:** routes go around the other faction's towns and guards, and zones too high for your level (asking before taking you into one).
 - **Turn-by-turn directions** in a small arrow window, with the distance and ETA to every stop.
 - **Multi-stop trips** in the fastest order, including flight paths (even ones you'll learn on the way), boats, zeppelins, your hearthstone and class teleports.
 - **Questing:** a one-click route through your quest log, and stops that wait while you do the quest.
@@ -76,7 +77,7 @@ _On a flight, the line shrinks toward the landing and the time left counts down.
 ### Hearthstone, teleports and boats
 
 - A trip can use your **Hearthstone**, **Astral Recall**, a **mage teleport** or **Teleport: Moonglade** when it's ready and faster, on whichever leg saves the most (once per trip). The addon knows your inn and never uses anything for you: the directions just say "Use your Hearthstone".
-- **Boats and zeppelins** are part of the route, with where to board.
+- **Boats and zeppelins** are part of the route, with where to board, and only the ones your faction can take. Their docks show on the map (with points of interest; double-click one for a stop), and after you've ridden one once, its icon counts down to its next arrival.
 
 ![A route whose first step is Use your Hearthstone (to Gallows' End Tavern)](https://i.imgur.com/m1Trl0w.png)
 
@@ -94,6 +95,20 @@ _Hearth home, then walk the rest._
 ### The other faction's towns
 
 Routes keep away from the other faction's guards: around their towns and camps, and off the roads they patrol, when there's another way. A stop inside one is still reached, the shortest way in. (Options → Routing: "Avoid the other faction's towns".)
+
+### Zones too high for your level
+
+Routes go around zones whose levels are red for you (their lowest level more than 4 above yours), when there's another way. Routing to a stop in one, or along the only way there through one, asks first, on the map. (Options → Routing: "Avoid zones too high for your level".)
+
+### Dungeons and raids
+
+25 dungeons and raids, from Ragefire Chasm to Naxxramas, have entrance icons on every map style (the map menu's "Dungeons and raids" turns them on and off). Click one for its map:
+
+- the game's own map of it, floor by floor with the **+** and **-** buttons at the top left;
+- its **bosses**, numbered in the usual kill order;
+- a **gold line** for the usual way through, boss by boss, with stairs icons where it goes up or down a floor.
+
+The **Boss route** button makes a route through its bosses; each stop is done when its boss dies. Inside, the game hides your position from addons, so the map shows the dungeon and your progress: bosses down fade, and the way to the next one lights up. Right-click goes back to the map you came from.
 
 ### Corpse runs
 
@@ -230,9 +245,9 @@ AzerothGPS reads the TomTom `/way` format used by guides and websites:
 `/agps` or right-click the minimap button. Pages, like the game's own settings:
 
 - **General:** show the map, reopen it following you, lock it, window frame, zoom in near a stop, heading-up, size, a **key to show and hide the map**, minimap button.
-- **Map:** right-click world map, building interiors, and what's shown (flight masters, places, quests, quest areas, herbs, ore).
+- **Map:** right-click world map, building interiors, and what's shown (flight masters, places and docks, quests, quest areas, herbs, ore, dungeons and raids).
 - **Quick buttons:** a table of where each quick button goes (always shown or in the menu, up or right, or hidden), and their on/off settings. The map can't be made smaller than they need.
-- **Routing:** off-road shortcuts, avoiding the other faction's towns, questing and the quest route's "only this zone", flight paths, hearthstone, class teleports, fastest order (and keeping your own order in cities), the panel's ✕, `/way` and shared routes.
+- **Routing:** off-road shortcuts, avoiding the other faction's towns and zones too high for your level, questing and the quest route's "only this zone", flight paths, hearthstone, class teleports, fastest order (and keeping your own order in cities), the panel's ✕, `/way` and shared routes.
 - **Directions:** the arrow window, its lock and background, and how it works.
 - **Opacity:** map opacity, fade while moving, click-through while moving or in combat, hide or dim in combat.
 - **Road tools**, **Wall tools** and **Help improve** (copy your map data to share; kept on your PC until you do).
@@ -260,6 +275,8 @@ AzerothGPS reads the TomTom `/way` format used by guides and websites:
 | `/agps offroad on\|off` | Off-road shortcuts |
 | `/agps quests on\|off` | Quests on the map |
 | `/agps herbs\|ore\|nodes on\|off` | Herbs, ore, or both |
+| `/agps instances on\|off` | Dungeon and raid entrances |
+| `/agps bosses` | A route through the bosses of the dungeon you're in or looking at |
 | `/agps lock` / `unlock` `[map\|arrow]` | Lock or unlock |
 | `/agps dev` | The Road tools button on the map |
 | `/agps walltools` | The Wall tools button on the map |
