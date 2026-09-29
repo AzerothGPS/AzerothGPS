@@ -2408,6 +2408,22 @@ end
 
 -- Left-click (no drag) on the map: open the zone (on a continent) or the continent (on
 -- the world map) under the cursor.
+-- A click on a world map inset: from the terrain view, the terrain there (the whole island in
+-- view); in a map style, its map.
+function G.OpenInset(it)
+  local im = ns.Maps[it.map]
+  if not (fromTerrain and im and im.bounds) then
+    G.Browse(it.map)
+    return
+  end
+  local ib = im.bounds
+  browse, browseZoom, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil, nil
+  free = { x = (ib[1] + ib[3]) / 2, y = (ib[2] + ib[4]) / 2, rot = 0, cont = im.continent }
+  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, G.MapFitZoom(im)))
+  if recenter then recenter:Show() end
+  elapsed = 1
+end
+
 local function OnMapClick(dxUI, dyUI)
   local m = browse and ns.Maps[browse]
   if not m or (m.type > 2 and not fromTerrain) then return end -- (a zone from the terrain view: a spot on it)
@@ -2417,7 +2433,7 @@ local function OnMapClick(dxUI, dyUI)
     local u, v = (b[4] - y) / (b[4] - b[2]), (b[3] - x) / (b[3] - b[1])
     local it = G.InsetAt(u, v)
     if it then
-      G.Browse(it.map) -- (an inset: its map; from the terrain view, then a spot on it)
+      G.OpenInset(it)
       return
     end
     for c, wf in pairs(m.worldFrames) do

@@ -406,6 +406,13 @@ def test_zephras_isle_is_an_inset_on_the_world_map(inst_env):
     G.ShowWorld()
     browse, _ = G.BrowseState()
     assert browse is not None and ns.Maps[browse].worldFrames
-    G.Browse(it.map)  # (what a click on the inset does)
+    # clicked from the terrain view: the island's terrain, all of it in view
+    G.OpenInset(it)
+    browse, free = G.BrowseState()
+    assert browse is None and free.cont == 2991 and ns.settings.gps.zoom >= 2000
+    # clicked in a map style: its map
+    ns.settings.gps.style = "zone"
+    G.ShowWorld()
+    G.OpenInset(it)
     assert G.BrowseState()[0] == it.map
     G.Follow()
