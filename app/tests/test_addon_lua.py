@@ -3468,9 +3468,9 @@ def test_public_api_exposes_documented_functions(api):
     for name in ("Instance", "InstanceFloors", "PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
                  "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
-                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld"):
+                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
         assert A[name] is not None, name
-    assert A.version == 5
+    assert A.version == 6
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 
@@ -3501,6 +3501,15 @@ def test_nearest_road_waits_for_the_background_build(nav_env):
         R.Pump(clock() + 200, clock)
     x, y, dist, edge = multi(lua, A.NearestRoad, 1, -600.0, -4400.0)
     assert dist is not None and dist < 200
+
+
+def test_public_api_to_continent_goes_there_and_back(api):
+    lua, ns, A = api
+    load(lua, ns, "Data/Maps.lua")
+    x, y = multi(lua, A.ToContinent, 0, -9000.0, 400.0, 1)  # Eastern Kingdoms, in Kalimdor's coordinates
+    assert (x, y) != (-9000.0, 400.0)
+    assert multi(lua, A.ToContinent, 1, x, y, 0) == pytest.approx((-9000.0, 400.0))
+    assert multi(lua, A.ToContinent, 0, 5.0, 6.0, 0) == (5.0, 6.0)
 
 
 def test_public_api_map_to_world_inverts_locate(api):
