@@ -91,8 +91,10 @@ The addon is going public, so every change must keep it policy-safe:
     (`WallLines`, `CrossesWall`, wall cells closed on the grid): nothing walks through them, and roads
     they cross are cut there (`BuildGraph`; a gate is a gap); flights ignore them. The terrain's
     too-steep edges don't cut roads (a road over one is a pass). Saved in
-    `ns.db.tracks` on the player's level (`continent` 10001 in Undercity). Routes use them at
-    once (`Router.WithTracks`: a drawn road's stretches along an existing road are that road,
+    `ns.db.tracks` on the player's level (`continent` 10001 in Undercity). While the road or wall
+    tools are on, edits aren't built into the network (`Record.pending`: the map draws them over the
+    roads as they were, only what's in view); turning the tools off rebuilds it once (`Record.Apply`).
+    Routes use them from then (`Router.WithTracks`: a drawn road's stretches along an existing road are that road,
     its ends join a road within 25 yd; an erase cuts out the road under it). Drawn roads are
     truth: `agps watch-roads` (or `agps roads`) imports them into `overrides/` on every
     /reload, and `ns.RoadTracksIn` (in Roads.lua) lists the ones the data has, which the

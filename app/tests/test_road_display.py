@@ -5,7 +5,7 @@ import math
 import pytest
 
 from azerothgps.routecheck import _runtime
-from test_addon_lua import multi
+from test_addon_lua import ADDON, multi
 
 
 @pytest.fixture(scope="module")
@@ -139,3 +139,38 @@ def test_cave_entrances_sit_at_their_caves(game):
             assert best <= 30
     names0 = {G.CaveEntrances(0)[i].name for i in range(1, len(G.CaveEntrances(0)) + 1)}
     assert {"Jasperlode Mine", "Fargodeep Mine"} <= names0
+
+
+def test_with_the_road_tools_on_edits_rebuild_once_when_turned_off(game):
+    lua, ns = game
+    G, R = ns.GPS, ns.Router
+    if not ns.Record:
+        loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
+        loader((ADDON / "Record.lua").read_text(encoding="utf-8"), "Record.lua")("AzerothGPS", ns)
+    Rec = ns.Record
+    lua.execute("GetTime = function() return os.clock() end")
+    R.WARM, R.SYNC_WALKS = True, False
+    clock = lua.eval("function() return os.clock() * 1000 end")
+    try:
+        R.Reset()
+        G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0)
+        while R.HasWork():
+            R.Pump(clock() + 50, clock)
+        G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0)  # (its index for drawing)
+        assert R.GraphReady(0)
+        G.SetRoadMode(True)
+        ns.db.tracks = lua.eval("{ { op = 'add', continent = 0, time = 11, pts = { -9300,300, -9250,350, -9200,420 } } }")
+        Rec.Changed()  # (a road drawn with the tools on)
+        assert R.GraphReady(0) and Rec.pending  # (no rebuild yet)
+        segs = G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0)
+        s = 130.0 / 600.0
+        dx, dy = multi(lua, ns.Geo.ScreenOffset, -9460.0, 60.0, -9200.0, 420.0)
+        pts = [(segs[i][3], segs[i][4]) for i in range(1, len(segs) + 1)] + [(segs[i][1], segs[i][2]) for i in range(1, len(segs) + 1)]
+        assert min(math.hypot(px - dx * s, py - dy * s) for px, py in pts) < 3  # (drawn at once)
+        G.SetRoadMode(False)  # (the tools off: rebuilt now, once)
+        assert not Rec.pending and not R.GraphReady(0)
+    finally:
+        G.SetRoadMode(False)
+        R.WARM, R.SYNC_WALKS = False, True
+        ns.db.tracks = None
+        R.Reset()

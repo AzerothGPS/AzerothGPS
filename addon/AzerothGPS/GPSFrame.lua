@@ -462,6 +462,9 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
       if not stale then return segs end
     end
   end
+  -- (the road or wall tools on, with edits made: the network is rebuilt when they're turned off;
+  -- the roads as they were meanwhile, the edits drawn over them)
+  if not stale and ns.Record and ns.Record.pending then stale = roadIndex[cont] end
   local s = half / zoom
   local reach = zoom * 1.5
   local edge = half * 1.45 -- (the view's corners, turned heading-up)
@@ -3139,9 +3142,15 @@ function G.RoadHint()
   drawHint:Show()
 end
 
+-- The tools off: the edits made with them into the road network now (Record.Apply), once.
+local function ToolsOff()
+  if not G.roadMode and not G.wallMode and ns.Record and ns.Record.pending then ns.Record.Apply() end
+end
+
 function G.SetRoadMode(on)
   if on and G.ToolsRefused() then return false end
   G.roadMode = on and true or false
+  ToolsOff()
   if G.roadMode then G.wallMode = false end -- (one set of tools at a time)
   G.lasso, drag = nil, nil
   if G.drawMode then G.drawMode = false end
@@ -3157,6 +3166,7 @@ end
 function G.SetWallMode(on)
   if on and G.ToolsRefused() then return false end
   G.wallMode = on and true or false
+  ToolsOff()
   if G.wallMode then G.roadMode = false end
   G.lasso, drag = nil, nil
   if G.drawMode then G.drawMode = false end
@@ -3674,10 +3684,19 @@ end
 -- road network is being built). Run by the map window, or by the arrow window while the map
 -- is hidden (e.g. in combat). True when one finished (the route was invalidated to use it).
 G.WARM_MS = 5
+G.WARM_SHARE = 0.25 -- ... and at most this share of the last frame's time (a fast frame rate isn't eaten up)
+local lastPump
 function G.PumpSearches()
-  if not ns.Router.HasWork() then return false end
+  if not ns.Router.HasWork() then
+    lastPump = nil
+    return false
+  end
   local t0 = ns.PerfStart()
-  local budget = ns.Router.Warming and ns.Router.Warming() and G.WARM_MS or 1 -- (ms of this frame)
+  local now = debugprofilestop()
+  local frameMs = lastPump and now - lastPump or 16
+  lastPump = now
+  local budget = ns.Router.Warming and ns.Router.Warming()
+    and math.max(1, math.min(G.WARM_MS, frameMs * G.WARM_SHARE)) or 1 -- (ms of this frame)
   local done, fixed = ns.Router.Pump(debugprofilestop() + budget, debugprofilestop)
   if done then ns.Nav.SearchDone(fixed) end
   ns.PerfEnd("terrain search", t0)

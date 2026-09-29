@@ -842,6 +842,7 @@ end
 
 local BuildGraph
 local HostileSide
+local mergedRoads = {} -- [cont] = the roads with the overlays merged in (BuildGraph: kept between rebuilds)
 local function Graph(cont)
   -- (built for the player's faction: its guards' towns cost more; rebuilt if that changes)
   if graphs[cont] and graphs[cont].side ~= HostileSide() then graphs[cont] = nil end
@@ -867,10 +868,23 @@ function BuildGraph(cont)
   -- drops off ledges (a city's, a cave's): one way, a to b, and no part of the network's
   -- joining up. By road (the edge itself), as the numbers change below.
   local dropOf, caveOf = {}, {}
+  local noBridge = {} -- (a cave's nodes inside it: joined to the rest only by its roads out)
+  -- (the continent's roads with its overlays merged in don't depend on the player's drawn roads
+  -- or walls: worked out once and kept, so an edit rebuilds only what they change; copies of the
+  -- lists, which the walls below add to)
+  local merged = mergedRoads[cont]
+  local overlays = ns.RoadOverlays and ns.RoadOverlays[cont]
+  if merged and merged.roads == roads and merged.overlays == overlays and merged.nOverlays == (overlays and #overlays or 0) then
+    nodes, edges = {}, {}
+    for i = 1, #merged.nodes do nodes[i] = merged.nodes[i] end
+    for i = 1, #merged.edges do edges[i] = merged.edges[i] end
+    for k, v in pairs(merged.dropOf) do dropOf[k] = v end
+    for k, v in pairs(merged.caveOf) do caveOf[k] = v end
+    noBridge = merged.noBridge
+  else
   for ei, h in pairs(ns.RoadDrops and ns.RoadDrops[cont] or {}) do
     if edges[ei] then dropOf[edges[ei]] = h end
   end
-  local noBridge = {} -- (a cave's nodes inside it: joined to the rest only by its roads out)
   -- roads of a city's ruins up top (Data/Cities.lua), added to the continent's; its own
   -- roads that run through the ruins' walls there are left out. And the caves' roads
   -- (Data/Caves.lua), their ways out joined onto the continent's nearest road.
@@ -925,6 +939,14 @@ function BuildGraph(cont)
     end
     if extra.joins then R.JoinOnto(n2, e2, roadsEnd, base, extra.joins) end
     nodes, edges = n2, e2
+  end
+  local keep = { roads = roads, overlays = overlays, nOverlays = overlays and #overlays or 0,
+    nodes = {}, edges = {}, dropOf = {}, caveOf = {}, noBridge = noBridge }
+  for i = 1, #nodes do keep.nodes[i] = nodes[i] end
+  for i = 1, #edges do keep.edges[i] = edges[i] end
+  for k, v in pairs(dropOf) do keep.dropOf[k] = v end
+  for k, v in pairs(caveOf) do keep.caveOf[k] = v end
+  mergedRoads[cont] = keep
   end
   P1("router: build roads: overlays and caves", pt)
   pt = P0()

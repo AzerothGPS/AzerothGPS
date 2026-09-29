@@ -43,10 +43,24 @@ function R.Prune()
   if n > 0 then ns.Print(("%d of your drawn roads and walls are in the map data now"):format(n)) end
 end
 
--- Tracks changed: rebuild the road network (it includes them) and the route.
+-- Tracks changed: the walls at once, and the road network (it includes them) and the route
+-- rebuilt. While the road or wall tools are on, not after every edit: once, when they're turned
+-- off (R.pending meanwhile; the map shows the edits over the roads as they were: GPSFrame's
+-- LayoutRoads, only what's in view).
 function R.Changed()
   if ns.Passability and ns.Passability.RefreshWalls then ns.Passability.RefreshWalls() end
   if ns.GPS and ns.GPS.ClearEdges then ns.GPS.ClearEdges() end
+  if ns.GPS and (ns.GPS.roadMode or ns.GPS.wallMode) then
+    R.pending = true
+    if ns.GPS.Redraw then ns.GPS.Redraw() end
+    return
+  end
+  R.Apply()
+end
+
+-- The edits into the road network and the route (the tools turned off, or an edit made without them).
+function R.Apply()
+  R.pending = nil
   if ns.Router and ns.Router.Reset then ns.Router.Reset() end
   if ns.Nav and ns.Nav.Invalidate then ns.Nav.Invalidate(true, true) end
   if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
