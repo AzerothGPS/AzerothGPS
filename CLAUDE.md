@@ -340,6 +340,17 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   0 flagged trips. Turn anything it finds into a test with the trip's coordinates.
 - **Check the full test run before committing.** A new test passing isn't enough; older
   tests can break.
+- **A bug that comes back, or a kind of bug, gets a test that fails on it**, so a later change
+  can't bring it back unnoticed:
+  - `test_frame_budget.py`: lag spikes. Background work must pause often (every slice under
+    `FRAME_MS`), and showing the roads never builds them in the frame. Add a case for any new
+    long job (a new data build, a new warm-up step).
+  - `test_lua_lint.py`: the forward-reference trap (a file-level `local` used above its declaration).
+  - `test_every_addon_file_compiles_under_the_games_lua_5_1`: the 60-upvalue limit.
+  - `test_terrain_hpa.py`: stale prepared terrain blocks.
+  - `test_road_display.py`: roads vanishing zoomed out, or while being rebuilt after an edit.
+
+  Check that a new test fails without the fix before trusting it.
 - **Game side:**
   - After `install-addon`, `/reload` picks up changed Lua.
   - **New files, including images, need a full game restart.**
