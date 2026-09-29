@@ -67,3 +67,16 @@ def test_showing_the_roads_never_builds_them_in_the_frame(game):
         while R.HasWork():
             R.Pump(1e18, lua.eval("function() return 0 end"))
         R.Reset()
+
+
+def test_merging_many_drawn_roads_stays_cheap(game):
+    """Every road or wall edit merges all the drawn roads not in the data yet into the network:
+    that has to stay cheap as they pile up in a session (40 took about a second before)."""
+    lua, ns = game
+    rows = [f"{{ op = 'add', continent = 0, time = {i}, pts = {{ {-9460 + i * 37},{60 + (i % 5) * 50}, "
+            f"{-9400 + i * 37},{120 + (i % 5) * 50}, {-9350 + i * 37},{200 + (i % 5) * 50} }} }}" for i in range(1, 41)]
+    tracks = lua.eval("{ " + ", ".join(rows) + " }")
+    clock = lua.eval("function() return os.clock() * 1000 end")
+    a = clock()
+    ns.Router.WithTracks(ns.Roads[0], tracks, 0)
+    assert clock() - a < 250, f"merging 40 drawn roads took {clock() - a:.0f} ms"

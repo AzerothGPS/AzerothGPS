@@ -60,6 +60,7 @@ R.TRACK_ALONG_MIN_CITY = 4
 R.TRACK_CROSS = 3 -- yards: a drawn road this close to a road it isn't along crosses it
 R.TRACK_CROSS_CITY = 1.5
 R.TRACK_STUB = 15 -- yards: a cut road's dead-end stub shorter than this goes
+R.TRACK_REACH = 50 -- yards: the furthest from a drawn road that merging it touches (TRACK_SNAP and more)
 
 local function PolyLength(pts)
   local len = 0
@@ -198,9 +199,29 @@ end
 -- "remove" tracks cut out the road under them. Tracks the data already has
 -- (ns.RoadTracksIn, by time) are skipped. Returns node coordinates and edges (copies; the
 -- shipped data isn't changed). app/azerothgps/roads/graph.py does the same offline.
+-- A road's bounding box { x0, x1, y0, y1 } (its points from index 5), kept: the roads' own don't
+-- change, and merging the drawn roads asks for them over and over.
+local edgeBoxes = setmetatable({}, { __mode = "k" })
+local function EdgeBox(ed)
+  local b = edgeBoxes[ed]
+  if not b then
+    local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+    for k = 5, #ed - 1, 2 do
+      local x, y = ed[k], ed[k + 1]
+      if x < x0 then x0 = x end
+      if x > x1 then x1 = x end
+      if y < y0 then y0 = y end
+      if y > y1 then y1 = y end
+    end
+    b = { x0, x1, y0, y1 }
+    edgeBoxes[ed] = b
+  end
+  return b
+end
+
 function R.WithTracks(roads, tracks, cont)
-  -- (long loops over every road: in the background build, a pause every so often, not one long
-  -- frame; R.Breathe, defined further down, does nothing outside it)
+  -- (long loops: in the background build, a pause every so often, not one long frame;
+  -- R.Breathe, defined further down, does nothing outside it)
   local ticks = 0
   local function tick(every)
     ticks = ticks + 1
@@ -215,38 +236,6 @@ function R.WithTracks(roads, tracks, cont)
   end
   local city = ns.CityLevels and ns.CityLevels[cont]
   local snap = city and R.TRACK_SNAP_CITY or R.TRACK_SNAP
-  -- the node at (x, y) on the network (within `reach`; of the edges in `only` if given),
-  -- splitting an edge if needed; nil if none is close
-  local function attach(x, y, reach, only)
-    local best, bi, bAlong, bx, by
-    for ei, ed in ipairs(e) do
-      tick()
-      local along = 0
-      if only and not only[ed] then along = nil end
-      for i = 5, along and #ed - 3 or 0, 2 do
-        local ax, ay, cx, cy = ed[i], ed[i + 1], ed[i + 2], ed[i + 3]
-        local vx, vy = cx - ax, cy - ay
-        local L2 = vx * vx + vy * vy
-        local t = 0
-        if L2 > 0 then t = math.max(0, math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2)) end
-        local qx, qy = ax + vx * t, ay + vy * t
-        local d2 = (qx - x) ^ 2 + (qy - y) ^ 2
-        if not best or d2 < best then best, bi, bAlong, bx, by = d2, ei, along + math.sqrt(L2) * t, qx, qy end
-        along = along + math.sqrt(L2)
-      end
-    end
-    reach = reach or snap
-    if not best or best > reach * reach then return nil end
-    local ed = e[bi]
-    if bAlong < 3 then return ed[1], ed[5], ed[6] end
-    if bAlong > ed[3] - 3 then return ed[2], ed[#ed - 1], ed[#ed] end
-    local mid = newNode(bx, by)
-    local p1, p2 = SplitPolyline(ed, bAlong)
-    e[bi] = MakeEdge(ed[1], mid, p1, ed[4])
-    e[#e + 1] = MakeEdge(mid, ed[2], p2, ed[4])
-    if only then only[e[bi]], only[e[#e]] = true, true end
-    return mid, bx, by
-  end
   local function bounds(pts, i0)
     local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
     for k = i0 or 1, #pts - 1, 2 do
@@ -254,6 +243,111 @@ function R.WithTracks(roads, tracks, cont)
       y0, y1 = math.min(y0, pts[k + 1]), math.max(y1, pts[k + 1])
     end
     return x0, x1, y0, y1
+  end
+  -- The roads by grid square (their boxes'), and each one's place in `e`: a drawn road only
+  -- looks at the roads near it, not every road on the continent, and in `e`'s order (so the
+  -- result is the same as looking at all of them). Only the roads near the drawn ones are in it
+  -- (nothing further than TRACK_REACH from one is ever touched).
+  local BK = 128
+  local grid, where = {}, {}
+  local mine0 -- (the tracks' area, TRACK_REACH around them: the roads that can be touched)
+  local shipped = ns.RoadTracksIn or {}
+  local function wanted(t)
+    return t.continent == cont and t.pts and #t.pts >= 4 and not shipped[t.time or -1] and t.op ~= "wall" and t.op ~= "unwall"
+  end
+  for _, t in ipairs(tracks or {}) do
+    if wanted(t) then
+      local x0, x1, y0, y1 = bounds(t.pts)
+      if not mine0 then mine0 = { x0, x1, y0, y1 }
+      else mine0 = { math.min(mine0[1], x0), math.max(mine0[2], x1), math.min(mine0[3], y0), math.max(mine0[4], y1) } end
+    end
+  end
+  if not mine0 then return n, e end
+  local reach0 = R.TRACK_REACH
+  local function keys(ed, fn)
+    local bb = EdgeBox(ed)
+    for kx = math.floor(bb[1] / BK), math.floor(bb[2] / BK) do
+      for ky = math.floor(bb[3] / BK), math.floor(bb[4] / BK) do fn(kx * 65536 + ky) end
+    end
+  end
+  local function put(ed, i)
+    where[ed] = i
+    local bb = EdgeBox(ed)
+    if bb[2] < mine0[1] - reach0 or bb[1] > mine0[2] + reach0 or bb[4] < mine0[3] - reach0 or bb[3] > mine0[4] + reach0 then
+      return -- (far from every drawn road)
+    end
+    keys(ed, function(k)
+      local sq = grid[k]
+      if not sq then
+        sq = {}
+        grid[k] = sq
+      end
+      sq[ed] = true
+    end)
+  end
+  local function drop(ed)
+    where[ed] = nil
+    keys(ed, function(k)
+      local sq = grid[k]
+      if sq then sq[ed] = nil end
+    end)
+  end
+  for i, ed in ipairs(e) do
+    tick(1000)
+    put(ed, i)
+  end
+  -- The roads whose boxes overlap x0..x1, y0..y1, in `e`'s order.
+  local function near(x0, x1, y0, y1)
+    local seen, out = {}, {}
+    for kx = math.floor(x0 / BK), math.floor(x1 / BK) do
+      for ky = math.floor(y0 / BK), math.floor(y1 / BK) do
+        for ed in pairs(grid[kx * 65536 + ky] or {}) do
+          if not seen[ed] then
+            seen[ed] = true
+            local bb = EdgeBox(ed)
+            if bb[2] >= x0 and bb[1] <= x1 and bb[4] >= y0 and bb[3] <= y1 then out[#out + 1] = ed end
+          end
+        end
+      end
+    end
+    table.sort(out, function(a, b) return where[a] < where[b] end)
+    return out
+  end
+  -- the node at (x, y) on the network (within `reach`; of the edges in `only` if given),
+  -- splitting an edge if needed; nil if none is close
+  local function attach(x, y, reach, only)
+    local best, bi, bAlong, bx, by
+    reach = reach or snap
+    for _, ed in ipairs(near(x - reach, x + reach, y - reach, y + reach)) do
+      tick()
+      if not only or only[ed] then
+        local along = 0
+        for i = 5, #ed - 3, 2 do
+          local ax, ay, cx, cy = ed[i], ed[i + 1], ed[i + 2], ed[i + 3]
+          local vx, vy = cx - ax, cy - ay
+          local L2 = vx * vx + vy * vy
+          local t = 0
+          if L2 > 0 then t = math.max(0, math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2)) end
+          local qx, qy = ax + vx * t, ay + vy * t
+          local d2 = (qx - x) ^ 2 + (qy - y) ^ 2
+          if not best or d2 < best then best, bi, bAlong, bx, by = d2, where[ed], along + math.sqrt(L2) * t, qx, qy end
+          along = along + math.sqrt(L2)
+        end
+      end
+    end
+    if not best or best > reach * reach then return nil end
+    local ed = e[bi]
+    if bAlong < 3 then return ed[1], ed[5], ed[6] end
+    if bAlong > ed[3] - 3 then return ed[2], ed[#ed - 1], ed[#ed] end
+    local mid = newNode(bx, by)
+    local p1, p2 = SplitPolyline(ed, bAlong)
+    drop(ed)
+    e[bi] = MakeEdge(ed[1], mid, p1, ed[4])
+    put(e[bi], bi)
+    e[#e + 1] = MakeEdge(mid, ed[2], p2, ed[4])
+    put(e[#e], #e)
+    if only then only[e[bi]], only[e[#e]] = true, true end
+    return mid, bx, by
   end
   -- The stretches of road within `reach` of any of `lines` (flat point lists) cut out of
   -- the roads they're on (`parallel`: only where they run about parallel to it); the rest
@@ -291,18 +385,19 @@ function R.WithTracks(roads, tracks, cont)
       end
       return false
     end
-    local ends, kept = {}, {}
+    -- (only the roads near the lines can be cut: the rest stay as they are)
+    local cand = {}
+    for _, b in ipairs(boxes) do
+      for _, ed in ipairs(near(b[1] - reach, b[2] + reach, b[3] - reach, b[4] + reach)) do cand[ed] = true end
+    end
+    local ends, kept, fresh = {}, {}, {}
     for _, ed in ipairs(e) do
-      tick()
-      -- (a road nowhere near the lines stays as it is)
-      local ex0, ex1, ey0, ey1 = bounds(ed, 5)
-      local nearAny = false
-      for _, b in ipairs(boxes) do
-        if not (ex1 < b[1] - reach or ex0 > b[2] + reach or ey1 < b[3] - reach or ey0 > b[4] + reach) then nearAny = true end
-      end
-      local dense, flag, anyUnder = {}, {}, false
-      if nearAny then
+      tick(2000)
+      if not cand[ed] then
+        kept[#kept + 1] = ed
+      else
         -- its points every 2 yards or so, each under the lines or not
+        local dense, flag, anyUnder = {}, {}, false
         for i = 5, #ed - 3, 2 do
           local ax, ay, bx, by = ed[i], ed[i + 1], ed[i + 2], ed[i + 3]
           local m = math.max(1, math.ceil(math.sqrt((bx - ax) ^ 2 + (by - ay) ^ 2) / 2))
@@ -314,64 +409,82 @@ function R.WithTracks(roads, tracks, cont)
             anyUnder = anyUnder or f
           end
         end
-      end
-      if not anyUnder then
-        kept[#kept + 1] = ed
-      else
-        -- (a junction the cut took away from under another road: that road's end now)
-        if flag[1] then ends[#ends + 1] = { ed[1], dense[1], dense[2] } end
-        if flag[#flag] then ends[#ends + 1] = { ed[2], dense[#dense - 1], dense[#dense] } end
-        -- the stretches not under them, as roads of their own
-        local run = {}
-        local function flush(last)
-          if #run >= 4 then
-            local na = run.startsAtA and ed[1]
-            if not na then
-              na = newNode(run[1], run[2])
-              ends[#ends + 1] = { na, run[1], run[2] }
-              cutNodes[na] = true
+        if not anyUnder then
+          kept[#kept + 1] = ed
+        else
+          drop(ed)
+          -- (a junction the cut took away from under another road: that road's end now)
+          if flag[1] then ends[#ends + 1] = { ed[1], dense[1], dense[2] } end
+          if flag[#flag] then ends[#ends + 1] = { ed[2], dense[#dense - 1], dense[#dense] } end
+          -- the stretches not under them, as roads of their own
+          local run = {}
+          local function flush(last)
+            if #run >= 4 then
+              local na = run.startsAtA and ed[1]
+              if not na then
+                na = newNode(run[1], run[2])
+                ends[#ends + 1] = { na, run[1], run[2] }
+                cutNodes[na] = true
+              end
+              local nb = last and ed[2]
+              if not nb then
+                nb = newNode(run[#run - 1], run[#run])
+                ends[#ends + 1] = { nb, run[#run - 1], run[#run] }
+                cutNodes[nb] = true
+              end
+              local piece = MakeEdge(na, nb, run, ed[4])
+              kept[#kept + 1] = piece
+              fresh[piece] = true
             end
-            local nb = last and ed[2]
-            if not nb then
-              nb = newNode(run[#run - 1], run[#run])
-              ends[#ends + 1] = { nb, run[#run - 1], run[#run] }
-              cutNodes[nb] = true
+            run = {}
+          end
+          for j, f in ipairs(flag) do
+            if f then
+              if #run > 0 then flush(false) end
+            else
+              if #run == 0 then run.startsAtA = (j == 1) end
+              run[#run + 1], run[#run + 2] = dense[2 * j - 1], dense[2 * j]
             end
-            kept[#kept + 1] = MakeEdge(na, nb, run, ed[4])
           end
-          run = {}
+          if #run > 0 then flush(true) end
         end
-        for j, f in ipairs(flag) do
-          if f then
-            if #run > 0 then flush(false) end
-          else
-            if #run == 0 then run.startsAtA = (j == 1) end
-            run[#run + 1], run[#run + 2] = dense[2 * j - 1], dense[2 * j]
-          end
-        end
-        if #run > 0 then flush(true) end
       end
     end
     e = kept
+    for i, ed in ipairs(e) do
+      tick(2000)
+      if fresh[ed] then put(ed, i) else where[ed] = i end
+    end
     return ends
   end
-  local shipped = ns.RoadTracksIn or {}
+  -- How many roads (not in `skip`) end at node `nd` (at x, y).
+  local function degree(nd, x, y, skip)
+    local d = 0
+    for _, ed in ipairs(near(x - 0.5, x + 0.5, y - 0.5, y + 0.5)) do
+      if not skip[ed] then
+        if ed[1] == nd then d = d + 1 end
+        if ed[2] == nd then d = d + 1 end
+      end
+    end
+    return d
+  end
   for _, t in ipairs(tracks or {}) do
     local pts = t.pts
     -- (walls aren't roads: Passability has them)
-    if t.continent == cont and pts and #pts >= 4 and not shipped[t.time or -1] and t.op ~= "wall" and t.op ~= "unwall" then
+    if wanted(t) then
       if t.op == "remove" then
         if t.area then cut({ pts }, 0, false, true) else cut({ pts }, R.TRACK_REMOVE_YD) end
       else
         local over = city and R.TRACK_OVERLAP_CITY or R.TRACK_OVERLAP
         local crossYd = city and R.TRACK_CROSS_CITY or R.TRACK_CROSS
         local alongMin = city and R.TRACK_ALONG_MIN_CITY or R.TRACK_ALONG_MIN
-        local tx0, tx1, ty0, ty1 = bounds(pts)
         -- the roads' segments near the drawn line: the nearest one's distance and direction
+        -- (only those within `over`: a road further off is never along it nor crossed)
         local function nearest(x, y)
           local best, bvx, bvy = math.huge, 0, 0
-          for _, ed in ipairs(e) do
-            if not ed.far then
+          for _, ed in ipairs(near(x - over, x + over, y - over, y + over)) do
+            local bb = EdgeBox(ed)
+            if math.max(bb[1] - x, 0, x - bb[2]) ^ 2 + math.max(bb[3] - y, 0, y - bb[4]) ^ 2 < best then
               for i = 5, #ed - 3, 2 do
                 local ax, ay, cx, cy = ed[i], ed[i + 1], ed[i + 2], ed[i + 3]
                 local vx, vy = cx - ax, cy - ay
@@ -385,13 +498,6 @@ function R.WithTracks(roads, tracks, cont)
           end
           return math.sqrt(best), bvx, bvy
         end
-        local function markFar()
-          for _, ed in ipairs(e) do
-            tick(400)
-            local ex0, ex1, ey0, ey1 = bounds(ed, 5)
-            ed.far = ex1 < tx0 - over or ex0 > tx1 + over or ey1 < ty0 - over or ey0 > ty1 + over or nil
-          end
-        end
         -- the drawn line every 2 yards or so (its own points marked)
         local dx, dy, own = { pts[1] }, { pts[2] }, { true }
         for k = 1, #pts - 3, 2 do
@@ -403,7 +509,6 @@ function R.WithTracks(roads, tracks, cont)
         end
         local M = #dx
         -- along a road: close and about parallel, for a while (or at the drawn road's ends)
-        markFar()
         local along = {}
         for j = 1, M do
           tick(20)
@@ -433,7 +538,6 @@ function R.WithTracks(roads, tracks, cont)
         -- the road there goes: the drawn one replaces it
         local cutEnds = #alongLines > 0 and cut(alongLines, over, true) or {}
         -- where it crosses a road left: split there (a junction)
-        markFar()
         local splits, cd = {}, {}
         for q = 1, M do
           tick(20)
@@ -475,6 +579,7 @@ function R.WithTracks(roads, tracks, cont)
             if na ~= nb then
               local ed = MakeEdge(na, nb, line, R.SOURCE_RECORDED)
               e[#e + 1] = ed
+              put(ed, #e)
               mine[ed] = true
               joined[na], joined[nb] = true, true
             end
@@ -483,25 +588,18 @@ function R.WithTracks(roads, tracks, cont)
         end
         -- the replaced road's cut ends (and roads that met it there) join the drawn one
         -- (only those left a dead end: a road still going through a node needs nothing)
-        local deg = {}
-        for _, ed in ipairs(e) do
-          if not mine[ed] then
-            deg[ed[1]] = (deg[ed[1]] or 0) + 1
-            deg[ed[2]] = (deg[ed[2]] or 0) + 1
-          end
-        end
         for _, ce in ipairs(cutEnds) do
-          if not joined[ce[1]] and deg[ce[1]] == 1 then
+          if not joined[ce[1]] and degree(ce[1], ce[2], ce[3], mine) == 1 then
             joined[ce[1]] = true
             local nm, mx, my = attach(ce[2], ce[3], over + 4, mine)
             if nm and nm ~= ce[1] then
               local ed = MakeEdge(ce[1], nm, { ce[2], ce[3], mx, my }, R.SOURCE_RECORDED)
               e[#e + 1] = ed
+              put(ed, #e)
               mine[ed] = true
             end
           end
         end
-        for _, ed in ipairs(e) do ed.far = nil end
       end
     end
   end
