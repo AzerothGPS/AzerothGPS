@@ -85,3 +85,37 @@ def test_roads_stay_on_screen_while_rebuilt_after_an_edit(game):
         R.WARM, R.SYNC_WALKS = False, True
         ns.db.tracks = None
         R.Reset()
+
+
+def test_an_erased_road_goes_at_once_while_rebuilt(game):
+    lua, ns = game
+    G, R = ns.GPS, ns.Router
+    lua.execute("GetTime = function() return os.clock() end")
+    R.WARM, R.SYNC_WALKS = True, False
+    half, zoom, px, py = 130.0, 600.0, -9460.0, 60.0
+    s = half / zoom
+    try:
+        G.LayoutRoads(px, py, 0, 0, zoom, half)  # (built)
+        n = R.Nearest(0, px, py)  # a road point near Goldshire
+        rx, ry = n.px, n.py
+        box = [rx - 25, ry - 25, rx + 25, ry - 25, rx + 25, ry + 25, rx - 25, ry + 25, rx - 25, ry - 25]
+
+        def inside(segs):
+            out = 0
+            for i in range(1, len(segs) + 1):
+                for (ax, ay) in ((segs[i][1], segs[i][2]), (segs[i][3], segs[i][4])):
+                    for wx, wy in ((rx, ry),):
+                        dx, dy = multi(lua, ns.Geo.ScreenOffset, px, py, wx, wy)
+                        if abs(ax - dx * s) < 20 * s and abs(ay - dy * s) < 20 * s:
+                            out += 1
+            return out
+        assert inside(G.LayoutRoads(px, py, 0, 0, zoom, half)) > 0  # (the road is drawn there)
+        # circled to erase it: the network rebuilt in the background, the road there gone at once
+        ns.db.tracks = lua.eval("{}")
+        ns.db.tracks[1] = lua.table(op="remove", area=True, continent=0, time=9, pts=lua.table(*box))
+        R.Reset()
+        assert inside(G.LayoutRoads(px, py, 0, 0, zoom, half)) == 0
+    finally:
+        R.WARM, R.SYNC_WALKS = False, True
+        ns.db.tracks = None
+        R.Reset()

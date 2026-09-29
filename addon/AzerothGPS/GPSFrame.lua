@@ -397,7 +397,7 @@ function G.DrawnTrackIndex(cont)
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do
     local pts = t.pts
     if t.continent == cont and (t.op == nil or t.op == "add") and pts and #pts >= 4 and not shipped[t.time or -1] then
-      local e = { 0, 0, 0, RECORDED }
+      local e = { 0, 0, 0, RECORDED, time = t.time }
       local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
       for i = 1, #pts - 1, 2 do
         e[#e + 1], e[#e + 2] = pts[i], pts[i + 1]
@@ -407,6 +407,45 @@ function G.DrawnTrackIndex(cont)
     end
   end
   return out
+end
+-- The player's erasures not in the data yet: { { pts, area, reach, x0, x1, y0, y1, time }, ... }
+-- (while the road graph is rebuilt after one, the roads under it go at once, not after).
+function G.PendingErases(cont)
+  local out, shipped = {}, ns.RoadTracksIn or {}
+  local reach = ns.Router and ns.Router.TRACK_REMOVE_YD or 8
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    local pts = t.pts
+    if t.continent == cont and t.op == "remove" and pts and #pts >= 4 and not shipped[t.time or -1] then
+      local r = t.area and 0 or reach
+      local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+      for i = 1, #pts - 1, 2 do
+        x0, x1, y0, y1 = math.min(x0, pts[i]), math.max(x1, pts[i]), math.min(y0, pts[i + 1]), math.max(y1, pts[i + 1])
+      end
+      out[#out + 1] = { pts = pts, area = t.area, reach = r, x0 = x0 - r, x1 = x1 + r, y0 = y0 - r, y1 = y1 + r, time = t.time }
+    end
+  end
+  return out
+end
+-- Whether (x, y) is under one of those erasures (made after `since`, when given).
+function G.UnderErase(list, x, y, since)
+  for _, er in ipairs(list) do
+    if (not since or (er.time or 0) > since) and x >= er.x0 and x <= er.x1 and y >= er.y0 and y <= er.y1 then
+      local pts = er.pts
+      if er.area then
+        if ns.Router and ns.Router.InPolygon and ns.Router.InPolygon(pts, x, y) then return true end
+      else
+        local r2 = er.reach * er.reach
+        for k = 1, #pts - 3, 2 do
+          local ax, ay, bx, by = pts[k], pts[k + 1], pts[k + 2], pts[k + 3]
+          local vx, vy = bx - ax, by - ay
+          local L2 = vx * vx + vy * vy
+          local t = L2 > 0 and math.max(0, math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2)) or 0
+          if (ax + vx * t - x) ^ 2 + (ay + vy * t - y) ^ 2 <= r2 then return true end
+        end
+      end
+    end
+  end
+  return false
 end
 local roadCoarse = {} -- [cont] = { zoom, k }: the spacing that fitted last
 function G.LayoutRoads(px, py, cont, rot, zoom, half)
@@ -428,7 +467,12 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
   local edge = half * 1.45 -- (the view's corners, turned heading-up)
   local idx = stale and stale.idx or RoadIndex(cont)
   local lists = { idx }
-  if stale then lists[2] = G.DrawnTrackIndex(cont) end
+  local erases
+  if stale then
+    lists[2] = G.DrawnTrackIndex(cont)
+    erases = G.PendingErases(cont)
+    if #erases == 0 then erases = nil end
+  end
   local function Lay(k)
     local out, seen = {}, {}
     local cell = G.ROAD_STEP_UI * k
@@ -443,6 +487,9 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
             local lx, ly, lc -- last point kept (screen) and its grid cell
             local fx, fy, any -- the first point, and whether any line was kept
             for i = 5, #e, 2 do
+              if erases and G.UnderErase(erases, e[i], e[i + 1], e.time) then
+                lx, ly, lc = nil, nil, nil -- (erased just now: gone at once, not after the rebuild)
+              else
               local dx, dy = Geo.ScreenOffset(px, py, e[i], e[i + 1])
               dx, dy = Geo.Rotate(dx * s, dy * s, rot)
               local c = (math.floor(dx / cell) + 2048) * 4096 + math.floor(dy / cell) + 2048
@@ -469,6 +516,7 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
                   out[#out + 1] = { fx, fy, dx, dy, src }
                   if #out >= G.MAX_SEGMENTS then return out, true end
                 end
+              end
               end
             end
           end
