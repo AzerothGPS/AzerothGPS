@@ -62,3 +62,26 @@ def test_zooming_back_in_gets_the_fine_roads_back(game):
         z /= 1.06
         G.LayoutRoads(-9460.0, 60.0, 0, 0, z, 130.0)
     assert len(G.LayoutRoads(-9460.0, 60.0, 0, 0, 300.0, 130.0)) == first
+
+
+def test_roads_stay_on_screen_while_rebuilt_after_an_edit(game):
+    lua, ns = game
+    G, R = ns.GPS, ns.Router
+    lua.execute("GetTime = function() return os.clock() end")
+    R.WARM, R.SYNC_WALKS = True, False
+    try:
+        before = len(G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0))  # (built: shown)
+        assert before > 0
+        # a road drawn, the road network rebuilt in the background (as Record.Changed does)
+        ns.db.tracks = lua.eval("{ { op = 'add', continent = 0, time = 7, pts = { -9460,60, -9400,120, -9350,200 } } }")
+        R.Reset()
+        during = G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0)
+        assert len(during) >= before  # (the roads as they were, and the new one as drawn)
+        clock = lua.eval("function() return os.clock() * 1000 end")
+        while R.HasWork():
+            R.Pump(clock() + 5, clock)
+        assert len(G.LayoutRoads(-9460.0, 60.0, 0, 0, 600.0, 130.0)) > 0
+    finally:
+        R.WARM, R.SYNC_WALKS = False, True
+        ns.db.tracks = None
+        R.Reset()

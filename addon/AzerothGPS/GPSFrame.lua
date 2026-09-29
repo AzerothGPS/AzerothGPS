@@ -390,27 +390,50 @@ end
 -- roads left out. The grid is kept for the frames after (scaled with the zoom).
 local RECORDED = 9 -- (Router.SOURCE_RECORDED)
 G.ROAD_STEP_UI = 2
+-- The player's drawn roads not in the data yet, straight from their strokes, as index entries
+-- like RoadIndex's (drawn while the road graph is rebuilt after an edit).
+function G.DrawnTrackIndex(cont)
+  local out, shipped = {}, ns.RoadTracksIn or {}
+  for _, t in ipairs(ns.db and ns.db.tracks or {}) do
+    local pts = t.pts
+    if t.continent == cont and (t.op == nil or t.op == "add") and pts and #pts >= 4 and not shipped[t.time or -1] then
+      local e = { 0, 0, 0, RECORDED }
+      local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+      for i = 1, #pts - 1, 2 do
+        e[#e + 1], e[#e + 2] = pts[i], pts[i + 1]
+        x0, x1, y0, y1 = math.min(x0, pts[i]), math.max(x1, pts[i]), math.min(y0, pts[i + 1]), math.max(y1, pts[i + 1])
+      end
+      out[#out + 1] = { x0, x1, y0, y1, e }
+    end
+  end
+  return out
+end
 local roadCoarse = {} -- [cont] = { zoom, k }: the spacing that fitted last
 function G.LayoutRoads(px, py, cont, rot, zoom, half)
   local segs = {}
-  -- (the road graph not built yet, after a /reload: built in the background, drawn once ready)
+  -- (the road graph not built yet, after a /reload or a road or wall edit: built in the
+  -- background; meanwhile the roads as they were, and the player's drawn ones as drawn)
   local R = ns.Router
+  local stale
   if R and R.GraphReady and R.WARM and not R.SYNC_WALKS and GetTime then -- (no game clock, the tests: at once)
-    if not R.GraphReady(cont) then
-      R.WarmUp(cont, px, py)
-      return segs
+    local ready = R.GraphReady(cont)
+    if not ready then R.WarmUp(cont, px, py) end
+    if not ready or (R.Warming and R.Warming()) then -- (or its index for drawing still being built)
+      stale = roadIndex[cont]
+      if not stale then return segs end
     end
-    if R.Warming and R.Warming() then return segs end -- (its index for drawing still being built)
   end
   local s = half / zoom
   local reach = zoom * 1.5
   local edge = half * 1.45 -- (the view's corners, turned heading-up)
-  local idx = RoadIndex(cont)
+  local idx = stale and stale.idx or RoadIndex(cont)
+  local lists = { idx }
+  if stale then lists[2] = G.DrawnTrackIndex(cont) end
   local function Lay(k)
     local out, seen = {}, {}
     local cell = G.ROAD_STEP_UI * k
     for round = 1, 2 do -- the player's drawn roads first, then the rest
-      for _, b in ipairs(idx) do
+      for _, list in ipairs(lists) do for _, b in ipairs(list) do
         if b[2] > px - reach and b[1] < px + reach and b[4] > py - reach and b[3] < py + reach then
           local e = b[5]
           -- (drawn roads are truth: roads like any, before they're in the data too)
@@ -450,7 +473,7 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
             end
           end
         end
-      end
+      end end
     end
     return out, false
   end

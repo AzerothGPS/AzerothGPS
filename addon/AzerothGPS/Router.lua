@@ -199,6 +199,13 @@ end
 -- (ns.RoadTracksIn, by time) are skipped. Returns node coordinates and edges (copies; the
 -- shipped data isn't changed). app/azerothgps/roads/graph.py does the same offline.
 function R.WithTracks(roads, tracks, cont)
+  -- (long loops over every road: in the background build, a pause every so often, not one long
+  -- frame; R.Breathe, defined further down, does nothing outside it)
+  local ticks = 0
+  local function tick(every)
+    ticks = ticks + 1
+    if R.Breathe then R.Breathe(ticks, every or 200) end
+  end
   local n, e = {}, {}
   for i = 1, #roads.n do n[i] = roads.n[i] end
   for i = 1, #roads.e do e[i] = roads.e[i] end
@@ -213,6 +220,7 @@ function R.WithTracks(roads, tracks, cont)
   local function attach(x, y, reach, only)
     local best, bi, bAlong, bx, by
     for ei, ed in ipairs(e) do
+      tick()
       local along = 0
       if only and not only[ed] then along = nil end
       for i = 5, along and #ed - 3 or 0, 2 do
@@ -285,6 +293,7 @@ function R.WithTracks(roads, tracks, cont)
     end
     local ends, kept = {}, {}
     for _, ed in ipairs(e) do
+      tick()
       -- (a road nowhere near the lines stays as it is)
       local ex0, ex1, ey0, ey1 = bounds(ed, 5)
       local nearAny = false
@@ -378,6 +387,7 @@ function R.WithTracks(roads, tracks, cont)
         end
         local function markFar()
           for _, ed in ipairs(e) do
+            tick(400)
             local ex0, ex1, ey0, ey1 = bounds(ed, 5)
             ed.far = ex1 < tx0 - over or ex0 > tx1 + over or ey1 < ty0 - over or ey0 > ty1 + over or nil
           end
@@ -396,6 +406,7 @@ function R.WithTracks(roads, tracks, cont)
         markFar()
         local along = {}
         for j = 1, M do
+          tick(20)
           local d, vx, vy = nearest(dx[j], dy[j])
           local j0, j1 = math.max(j - 1, 1), math.min(j + 1, M)
           local wx, wy = dx[j1] - dx[j0], dy[j1] - dy[j0]
@@ -425,6 +436,7 @@ function R.WithTracks(roads, tracks, cont)
         markFar()
         local splits, cd = {}, {}
         for q = 1, M do
+          tick(20)
           cd[q] = nearest(dx[q], dy[q])
         end
         local q = 2
