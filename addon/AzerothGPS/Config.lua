@@ -29,6 +29,7 @@ local HELP = {
   "/agps draw [undo|list|delete <n>]  (road tools on/off: left-drag draws, right-drag erases, middle-drag pans)",
   "/agps minimap on|off     (minimap button)",
   "/agps debug              (API probe; see `agps probes`)",
+  "/agps debug route        (save your position and the route for a bug report; then /reload)",
 }
 
 local function OnOff(v, cur)
@@ -130,7 +131,26 @@ SlashCmdList.AZEROTHGPS = function(msg)
   elseif a == "reset" then
     ns.settings.gps = CopyTable(ns.DEFAULTS.gps)
   elseif a == "debug" then
-    if b == "interior" then
+    if b == "route" then
+      -- (for a bug report: where the player is and the route as it stands, saved for `agps probes`
+      -- style reading after a /reload: ns.db.routeDebug)
+      local N = ns.Nav
+      local x, y, c = ns.Geo.PlayerWorld()
+      local lvl = c and N.PlayerLevel and N.PlayerLevel(c) or c
+      local r = N.route
+      local pts = {}
+      for i = 1, math.min(#(r and r.pts or {}), 200) do pts[i] = r.pts[i] end
+      local stops = {}
+      for i, d in ipairs(N.stops) do stops[i] = { x = d.x, y = d.y, cont = d.cont, name = d.name } end
+      ns.db.routeDebug = { time = time(), x = x, y = y, cont = c, level = lvl,
+        z = N.PlayerZ and N.PlayerZ() or nil, indoors = N.Indoors and N.Indoors() or nil,
+        offroad = ns.settings.gps.offroad, stops = stops, pts = pts, kinds = r and r.kinds or nil,
+        pending = r and r.pending or nil, length = r and r.length or nil,
+        pendingEdits = ns.Record and ns.Record.pending or nil, roadMode = ns.GPS.roadMode, wallMode = ns.GPS.wallMode }
+      ns.Print(string.format("route saved for the bug report (%s stops, %d points): /reload to write it out",
+        #stops, #pts / 2))
+      return
+    elseif b == "interior" then
       for _, l in ipairs(ns.GPS.DebugInterior()) do ns.Print(l) end
     elseif b == "perf" then
       for _, l in ipairs(ns.PerfReport()) do ns.Print(l) end

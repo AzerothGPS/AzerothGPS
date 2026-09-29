@@ -1445,11 +1445,7 @@ local function PoiButton(i)
       ns.Layers.AddQuestToTooltip(GameTooltip, self.questID)
     end
     if self.note then GameTooltip:AddLine(self.note, 0.7, 0.7, 0.7) end
-    if self.preview then
-      GameTooltip:AddLine("Ask a guard for directions to go there", 0.4, 0.8, 1)
-    else
-      GameTooltip:AddLine("Double-click: add as a stop", 0.4, 0.8, 1)
-    end
+    GameTooltip:AddLine("Double-click: add as a stop", 0.4, 0.8, 1)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)
@@ -1472,7 +1468,6 @@ local function PoiButton(i)
   b:SetScript("OnDoubleClick", function(self)
     if self.cityMap or self.exit then return end
     if G.Held() then return HeldClick(self.wx, self.wy, self.level or view.cont) end -- (the holder's)
-    if self.preview then return end -- (a city place a guard hasn't pointed out: ask one)
     G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex) -- like a double-click on the map, with its name and icon
   end)
   poiButtons[i] = b
@@ -3368,14 +3363,6 @@ function G.AddPending(dxUI, dyUI)
   if G.Held() then -- (held by another addon: its double-click)
     local x, y = G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s)
     return HeldClick(x, y, view.cont)
-  end
-  -- (not on a city location a guard hasn't pointed out: that's asked of a guard)
-  local ccx, ccy = canvas:GetCenter()
-  for _, b in ipairs(poiButtons) do
-    if b:IsShown() and b.preview then
-      local bx, by = b:GetCenter()
-      if bx and (bx - ccx - dxUI) ^ 2 + (by - ccy - dyUI) ^ 2 <= 100 then return end
-    end
   end
   G.AddStopAt(G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s))
 end
