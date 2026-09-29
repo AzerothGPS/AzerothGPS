@@ -91,7 +91,9 @@ The addon is going public, so every change must keep it policy-safe:
   - `Config.lua`: slash commands.
   - `Api.lua`: the public `AzerothGPS` table for companion addons such as
     AzerothGPS-StreetView (`docs/api.md`): geometry, the cursor's world point, overlays drawn
-    on the map (`G.overlays`), and showing the road network on request (`G.roadOwners`).
+    on the map (`G.overlays`), showing the road network on request (`G.roadOwners`), and holding
+    the map for a game on it (`G.holders`, `G.Held`: no route lines, pins, crosshair or top panel;
+    double-clicks go to the holder).
   - `Bindings.xml`: the show/hide map key (loaded by the game, not listed in the toc; the
     names and `AzerothGPS_ToggleMap` are in Core.lua, the Set key button in Options.lua).
   - `Data/*.lua`: generated; don't edit by hand.

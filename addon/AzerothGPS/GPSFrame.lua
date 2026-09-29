@@ -1090,6 +1090,20 @@ end
 -- map's own (clipped, rotated, no fading). G.roadOwners[owner] = { r, g, b }: the road network
 -- is shown, in that color, while anyone asks (the player's own road option wins).
 G.overlays, G.roadOwners = {}, {}
+-- The map held by another addon (a game on it, AzerothGPS-StreetView's): G.holders[owner] =
+-- { click = fn(x, y, cont) }. While held, the route (still followed: Nav, the arrow window), the
+-- stops' pins, the crosshair with Confirm Route and the top panel aren't shown, and a
+-- double-click goes to the holder instead of making a stop.
+G.holders = {}
+function G.Held() return next(G.holders) ~= nil end
+local function HeldClick(x, y, cont)
+  for _, h in pairs(G.holders) do
+    if h.click then pcall(h.click, x, y, cont) end
+    return true
+  end
+  return false
+end
+G.HeldClick = HeldClick
 function G.ForcedRoadColor()
   for _, c in pairs(G.roadOwners) do return c end
 end
@@ -1281,6 +1295,7 @@ local function PoiButton(i)
   end)
   b:SetScript("OnDoubleClick", function(self)
     if self.cityMap or self.exit then return end
+    if G.Held() then return HeldClick(self.wx, self.wy, self.level or view.cont) end -- (the holder's)
     if self.preview then return end -- (a city place a guard hasn't pointed out: ask one)
     G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex) -- like a double-click on the map, with its name and icon
   end)
@@ -1452,6 +1467,10 @@ end
 
 -- Draw the pins: route stops (solid) and pending stops (lighter, removable).
 local function DrawStopPins(toScreen, viewCont)
+  if G.Held() then -- (held by another addon: no pins)
+    for _, b in ipairs(stopPins) do b:Hide() end
+    return
+  end
   local n = 0
   local function pin(d, title, pendingIndex, stopIndex)
     local x, y = Geo.ToContinent(d.cont, d.x, d.y, viewCont)
@@ -1673,7 +1692,7 @@ function G.Update()
   ns.Nav.Tick()
   local dest = ns.Nav.dest
   local route = not hidden and ns.Nav.Route(px, py, cont) or nil
-  if route then
+  if route and not G.Held() then -- (held by another addon: the route goes on, not drawn)
     -- Every part of the route, converted into this view's continent coordinates.
     local reach = half * 1.5
     local function toScreen(x, y)
@@ -1976,7 +1995,7 @@ function G.Update()
   G.stepsMore:SetShown(status ~= nil and not collapsed and not st.stepsAll and #ns.Nav.Steps() > 3)
   navPanel:SetHeight(navText:GetStringHeight() + 12 + (steps ~= "" and stepsText:GetStringHeight() + 4 or 0))
   -- closed with its X: hidden until the route changes (unless the X clears the route)
-  navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version())
+  navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version() and not G.Held())
   -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
   if fl.bar and fl.bar:IsShown() then G.PlaceFloorBar() end
   ns.PerfEnd("redraw: text", pt)
@@ -1992,9 +2011,10 @@ function G.Update()
   end
   -- Free look: crosshair and "Route Here" at the view center.
   local showCross = free ~= nil and free.cross and not (browse and ns.Maps[browse] and ns.Maps[browse].type <= 2)
+  if G.Held() then showCross = false end
   crossH:SetShown(showCross)
   crossV:SetShown(showCross)
-  routeBtn:SetShown(showCross or #pending > 0)
+  routeBtn:SetShown((showCross or #pending > 0) and not G.Held())
   -- with a route set: Clear Route (double-clicks add stops to it directly)
   routeBtn:SetText(#ns.Nav.stops > 0 and "Clear Route"
     or (#pending > 0 and ("Confirm Route (" .. #pending .. ")") or "Confirm Route"))
@@ -2204,6 +2224,18 @@ function G.Follow()
   pending = {}
   browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
   if recenter then recenter:Hide() end
+  elapsed = 1
+end
+
+-- Another addon's view: centered on (x, y) of `cont`, north up, `zoom` yards from the middle to
+-- the edge (at least MIN_ZOOM; more than MAX_ZOOM too, as the Route Here tour's). "Back to your
+-- position" returns as usual.
+function G.LookAt(cont, x, y, zoom)
+  browse, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil
+  browseZoom = math.max(MIN_ZOOM, zoom or S().zoom)
+  free = { x = x, y = y, rot = 0, cont = cont }
+  tour = nil
+  if recenter then recenter:Show() end
   elapsed = 1
 end
 
@@ -2906,6 +2938,10 @@ end
 
 -- Double-click on the map: a stop at that spot (up to Nav.MAX_STOPS, one marker each).
 function G.AddPending(dxUI, dyUI)
+  if G.Held() then -- (held by another addon: its double-click)
+    local x, y = G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s)
+    return HeldClick(x, y, view.cont)
+  end
   -- (not on a city location a guard hasn't pointed out: that's asked of a guard)
   local ccx, ccy = canvas:GetCenter()
   for _, b in ipairs(poiButtons) do

@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 2) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 3) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -46,5 +46,13 @@ center, +x right and +y up.
   faded. Pass `nil` to remove the overlay. Errors are logged like the map's own.
 - `ShowRoads(owner, on, {r, g, b})`: shows the road network in that color while any owner
   asks. The player's own road option wins.
+- `HoldMap(owner, on, onDoubleClick)`: while any owner holds the map (a game on it), the
+  route (still followed; the arrow window is unchanged), the stops' pins, the crosshair with
+  Confirm Route and the top panel aren't shown, and a double-click on the map or one of its
+  icons calls `onDoubleClick(x, y, continent)` instead of making a stop. `on = false` lets go.
+- `LookAt(cont, x, y, zoom)`: centers the map on that spot, north up, `zoom` yards from the
+  middle to the edge. "Back to your position" or `Follow()` returns to the player.
+- `Follow()`: back to following the player.
+- `ShowMap()`: shows the map window when the player has it hidden.
 - `Redraw()`: the map redraws on its next frame. The map skips redraws when nothing it knows
   about changed, so call this after changing what your overlay draws.

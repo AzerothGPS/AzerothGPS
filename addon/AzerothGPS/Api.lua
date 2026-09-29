@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 2 }
+local API = { version = 3 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -109,6 +109,32 @@ function API.ShowRoads(owner, on, color)
   GPS().roadOwners[owner] = on and (color or { 0.25, 0.6, 1 }) or nil
   GPS().Redraw()
 end
+-- Hold the map for a while (a game on it): while any owner holds it, the route (still followed,
+-- and the arrow window unchanged), the stops' pins, the crosshair with Confirm Route and the top
+-- panel aren't shown, and a double-click on the map (or on one of its icons) calls
+-- onDoubleClick(x, y, continent) instead of making a stop. on = false lets go.
+function API.HoldMap(owner, on, onDoubleClick)
+  local G = GPS()
+  if not G then return end
+  G.holders[owner] = on and { click = onDoubleClick } or nil
+  G.Redraw()
+end
+-- Look at a spot: the map centered on (x, y) of `cont`, north up, `zoom` yards from the middle
+-- to the edge. "Back to your position" (or API.Follow) returns to the player.
+function API.LookAt(cont, x, y, zoom)
+  if GPS() then GPS().LookAt(cont, x, y, zoom) end
+end
+-- Back to following the player.
+function API.Follow()
+  if GPS() then GPS().Follow() end
+end
+-- Show the map window (when the player has it hidden).
+function API.ShowMap()
+  if not (ns.settings and ns.settings.gps) then return end
+  ns.settings.gps.shown = true
+  if ns.Options and ns.Options.Apply then ns.Options.Apply() elseif GPS() then GPS().ApplySettings() end
+end
+
 -- Redraw the map on its next frame (after changing what an overlay draws).
 function API.Redraw()
   if GPS() then GPS().Redraw() end

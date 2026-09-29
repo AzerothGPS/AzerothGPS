@@ -3395,10 +3395,26 @@ def test_public_api_exposes_documented_functions(api):
     lua, ns, A = api
     for name in ("Instance", "InstanceFloors", "PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
                  "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
-                 "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton"):
+                 "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
+                 "HoldMap", "LookAt", "Follow", "ShowMap"):
         assert A[name] is not None, name
-    assert A.version == 2
+    assert A.version == 3
     assert A.MapButton("recenter") is None  # (no map built in the tests)
+
+
+def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
+    lua, ns, A = api
+    G = ns.GPS
+    got = lua.eval("{}")
+    click = lua.eval("function(t) return function(x, y, c) t.x, t.y, t.c = x, y, c end end")(got)
+    assert not G.Held()
+    A.HoldMap("game", True, click)
+    assert G.Held()
+    assert G.HeldClick(10, 20, 1) is True
+    assert (got.x, got.y, got.c) == (10, 20, 1)
+    A.HoldMap("game", False)
+    assert not G.Held()
+    assert G.HeldClick(1, 2, 0) is False
 
 
 def test_public_api_map_to_world_inverts_locate(api):
