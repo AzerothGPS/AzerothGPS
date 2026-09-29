@@ -416,3 +416,11 @@ def test_zephras_isle_is_an_inset_on_the_world_map(inst_env):
     G.OpenInset(it)
     assert G.BrowseState()[0] == it.map
     G.Follow()
+
+
+def test_no_terrain_view_in_the_open_sea(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "Data/Minimap.lua", "GPSFrame.lua")
+    G = ns.GPS
+    assert G.HasTerrain(0, -9460.0, 60.0)  # Goldshire
+    assert not G.HasTerrain(0, -10500.0, 5200.0)  # (the sea far west of Westfall: the terrain view would be black)

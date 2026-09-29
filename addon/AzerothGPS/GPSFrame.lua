@@ -46,6 +46,15 @@ end
 -- Returns a list of quads { fid, x, y, w, h, rot, l, r, t, b, sublayer } in UI units,
 -- relative to the frame center (+y up), for the view centered on world (px, py).
 -- `rot` is the map rotation (radians, CCW); l/r/t/b are texture coords.
+-- Whether `cont` has terrain (a minimap tile) at world (x, y): not the open sea, which the
+-- terrain view would show black.
+function G.HasTerrain(cont, x, y)
+  local tiles = ns.MinimapTiles and ns.MinimapTiles[cont]
+  if not tiles then return false end
+  local tx, ty = Geo.WorldToTile(x, y)
+  return tiles[math.floor(tx) * 64 + math.floor(ty)] ~= nil
+end
+
 function G.LayoutMinimap(px, py, cont, rot, zoom, half)
   local tiles = ns.MinimapTiles and ns.MinimapTiles[cont]
   local quads = {}
@@ -2449,8 +2458,10 @@ local function OnMapClick(dxUI, dyUI)
     return
   end
   if fromTerrain then
-    -- picked a spot: back to the terrain view, centered there (free view, crosshair)
+    -- picked a spot: back to the terrain view, centered there (free view, crosshair); not in
+    -- the open sea (no terrain there, nothing but black)
     local c = browseCont
+    if not G.HasTerrain(Geo.Base(c), x, y) then return end
     browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
     free = { x = x, y = y, rot = 0, cross = true, cont = c }
     recenter:Show()
