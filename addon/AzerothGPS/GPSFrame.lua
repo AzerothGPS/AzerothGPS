@@ -2357,6 +2357,23 @@ function G.LookAt(cont, x, y, zoom)
   elapsed = 1
 end
 
+-- The mouse wheel: zoom by `f`. A map being browsed zooms freely; the terrain view looked at
+-- from elsewhere (LookAt: no map browsed) never out past its tiles (MINIMAP_MAX_ZOOM, where it
+-- would turn into map art): only right-click leaves it. Returns the zoom.
+function G.WheelZoom(f)
+  if not browseZoom then
+    G.SetZoom(S().zoom * f)
+    return S().zoom
+  end
+  local z = math.max(MIN_ZOOM, browseZoom * f)
+  if not browse and f > 1 then
+    z = math.min(z, math.max(MAX_ZOOM, math.min(browseZoom, G.MINIMAP_MAX_ZOOM - 1)))
+  end
+  browseZoom = z
+  elapsed = 1
+  return z
+end
+
 -- From browsing a map (a world map style) to the terrain view: over the same spot, about
 -- as zoomed, not back on the player.
 function G.BrowseToTerrain()
@@ -3633,13 +3650,7 @@ function G.Init()
   frame:SetScript("OnMouseWheel", function(_, delta)
     tour = nil
     lastActivity = GetTime()
-    local f = delta > 0 and 0.8 or 1.25
-    if browseZoom then
-      browseZoom = math.max(MIN_ZOOM, browseZoom * f)
-      elapsed = 1
-    else
-      G.SetZoom(S().zoom * f)
-    end
+    G.WheelZoom(delta > 0 and 0.8 or 1.25)
   end)
   frame:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8X8",

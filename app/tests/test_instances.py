@@ -424,3 +424,24 @@ def test_no_terrain_view_in_the_open_sea(inst_env):
     G = ns.GPS
     assert G.HasTerrain(0, -9460.0, 60.0)  # Goldshire
     assert not G.HasTerrain(0, -10500.0, 5200.0)  # (the sea far west of Westfall: the terrain view would be black)
+
+
+def test_the_wheel_keeps_a_looked_at_terrain_view_terrain(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G = ns.GPS
+    ns.settings = lua.eval("{ gps = { zoom = 500 } }")
+    G.LookAt(0, -9460.0, 60.0, 2950.0)  # (another addon's view, wider than the wheel's own limit)
+    for _ in range(10):
+        z = G.WheelZoom(1.25)
+    assert z == pytest.approx(2950.0) and z < G.MINIMAP_MAX_ZOOM  # (never out to map art)
+    assert G.WheelZoom(0.8) == pytest.approx(2360.0)  # (in, as usual)
+    for _ in range(10):
+        z = G.WheelZoom(1.25)
+    assert z == pytest.approx(2500.0)  # (back out: up to the wheel's own limit)
+    # a map being browsed still zooms out freely
+    westfall = next(k for k in ns.Maps.keys() if ns.Maps[k].name == "Westfall" and ns.Maps[k].type == 3)
+    G.Browse(westfall)
+    z0 = G.WheelZoom(1.0)
+    assert G.WheelZoom(1.25) == pytest.approx(z0 * 1.25)
+    G.Follow()
