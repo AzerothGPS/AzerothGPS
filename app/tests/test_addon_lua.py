@@ -3490,6 +3490,26 @@ def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
     assert G.HeldClick(1, 2, 0) is False
 
 
+def test_no_road_or_wall_tools_while_the_map_is_held(api):
+    lua, ns, A = api
+    G = ns.GPS
+    said = lua.eval("{}")
+    ns.Print = lua.eval("function(t) return function(msg) t[#t + 1] = msg end end")(said)
+    G.SetRoadMode(True)
+    assert G.roadMode
+    A.HoldMap("game", True, None)  # (a game on the map starts)
+    assert not G.roadMode and not G.wallMode  # (turned off)
+    assert G.SetRoadMode(True) is False and not G.roadMode  # (refused while held, and said why)
+    assert G.SetWallMode(True) is False and not G.wallMode
+    assert G.StartDrawing("farm") is False and not G.drawMode
+    assert said[len(said)] == "not during a game on the map"
+    A.HoldMap("game", False)
+    assert not G.roadMode  # (not back by itself)
+    G.SetRoadMode(True)  # (turned on again after the game: fine)
+    assert G.roadMode
+    G.SetRoadMode(False)
+
+
 def test_nearest_road_waits_for_the_background_build(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Api.lua")

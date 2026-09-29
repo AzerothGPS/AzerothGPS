@@ -126,6 +126,7 @@ function API.HoldMap(owner, on, onDoubleClick)
   local G = GPS()
   if not G then return end
   G.holders[owner] = on and { click = onDoubleClick } or nil
+  if on and G.StopTools then G.StopTools() end -- (no road, wall or farming tools during it)
   G.Redraw()
 end
 -- Look at a spot: the map centered on (x, y) of `cont`, north up, `zoom` yards from the middle

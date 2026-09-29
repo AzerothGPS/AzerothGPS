@@ -2935,7 +2935,23 @@ end
 local drawHint
 
 -- `kind`: "farm" (a loop round nodes, the default) or "road" (a road to suggest).
+-- While another addon holds the map (a game on it: API.HoldMap), no drawing tools: turning one on
+-- says so and does nothing (false).
+function G.ToolsRefused()
+  if not G.Held() then return false end
+  ns.Print("not during a game on the map")
+  return true
+end
+
+-- A hold starting: every drawing tool off (they come back only when turned on again).
+function G.StopTools()
+  if G.roadMode then G.SetRoadMode(false) end
+  if G.wallMode then G.SetWallMode(false) end
+  if G.drawMode or G.lasso then G.StopDrawing() end
+end
+
 function G.StartDrawing(kind)
+  if G.ToolsRefused() then return false end
   if (kind or "farm") == "farm" and ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   G.drawMode, G.lasso, G.drawKind = true, nil, kind or "farm"
   if drawHint then
@@ -2967,6 +2983,7 @@ function G.RoadHint()
 end
 
 function G.SetRoadMode(on)
+  if on and G.ToolsRefused() then return false end
   G.roadMode = on and true or false
   if G.roadMode then G.wallMode = false end -- (one set of tools at a time)
   G.lasso, drag = nil, nil
@@ -2981,6 +2998,7 @@ end
 -- The wall tools: like the road tools, for walls (what routes can't walk through): on the
 -- map, left-drag draws one, right-drag erases them, middle-drag pans. On until toggled off.
 function G.SetWallMode(on)
+  if on and G.ToolsRefused() then return false end
   G.wallMode = on and true or false
   if G.wallMode then G.roadMode = false end
   G.lasso, drag = nil, nil
@@ -2993,13 +3011,13 @@ function G.SetWallMode(on)
 end
 
 function G.ToggleWallMode()
-  G.SetWallMode(not G.wallMode)
+  if G.SetWallMode(not G.wallMode) == false then return end
   ns.Print(G.wallMode and "wall tools on: left-drag draws a wall, right-drag erases walls, middle-drag pans (toggle off when done)"
     or "wall tools off")
 end
 
 function G.ToggleRoadMode()
-  G.SetRoadMode(not G.roadMode)
+  if G.SetRoadMode(not G.roadMode) == false then return end
   ns.Print(G.roadMode and "road tools on: left-drag draws a road, right-drag erases one, middle-drag pans (toggle off when done)"
     or "road tools off")
 end
