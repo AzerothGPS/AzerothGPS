@@ -300,6 +300,11 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   global instead, and fails only when called, so a load-only test won't catch it. Declare
   the local first (`local Foo` near the top, `Foo = function() ... end` later), and test the
   handler by calling it.
+- **Lua 5.1's limits are tighter:** a function may use at most 60 variables from outside it
+  (upvalues) and have 200 locals. `G.Init` is near the 60: group new file-level locals it uses
+  into a table (like `fl`). The whole file fails to load in game otherwise (the map never
+  opens), and Lua 5.5 in the tests allows 255; `test_every_addon_file_compiles_under_the_games_lua_5_1`
+  compiles every file with lupa's Lua 5.1.
 - **Lua 5.5 in the tests, 5.1 in the game:**
   - Loop variables are read-only.
   - `%d` needs integers.
