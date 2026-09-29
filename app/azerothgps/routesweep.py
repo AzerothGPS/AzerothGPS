@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 from .routecheck import _in_cave, _pts, _runtime
@@ -84,7 +85,9 @@ def _angles(pts, tx, ty) -> tuple[int, int]:
     return hair, zig
 
 
-def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log=print) -> dict:
+def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log=print,
+          minutes: float | None = None) -> dict:
+    """`trips` random trips (both modes each), or as many as fit in `minutes` when given."""
     from .extract.pipeline import CONTINENTS
 
     seed = seed if seed is not None else random.randrange(1 << 30)
@@ -102,7 +105,12 @@ def sweep(trips: int = 60, seed: int | None = None, only: str | None = None, log
             zones.append((m.name, int(mid), m.continent, [m.bounds[i] for i in range(1, 5)]))
     zones.sort()
     flagged, done, tried = [], 0, 0
+    deadline = time.time() + minutes * 60 if minutes else None
+    if deadline:
+        trips = 1 << 30
     while done < trips and tried < trips * 40 and zones:
+        if deadline and time.time() >= deadline:
+            break
         tried += 1
         name, mid, cont, (x0, y0, x1, y1) = rnd.choice(zones)
         sx, sy = rnd.uniform(x0, x1), rnd.uniform(y0, y1)
