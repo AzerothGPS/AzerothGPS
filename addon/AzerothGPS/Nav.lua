@@ -142,7 +142,7 @@ function N.RedStops(list)
       seen[z] = true
       local lo, hi = R.ZoneLevels(z)
       local m = ns.Maps and ns.Maps[z]
-      out[#out + 1] = { m and m.name or "?", lo, hi }
+      out[#out + 1] = { m and m.name or "?", lo, hi, z = z }
     end
   end
   return out[1] and out or nil
@@ -153,11 +153,49 @@ end
 local function AskRed(list, again)
   local zones = N.RedStops(list)
   if not zones or not (ns.GPS and ns.GPS.ConfirmRedZone) then return false end
-  return ns.GPS.ConfirmRedZone(zones, list, again)
+  return ns.GPS.ConfirmRedZone(zones, list, function()
+    for _, z in ipairs(zones) do N.redOk[z.z] = true end -- (asked: not again for passing through)
+    again()
+  end)
+end
+
+-- A route walking through a zone too high for the player (the way round there isn't, for
+-- their faction): asked once per zone per route, like a stop in one. Rides (boats, flights)
+-- over one don't count, nor the zones the route starts and ends in.
+N.RED_ROUTE_YD = 60 -- walked this far in one: asked
+N.redOk = {} -- zones the player said yes to, for this route
+function N.RedOnRoute(r, px, py, cont)
+  local R = ns.Router
+  local red = R and R.RedZones and R.RedZones()
+  if not (red and r and r.parts) then return nil end
+  local exempt = { [R.ZoneAt(Geo.Base(cont), px, py)] = true }
+  for _, d in ipairs(N.stops) do exempt[R.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true end
+  local yards = {}
+  for _, part in ipairs(r.parts) do
+    local c, pts = Geo.Base(part.cont), part.pts
+    for i = 1, #pts - 3, 2 do
+      if part.kinds[(i + 1) / 2] ~= N.KIND_TRANSPORT then
+        for z, yd in pairs(R.ZoneYards(c, pts[i], pts[i + 1], pts[i + 2], pts[i + 3])) do
+          if red[z] and not exempt[z] and not N.redOk[z] then yards[z] = (yards[z] or 0) + yd end
+        end
+      end
+    end
+  end
+  local out = {}
+  for z, yd in pairs(yards) do
+    if yd >= N.RED_ROUTE_YD then
+      local lo, hi = R.ZoneLevels(z)
+      local m = ns.Maps and ns.Maps[z]
+      out[#out + 1] = { m and m.name or "?", lo, hi, z = z, yards = yd }
+    end
+  end
+  table.sort(out, function(a, b) return a.yards > b.yards end)
+  return out[1] and out or nil
 end
 
 function N.SetStops(stops, fastest, force)
   if Locked(force) then return false end
+  if force ~= "red" then N.redOk = {} end -- (a new route: its zones asked about again)
   -- ("red": asked and confirmed; true: the dungeon route, its own)
   if not force and AskRed(stops, function() N.SetStops(stops, fastest, "red") end) then return false, true end
   N.stops, N.loop = {}, false
@@ -276,6 +314,7 @@ function N.Version() return version end
 
 function N.Clear()
   N.stops, N.loop = {}, false
+  N.redOk = {}
   Changed()
 end
 
@@ -1112,7 +1151,27 @@ function N.Route(px, py, cont)
   kept = N.route
   N.routeX, N.routeY, N.routeTime, N.routeOffroad, N.routeCont = px, py, now, offroad, cont
   if t0 then ns.PerfEnd("route calculation", t0) end
+  N.CheckRedRoute(px, py, cont, now)
   return N.route
+end
+
+-- Once a route is worked out (settled, or 3 s on): walking through a zone too high for the
+-- player asks first (GPSFrame's ConfirmRedRoute); no clears the route.
+local redChecked, redSeenAt = nil, nil
+function N.CheckRedRoute(px, py, cont, now)
+  local r = N.route
+  local d = N.dest
+  if not r or not d or d.corpse or redChecked == version then return end
+  if redSeenAt == nil or redSeenAt[1] ~= version then redSeenAt = { version, now } end
+  if r.pending and now - redSeenAt[2] < 3 then return end
+  redChecked = version
+  local zones = N.RedOnRoute(r, px, py, cont)
+  if not (zones and ns.GPS and ns.GPS.ConfirmRedRoute) then return end
+  ns.GPS.ConfirmRedRoute(zones, function()
+    for _, z in ipairs(zones) do N.redOk[z.z] = true end
+  end, function()
+    N.Clear()
+  end)
 end
 
 -- Keep route `old` instead of the recalculated `new`? When `new` is clearly longer (the

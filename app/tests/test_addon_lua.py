@@ -3526,7 +3526,7 @@ def test_a_stop_in_a_zone_too_high_is_confirmed_first(nav_env):
     assert ok is False and asked and len(N.stops) == 0  # not yet: asked first
     popup = lua.eval("ASKED")
     assert "Tarren Mill is in Hillsbrad Foothills (level 20-30)" in popup.text and "your level 13" in popup.text
-    popup.data()  # Yes
+    popup.data[1]()  # Yes
     assert len(N.stops) == 1 and N.stops[1].name == "Tarren Mill"
     N.Clear()
     lua.execute("ASKED = nil")
@@ -3539,7 +3539,7 @@ def test_a_stop_in_a_zone_too_high_is_confirmed_first(nav_env):
     assert lua.eval("ASKED") is None and len(N.stops) == 1  # (in the player's level: no question)
     ok, asked = N.AddStop(stop)
     assert not ok and asked and len(N.stops) == 1
-    lua.eval("ASKED").data()
+    lua.eval("ASKED").data[1]()
     assert len(N.stops) == 2
     # the player in that zone already, or the option off: no question
     N.Clear()
@@ -3632,3 +3632,42 @@ def test_every_addon_file_compiles_under_the_games_lua_5_1():
         if err:
             errors.append(err)
     assert not errors, errors
+
+
+def test_a_route_walking_through_a_zone_too_high_asks_first(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Zones.lua", "GPSFrame.lua")
+    N, R = ns.Nav, ns.Router
+    ns.settings = lua.eval("{ gps = {} }")
+    ns.Print = lua.eval("function() end")
+
+    def zone(name):
+        return next(k for k in ns.Maps.keys() if ns.Maps[k].name == name and ns.Maps[k].type == 3)
+
+    def at(name, u, v):
+        b = ns.Maps[zone(name)].bounds
+        return b[3] - v / 100 * (b[3] - b[1]), b[4] - u / 100 * (b[4] - b[2])
+
+    brill, alterac, tarren = at("Tirisfal Glades", 61, 52), at("Alterac Mountains", 50, 50), at("Hillsbrad Foothills", 61, 20)
+    lua.execute("UnitLevel = function() return 13 end")
+    lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
+    lua.execute("StaticPopupDialogs = {}; ASKED = nil; StaticPopup_Show = function(which, text, _, data) ASKED = { text = text, data = data } end")
+    N.stops = lua.table(lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill"))
+    N.dest = N.stops[1]
+    # a route over the mountains (as when there's no other way for the character's faction)
+    route = lua.eval("function(a, b, c, d, e, f) return { parts = { { cont = 0, kinds = { 0, 0 }, pts = { a, b, c, d, e, f } } } } end")(
+        brill[0], brill[1], alterac[0], alterac[1], tarren[0], tarren[1])
+    zones = N.RedOnRoute(route, brill[0], brill[1], 0)
+    assert zones and zones[1][1] == "Alterac Mountains"  # (Hillsbrad is where it goes: not asked about)
+    # asked on the map's confirm; No clears the route
+    N.route = route
+    N.CheckRedRoute(brill[0], brill[1], 0, 100)
+    popup = lua.eval("ASKED")
+    assert popup and "The only way there walks through Alterac Mountains" in popup.text
+    popup.data[2]()
+    assert len(N.stops) == 0
+    # Yes: not asked again for that zone on this route
+    N.stops = lua.table(lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill"))
+    N.redOk = lua.table()
+    N.redOk[zone("Alterac Mountains")] = True
+    assert N.RedOnRoute(route, brill[0], brill[1], 0) is None

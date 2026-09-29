@@ -3050,31 +3050,94 @@ end
 -- A route to a zone too high for the player (Nav.RedStops): "route there anyway?" `zones`:
 -- { { name, lo, hi }, ... }; `stops` the route's; `again` sets them (confirmed). True when asked
 -- (no popup here: false, and the route is set without asking).
-function G.ConfirmRedZone(zones, stops, again)
+-- "Yes / No" on the map (over its middle; the game's popup mid-screen while the map is hidden).
+-- onYes / onNo run on the answer. False when neither can be shown.
+local confirmBox
+function G.Confirm(text, onYes, onNo)
+  if frame and frame:IsShown() and topLayer then
+    if not confirmBox then
+      local c = CreateFrame("Frame", nil, topLayer, "BackdropTemplate")
+      c:SetFrameLevel(topLayer:GetFrameLevel() + 20)
+      c:SetWidth(280)
+      c:SetPoint("CENTER", canvas, "CENTER", 0, 20)
+      if c.SetBackdrop then
+        c:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        c:SetBackdropColor(0.05, 0.04, 0.03, 0.95)
+        c:SetBackdropBorderColor(1, 0.82, 0, 0.7)
+      end
+      c:EnableMouse(true)
+      c.text = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+      c.text:SetPoint("TOPLEFT", 12, -12)
+      c.text:SetPoint("TOPRIGHT", -12, -12)
+      c.text:SetJustifyH("LEFT")
+      local function Btn(label, x)
+        local ok, b = pcall(CreateFrame, "Button", nil, c, "UIPanelButtonTemplate")
+        if not ok then b = CreateFrame("Button", nil, c) end
+        b:SetSize(90, 22)
+        b:SetText(label)
+        b:SetPoint("BOTTOM", c, "BOTTOM", x, 10)
+        return b
+      end
+      c.yes = Btn(YES or "Yes", -50)
+      c.no = Btn(NO or "No", 50)
+      c.yes:SetScript("OnClick", function()
+        c:Hide()
+        if c.onYes then c.onYes() end
+      end)
+      c.no:SetScript("OnClick", function()
+        c:Hide()
+        if c.onNo then c.onNo() end
+      end)
+      confirmBox = c
+    end
+    local c = confirmBox
+    c.onYes, c.onNo = onYes, onNo
+    c.text:SetText(text)
+    c:SetHeight(c.text:GetStringHeight() + 56)
+    c:Show()
+    return true
+  end
   if not (StaticPopup_Show and StaticPopupDialogs) then return false end
-  if not StaticPopupDialogs.AZEROTHGPS_RED_ZONE then
-    StaticPopupDialogs.AZEROTHGPS_RED_ZONE = {
+  if not StaticPopupDialogs.AZEROTHGPS_CONFIRM then
+    StaticPopupDialogs.AZEROTHGPS_CONFIRM = {
       text = "%s", button1 = YES or "Yes", button2 = NO or "No",
-      OnAccept = function(_, data)
-        if data then
-          data()
-          if G.RouteChanged then G.RouteChanged() end
-        end
-      end,
+      OnAccept = function(_, data) if data and data[1] then data[1]() end end,
+      OnCancel = function(_, data, reason) if reason == "clicked" and data and data[2] then data[2]() end end,
       timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
   end
-  local ok, lvl = pcall(UnitLevel or error, "player")
+  StaticPopup_Show("AZEROTHGPS_CONFIRM", text, nil, { onYes, onNo })
+  return true
+end
+
+local function ZonesText(zones)
   local parts = {}
   for _, z in ipairs(zones) do
     parts[#parts + 1] = z[2] and string.format("%s (level %d-%d)", z[1], z[2], z[3] or z[2]) or z[1]
   end
+  local ok, lvl = pcall(UnitLevel or error, "player")
+  return table.concat(parts, ", "), ok and type(lvl) == "number" and ("your level " .. lvl) or "your level"
+end
+
+function G.ConfirmRedZone(zones, stops, again)
+  local names, lvl = ZonesText(zones)
   local what = #stops == 1 and ((stops[1].name and stops[1].name ~= "" and stops[1].name or "That stop") .. " is in ")
     or "Some of the stops are in "
-  local text = string.format("%s%s: too high for %s.\n\nRoute there anyway?", what, table.concat(parts, ", "),
-    ok and type(lvl) == "number" and ("your level " .. lvl) or "your level")
-  StaticPopup_Show("AZEROTHGPS_RED_ZONE", text, nil, again)
-  return true
+  local text = string.format("%s%s: too high for %s.\n\nRoute there anyway?", what, names, lvl)
+  return G.Confirm(text, function()
+    again()
+    G.RouteChanged()
+  end)
+end
+
+-- The route walks through a zone too high for the player, with no way round it for them.
+function G.ConfirmRedRoute(zones, onYes, onNo)
+  local names, lvl = ZonesText(zones)
+  local text = string.format("The only way there walks through %s: too high for %s.\n\nKeep this route?", names, lvl)
+  return G.Confirm(text, onYes, function()
+    onNo()
+    G.RouteChanged()
+  end)
 end
 
 -- Whether the route is a boss route in instance level `lvl` (any, with nil).
