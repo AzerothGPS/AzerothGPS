@@ -541,7 +541,11 @@ function L.QuestStops(onlyZone)
     if not x or secret(x) then return end
     if cityMap[mapID] and L.CityLevelAt(cont, x, y) == cityMap[mapID] then cont = cityMap[mapID] end
     if myZone then
-      local at = ns.GPS and ns.GPS.LocateWorld and ns.GPS.LocateWorld(Geo.Base(cont), x, y)
+      -- (the zone the ground there is in, Data/Zones.lua; zones' map outlines overlap: by them a
+      -- Tirisfal spot by its eastern edge could be in Western Plaguelands)
+      local R = ns.Router
+      local at = R and R.ZoneAt and R.ZoneAt(Geo.Base(cont), x, y) or 0
+      if at == 0 then at = ns.GPS and ns.GPS.LocateWorld and ns.GPS.LocateWorld(Geo.Base(cont), x, y) end
       if L.ZoneOf(at) ~= myZone then
         placed[id] = true -- (found, just not here)
         counts.elsewhere = counts.elsewhere + 1

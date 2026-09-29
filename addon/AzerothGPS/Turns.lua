@@ -7,8 +7,8 @@ local T = {}
 ns.Turns = T
 
 T.WINDOW = 35 -- yards before/after a point to measure how much the route bends there
-T.MIN_ANGLE = 35 -- degrees: off-road, a curve turning less than this is just "continue"
-T.JUNCTION_ANGLE = 25 -- degrees: at a road junction, from this much it's a turn
+T.MIN_ANGLE = 50 -- degrees: off-road, a curve turning less than this is just "continue" (the arrow points the way)
+T.JUNCTION_ANGLE = 40 -- degrees: at a road junction, from this much it's a turn (less: straight on)
 T.ROAD_BEND_ANGLE = 75 -- degrees: along a road away from junctions, only bends this sharp
 T.BEND_START = 8 -- degrees: points bending at least this much belong to a curve
 T.END_QUIET = 25 -- yards: no instructions this close to the stop ("Arrive" covers it)
@@ -208,15 +208,23 @@ function T.Maneuvers(path, stopLabel)
           last = out[j].dist
         end
       end
-      if #run >= 2 then
-        local net = 0
-        for _, j in ipairs(run) do net = net + out[j].angle end
+      do
+        -- (the heading before the run and after it: a jog comes back to the same one, even when
+        -- its gentler bends were too slight to be turns and one sharp one is left)
         local s0, s1 = out[run[1]].dist, out[run[#run]].dist
-        local ax, ay = T.PointAt(path, s0 - T.WINDOW)
-        local bx, by = T.PointAt(path, s0)
-        local cx, cy = T.PointAt(path, math.min(path.total, s1 + T.WINDOW))
-        local L = Dist(ax, ay, bx, by)
-        local off = L > 0 and math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) / L or math.huge
+        local p1x, p1y = T.PointAt(path, math.max(0, s0 - 2 * T.WINDOW))
+        local p2x, p2y = T.PointAt(path, math.max(0, s0 - T.WINDOW))
+        local q1x, q1y = T.PointAt(path, math.min(path.total, s1 + T.WINDOW))
+        local q2x, q2y = T.PointAt(path, math.min(path.total, s1 + 2 * T.WINDOW))
+        local net = 180
+        if (p2x - p1x) ^ 2 + (p2y - p1y) ^ 2 >= 1 and (q2x - q1x) ^ 2 + (q2y - q1y) ^ 2 >= 1 then
+          net = math.deg(atan2(q2y - q1y, q2x - q1x) - atan2(p2y - p1y, p2x - p1x))
+          while net > 180 do net = net - 360 end
+          while net < -180 do net = net + 360 end
+        end
+        -- (how far after the run the route is from the line it was on before it)
+        local L = Dist(p1x, p1y, p2x, p2y)
+        local off = L > 0 and math.abs((p2x - p1x) * (q1y - p1y) - (p2y - p1y) * (q1x - p1x)) / L or math.huge
         -- (not on hilly ground: winding there may be the way up, and worth saying)
         local hilly = false
         local P = ns.Passability

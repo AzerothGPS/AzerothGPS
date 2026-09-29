@@ -649,6 +649,15 @@ end
 -- The smallest zone/city map on continent `cont` containing world (x, y), with the
 -- point's map coordinates (0-1): returns uiMapID, name, mx, my.
 function G.LocateWorld(cont, x, y)
+  -- (the zone the ground there is in, Data/Zones.lua, when it has it: the zones' outlines
+  -- overlap, and a third of Tirisfal's ground is inside Western Plaguelands' by them)
+  local R = ns.Router
+  local z = R and R.ZoneAt and R.ZoneAt(cont, x, y)
+  local zm = z and z ~= 0 and ns.Maps and ns.Maps[z]
+  local zb = zm and zm.bounds
+  if zb and x >= zb[1] and x <= zb[3] and y >= zb[2] and y <= zb[4] then
+    return z, zm.name, (zb[4] - y) / (zb[4] - zb[2]), (zb[3] - x) / (zb[3] - zb[1])
+  end
   local best, bestArea
   for id, m in pairs(ns.Maps or {}) do
     local b = m.bounds

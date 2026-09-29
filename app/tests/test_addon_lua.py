@@ -3696,3 +3696,15 @@ def test_a_dungeons_way_in_is_learned_and_shared(env, tmp_path, monkeypatch):
     monkeypatch.setattr(X, "ENTRANCES", tmp_path / "instance_entrances.json")
     assert X.merge_entrances(X.parse_shared_entrances(text), log=lambda *a: None) == 1
     assert X.merge_entrances(X.parse_shared_entrances(text), log=lambda *a: None) == 0  # (known now)
+
+
+def test_a_gentle_bend_is_straight_on(turns):
+    lua, ns = turns
+    # off-road east, then a 30 degree bend (running straight along the route: no "Slight right")
+    p = path_of(lua, ns, [(0, 0), (0, -300), (-150, -560), (-300, -820)], [1, 1, 1])
+    got, _ = maneuvers(lua, ns, p)
+    assert [g[0] for g in got] == ["arrive"]
+    # a real turn still is one
+    p = path_of(lua, ns, [(0, 0), (0, -300), (300, -300), (600, -300)], [1, 1, 1])
+    got, _ = maneuvers(lua, ns, p)
+    assert got[0][2] == "Turn left"
