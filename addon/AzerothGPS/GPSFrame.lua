@@ -830,6 +830,48 @@ function G.InstanceFloors(inst)
   return out
 end
 
+-- A dungeon's bosses in the usual order (optional ones left out; those without an order after,
+-- as listed): { boss row, ... }.
+function G.BossOrder(lvl)
+  local info = ns.Instances and ns.Instances[lvl]
+  local list = {}
+  for i, b in ipairs(info and info.bosses or {}) do
+    if not b.optional then list[#list + 1] = { b = b, key = (b.order or 1000) * 1000 + i } end
+  end
+  table.sort(list, function(a, c) return a.key < c.key end)
+  local out = {}
+  for i, e in ipairs(list) do out[i] = e.b end
+  return out
+end
+
+-- The usual way through a dungeon, drawn on its map: from its (first) way in, boss by boss in
+-- the usual order, along its roads. World points { x, y, ... }; worked out when first shown
+-- (again every 2 s while a terrain search it needs runs), then kept.
+local suggested = {}
+function G.SuggestedPath(inst)
+  local c = suggested[inst]
+  local now = GetTime and GetTime() or 0
+  if c and (c.done or now - c.at < 2) then return c.pts end
+  local info = ns.Instances and ns.Instances[inst]
+  local R = ns.Router
+  local e = info and info.entrances and info.entrances[1]
+  if not (e and R and R.Route) then return {} end
+  local pts, pending = {}, false
+  local x, y = e[4], e[5]
+  for _, b in ipairs(G.BossOrder(inst)) do
+    local ok, r = pcall(R.Route, inst, x, y, b[3], b[4], { offroad = false })
+    if ok and r and r.pts then
+      pending = pending or r.pending
+      for i = 1, #r.pts - 1, 2 do
+        pts[#pts + 1], pts[#pts + 2] = r.pts[i], r.pts[i + 1]
+      end
+    end
+    x, y = b[3], b[4]
+  end
+  suggested[inst] = { pts = pts, at = now, done = not pending }
+  return pts
+end
+
 -- The floor shown in a dungeon's map: 0 all of them, else counted from the top. Picked with the
 -- mouse wheel (G.FloorWheel); until then the player's (at height pz, in it), else all.
 local floorSel, floorInst, floorBaseZoom
@@ -1157,6 +1199,7 @@ local function PoiButton(i)
 end
 
 local INSTANCE_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
+local SUGGESTED_COLOR = { 1, 0.78, 0.15 } -- a dungeon's usual way through, on its map
 local BOSS_ICON = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
 local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 
@@ -1371,9 +1414,10 @@ function G.Update()
     instArt = #quads > 0
     local n = #floors
     if floorText then
-      floorText:SetText(n < 2 and "" or instFloor == 0
+      local route = st.layerInstances ~= false and "\n|cffffc726Gold: the usual way through, boss by boss|r" or ""
+      floorText:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0
         and string.format("All %d floors  |cff9d9d9d(scroll in for each)|r", n)
-        or string.format("Floor %d of %d, from the top  |cff9d9d9d(scroll)|r", instFloor, n))
+        or string.format("Floor %d of %d, from the top  |cff9d9d9d(scroll)|r", instFloor, n)) .. route)
     end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
@@ -1413,6 +1457,20 @@ function G.Update()
   if inst then -- a dungeon's map: its floors' outline where there's no art (and walls drawn in it)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, inst, rot, zoom, half, not instArt)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], sg.edge and 8 or 7, sg.edge and 2 or 3)
+    end
+    -- the usual way through, boss by boss (gold, dotted; a route set in here goes over it)
+    if not browse and st.layerInstances ~= false then
+      local path, reach = G.SuggestedPath(inst), half * 1.5
+      local lx, ly
+      for i = 1, #path - 1, 2 do
+        local dx, dy = Geo.ScreenOffset(cx, cy, path[i], path[i + 1])
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if lx and not ((lx > reach and dx > reach) or (lx < -reach and dx < -reach)
+            or (ly > reach and dy > reach) or (ly < -reach and dy < -reach)) then
+          AddSeg(lx, ly, dx, dy, SUGGESTED_COLOR, 3, 0.85, true, true)
+        end
+        lx, ly = dx, dy
+      end
     end
   elseif st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
     local wc = (here and onMe) and ns.Nav.PlayerLevel(cont) or viewCont -- (the level shown: the player's only while the view is on them)
@@ -2744,23 +2802,13 @@ end
 -- The boss route's stops for instance level `lvl`: its bosses in the usual order (those
 -- without one after, by the order they're listed), not the optional ones nor the dead.
 function G.BossStops(lvl)
-  local info = ns.Instances and ns.Instances[lvl]
-  if not info then return {}, 0 end
-  local list, dead = {}, 0
-  for i, b in ipairs(info.bosses or {}) do
-    if not b.optional then
-      if ns.Nav.BossDead({ cont = lvl, boss = b[2] }) then
-        dead = dead + 1
-      else
-        list[#list + 1] = { b = b, key = (b.order or 1000) * 1000 + i }
-      end
+  local stops, dead = {}, 0
+  for _, b in ipairs(G.BossOrder(lvl)) do
+    if ns.Nav.BossDead({ cont = lvl, boss = b[2] }) then
+      dead = dead + 1
+    else
+      stops[#stops + 1] = { x = b[3], y = b[4], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
     end
-  end
-  table.sort(list, function(a, c) return a.key < c.key end)
-  local stops = {}
-  for _, e in ipairs(list) do
-    local b = e.b
-    stops[#stops + 1] = { x = b[3], y = b[4], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
   end
   return stops, dead
 end

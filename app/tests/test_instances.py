@@ -317,3 +317,30 @@ def test_dungeon_route_holds_off_other_routes(inst_env):
     lua.execute("UnitPosition = function() return nil end")
     G.DungeonEntered()
     assert len(N.stops) == 0
+
+
+def test_a_dungeons_map_shows_the_usual_way_through(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G = ns.GPS
+    order = G.BossOrder(DM)
+    names = [order[i][1] for i in range(1, len(order) + 1)]
+    assert names[0] == "Rhahk'Zor" and names[-1] == "Edwin VanCleef" and "Cookie" not in names
+    path = G.SuggestedPath(DM)
+    pts = [(path[i], path[i + 1]) for i in range(1, len(path), 2)]
+    assert len(pts) > 20
+    assert math.hypot(pts[0][0] - DM_INSIDE[0], pts[0][1] - DM_INSIDE[1]) < 1  # from the way in
+    last = order[len(order)]
+    assert math.hypot(pts[-1][0] - last[3], pts[-1][1] - last[4]) < 15  # to the last boss
+    # past every boss, in order
+    at = 0
+    for b in names:
+        row = boss(ns, DM, b)
+        near = [k for k, (x, y) in enumerate(pts) if k >= at and math.hypot(x - row[3], y - row[4]) < 15]
+        assert near, b
+        at = near[0]
+    # along the dungeon's floors: no long straight cuts through its walls
+    P = ns.Passability
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        if math.hypot(x2 - x1, y2 - y1) > 30:
+            assert P.SegmentCost(DM, x1, y1, x2, y2) is not None
