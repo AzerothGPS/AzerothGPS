@@ -80,3 +80,12 @@ def test_merging_many_drawn_roads_stays_cheap(game):
     a = clock()
     ns.Router.WithTracks(ns.Roads[0], tracks, 0)
     assert clock() - a < 250, f"merging 40 drawn roads took {clock() - a:.0f} ms"
+
+
+@pytest.mark.parametrize("cont", [0, 1])
+def test_cave_entrances_are_worked_out_within_a_frame(game, cont):
+    lua, ns = game
+    clock = lua.eval("function() return os.clock() * 1000 end")
+    a = clock()
+    ns.GPS.CaveEntrances(cont)
+    assert clock() - a < FRAME_MS

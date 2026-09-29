@@ -33,6 +33,7 @@ ns.DEFAULTS = {
     layerOre = true, -- ... and ore
     layerCity = true, -- city locations guards pointed out (trainers, bank, ...)
     layerInstances = true, -- dungeon and raid entrances (click one for its map, with its bosses)
+    layerCaves = true, -- cave and mine entrances (double-click one for a stop)
     approachZoom = true, -- zoom in near the next stop, back out once there
     -- routing
     offroad = true, -- straight across open ground, roads only where needed

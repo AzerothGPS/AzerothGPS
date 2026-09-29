@@ -119,3 +119,23 @@ def test_an_erased_road_goes_at_once_while_rebuilt(game):
         R.WARM, R.SYNC_WALKS = False, True
         ns.db.tracks = None
         R.Reset()
+
+
+def test_cave_entrances_sit_at_their_caves(game):
+    lua, ns = game
+    G, P = ns.GPS, ns.Passability
+    for cont, low, high in ((0, 170, 400), (1, 170, 500)):
+        caves = ns.Caves[cont]
+        marks = G.CaveEntrances(cont)
+        assert low <= len(marks) <= high  # (about one or two a cave: 175 caves each)
+        names = {caves[i][1] for i in range(1, len(caves) + 1)}
+        for i in range(1, len(marks) + 1):
+            m = marks[i]
+            assert m.name in names or m.name == "Cave"
+            # (at its cave: within its grid's rectangle, or just outside at the mouth)
+            best = min(
+                math.hypot(max(b[0] - m.x, 0, m.x - b[1]), max(b[2] - m.y, 0, m.y - b[3]))
+                for b in (multi(lua, P.GridBounds, caves[k][2]) for k in range(1, len(caves) + 1)))
+            assert best <= 30
+    names0 = {G.CaveEntrances(0)[i].name for i in range(1, len(G.CaveEntrances(0)) + 1)}
+    assert {"Jasperlode Mine", "Fargodeep Mine"} <= names0

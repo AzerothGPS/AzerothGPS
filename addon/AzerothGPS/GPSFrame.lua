@@ -1477,6 +1477,7 @@ local function PoiButton(i)
 end
 
 local INSTANCE_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
+local CAVE_ICON = "Interface\\Icons\\INV_Pick_02"
 local SUGGESTED_COLOR = { 1, 0.78, 0.15 } -- a dungeon's usual way through, on its map
 local SUGGESTED_NEXT = { 1, 0.95, 0.45 } -- ... its stretch to the next boss still up
 local DOCK_ICON = { zeppelin = "Interface\\AddOns\\AzerothGPS\\Media\\Zeppelin",
@@ -1556,6 +1557,11 @@ local function DrawPois(pois, zoom)
         b.note = (p.raid and "Raid" or "Dungeon") .. ". Click: show its map"
         b.instance = p.instance
         b:SetSize(20, 20)
+      elseif p[1] == 11 then -- a cave's or mine's way in
+        ns.SetIcon(b.icon, "atlas:CaveUnderground-Down", CAVE_ICON)
+        b.stopTex, b.questID = CAVE_ICON, nil
+        b.note = "Cave entrance. Double-click: a stop there"
+        b:SetSize(16, 16)
       elseif p[1] == 7 then -- a boss, in a dungeon's map
         ns.SetIcon(b.icon, BOSS_ICON)
         b.stopTex, b.questID = BOSS_ICON, nil
@@ -2102,6 +2108,16 @@ function G.Update()
         dx, dy = Geo.Rotate(dx * s, dy * s, rot)
         if math.abs(dx) <= half and math.abs(dy) <= half and not (zoomedOut and e.shared) then
           pois[#pois + 1] = { 6, dx, dy, e.name, e.x, e.y, instance = e.level, raid = e.raid, level = e.cont }
+        end
+      end
+    end
+    -- cave and mine entrances (not on a continent's map: too many there): double-click for a stop
+    if st.layerCaves ~= false and not (bm and bm.type == 2) then
+      for _, e in ipairs(G.CaveEntrances(Geo.Base(viewCont))) do
+        local dx, dy = Geo.ScreenOffset(cx, cy, e.x, e.y)
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if math.abs(dx) <= half and math.abs(dy) <= half then
+          pois[#pois + 1] = { 11, dx, dy, e.name, e.x, e.y }
         end
       end
     end
@@ -2677,6 +2693,93 @@ function G.ShowCity(id)
   free = { x = cx, y = cy, rot = 0, cross = true, cont = m.continent, interior = interior, city = id }
   if recenter then recenter:Show() end
   elapsed = 1
+end
+
+-- Caves and mines (Data/Caves.lua) ----------------------------------------------------------
+
+-- The caves' and mines' ways in on continent `cont`: { { x, y, name } }. Their mouths are in the
+-- caves' road data (caves.py): the nodes on the ground outside each opening, written into
+-- `bridge` along with the joins onto the land's roads, so bridge less joins. A cave's mouth
+-- nodes within CAVE_MOUTH_MERGE yd are one way in (at the node nearest their middle), named
+-- after the cave whose grid it opens from (the nearest; "Cave" when it has no name). Worked out
+-- once per continent, by buckets (no frame spent on it).
+G.CAVE_MOUTH_MERGE = 60
+local caveEntrances = {}
+function G.CaveEntrances(cont)
+  local list = caveEntrances[cont]
+  if list then return list end
+  list = {}
+  caveEntrances[cont] = list
+  local P, caves = ns.Passability, ns.Caves and ns.Caves[cont]
+  -- (the caves' roads: the first entry marked cave, from Data/Caves.lua; the capitals' floors
+  -- under others are marked so too, and come after it: Data/Capitals.lua loads later)
+  local entry
+  for _, o in ipairs(ns.RoadOverlays and ns.RoadOverlays[cont] or {}) do
+    if o.cave then
+      entry = o
+      break
+    end
+  end
+  if not (P and P.GridBounds and caves and entry and entry.n and entry.bridge) then return list end
+  -- the caves' grid rectangles, by 256-yd bucket
+  local B, buckets, boxes = 256, {}, {}
+  for i, c in ipairs(caves) do
+    local x0, x1, y0, y1 = P.GridBounds(c[2])
+    if x0 then
+      boxes[i] = { x0, x1, y0, y1 }
+      for bx = math.floor(x0 / B) - 1, math.floor(x1 / B) + 1 do
+        for by = math.floor(y0 / B) - 1, math.floor(y1 / B) + 1 do
+          local k = bx * 65536 + by
+          buckets[k] = buckets[k] or {}
+          table.insert(buckets[k], i)
+        end
+      end
+    end
+  end
+  local joins = {}
+  for _, j in ipairs(entry.joins or {}) do joins[j] = true end
+  local n, byCave = entry.n, {}
+  for _, j in ipairs(entry.bridge) do
+    if not joins[j] then
+      local x, y = n[2 * j - 1], n[2 * j]
+      local best, bd
+      for _, i in ipairs(buckets[math.floor(x / B) * 65536 + math.floor(y / B)] or {}) do
+        local b = boxes[i]
+        local d = math.max(b[1] - x, 0, x - b[2]) ^ 2 + math.max(b[3] - y, 0, y - b[4]) ^ 2
+        if not bd or d < bd then best, bd = i, d end
+      end
+      if best then
+        byCave[best] = byCave[best] or {}
+        table.insert(byCave[best], { x, y })
+      end
+    end
+  end
+  local merge2 = G.CAVE_MOUTH_MERGE ^ 2
+  local order = {}
+  for i in pairs(byCave) do order[#order + 1] = i end
+  table.sort(order)
+  for _, i in ipairs(order) do
+    local groups = {}
+    for _, p in ipairs(byCave[i]) do
+      local home
+      for _, gr in ipairs(groups) do
+        if (p[1] - gr[1][1]) ^ 2 + (p[2] - gr[1][2]) ^ 2 < merge2 then home = gr break end
+      end
+      if home then table.insert(home, p) else groups[#groups + 1] = { p } end
+    end
+    local name = caves[i][1] ~= "" and caves[i][1] or "Cave"
+    for _, gr in ipairs(groups) do
+      local mx, my = 0, 0
+      for _, p in ipairs(gr) do mx, my = mx + p[1] / #gr, my + p[2] / #gr end
+      local pick, pd
+      for _, p in ipairs(gr) do
+        local d = (p[1] - mx) ^ 2 + (p[2] - my) ^ 2
+        if not pd or d < pd then pick, pd = p, d end
+      end
+      list[#list + 1] = { x = pick[1], y = pick[2], name = name }
+    end
+  end
+  return list
 end
 
 -- Dungeons and raids (Data/Instances.lua) --------------------------------------------------
@@ -4152,6 +4255,8 @@ function G.Init()
       end },
     -- (the dungeon route toggle ("dungeonRoute": G.SetDungeonRoute) is left off the map menu: this
     -- client hides the player's position in dungeons, so the route it starts never can)
+    { id = "caves", key = "layerCaves", icon = CAVE_ICON, label = "Caves", defaultOn = true,
+      tip = "Cave and mine entrances on the map (not on a continent's map). Double-click one for a stop there." },
     { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
       tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
     { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
@@ -4197,8 +4302,8 @@ function G.Init()
     { id = "styles", label = "Map style", members = { "style_minimap", "style_zone", "style_nospoiler" },
       tip = "The map's look: click to choose." },
     { id = "questsG", label = "Quests", members = { "quests", "questAreas" }, tip = "Quests and quest areas on the map." },
-    { id = "dungeonsG", label = "Dungeons and raids", members = { "instances", "bossRoute" },
-      tip = "Dungeon and raid entrances on the map, and a route through a dungeon's bosses." },
+    { id = "dungeonsG", label = "Caves/Dungeons/Raids", members = { "caves", "instances", "bossRoute" },
+      tip = "Cave, dungeon and raid entrances on the map, and a route through a dungeon's bosses." },
     { id = "gather", label = "Herbs, ore and farming", members = { "herbs", "ore", "farm" },
       tip = "Herb and ore nodes on the map, and drawing a farming area." },
   }

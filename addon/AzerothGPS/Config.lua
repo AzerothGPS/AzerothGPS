@@ -18,6 +18,7 @@ local HELP = {
   "/agps quests on|off      (your quests' objectives and turn-ins)",
   "/agps bosses             (in a dungeon or with its map open: a route through its bosses)",
   "/agps instances on|off   (dungeon and raid entrances on the map)",
+  "/agps caves on|off       (cave and mine entrances on the map)",
   "/agps herbs on|off | ore on|off | nodes on|off  (herbs, ore, or both on the map)",
   "/agps lock | unlock [map|arrow]  (both, or just one; unlocked they can be moved)",
   "/agps reset              (restore default position and settings)",
@@ -97,6 +98,8 @@ SlashCmdList.AZEROTHGPS = function(msg)
     return
   elseif a == "instances" then
     gps.layerInstances = OnOff(b, gps.layerInstances ~= false)
+  elseif a == "caves" then
+    gps.layerCaves = OnOff(b, gps.layerCaves ~= false)
   elseif a == "roads" then
     gps.showRoads = OnOff(b, gps.showRoads)
   elseif a == "walls" then

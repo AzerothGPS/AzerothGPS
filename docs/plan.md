@@ -116,6 +116,9 @@ zoom); walls drawn before the terrain's edges.
 World map: Zephras Isle (no place on the world art, nor a link in the client) as a framed inset
 of its own map (G.WORLD_INSETS), clicked to open it; continents' zones light up under the mouse
 (C_Map.GetMapHighlightInfoAtPosition, as the game's map).
+Cave and mine entrances on the map (G.CaveEntrances: the caves' mouths from their road data,
+`bridge` less `joins`, merged within 60 yd and named after the cave): the Caves button in the
+Caves/Dungeons/Raids group, Options → Map, `/agps caves`.
 
 - **Blackwing Lair:** its ghost entrance (Blackrock Mountain) and triggers inside are in the
   client, its bosses in the CMaNGOS dump; reached through Upper Blackrock Spire.

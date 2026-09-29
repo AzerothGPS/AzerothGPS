@@ -562,6 +562,8 @@ local function BuildWindow()
     function() return GPS().layerOre ~= false end, function(v) GPS().layerOre = v end)
   check("Dungeons and raids", "Their entrances, on every map style. Click one for its map, with its bosses in the usual order; right-click goes back out.",
     function() return GPS().layerInstances ~= false end, function(v) GPS().layerInstances = v end)
+  check("Cave entrances", "The ways into caves and mines (not on a continent's map). Double-click one for a stop there.",
+    function() return GPS().layerCaves ~= false end, function(v) GPS().layerCaves = v end)
 
   ---------------------------------------------------------------- Routing
   ---------------------------------------------------------------- Quick buttons
