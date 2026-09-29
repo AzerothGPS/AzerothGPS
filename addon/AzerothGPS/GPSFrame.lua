@@ -1868,7 +1868,7 @@ function G.Update()
         lx, ly = dx, dy
       end
     end
-  elseif st.showWalls or G.wallMode then -- (inside maps too: a city's own floors and walls)
+  elseif G.ShowsWalls() then -- (inside maps too: a city's own floors and walls)
     local wc = (here and onMe) and ns.Nav.PlayerLevel(cont) or viewCont -- (the level shown: the player's only while the view is on them)
     -- (the terrain's impassable borders thinner, drawn walls thicker)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
@@ -3094,6 +3094,12 @@ function G.ToolsRefused()
   return true
 end
 
+-- The walls drawn on the map (the option, or the wall tools on): not while another addon holds it
+-- (its game's map stays clear; the option itself is left as it is).
+function G.ShowsWalls()
+  return (S().showWalls or G.wallMode) and not G.Held() and true or false
+end
+
 -- A hold starting: every drawing tool off (they come back only when turned on again).
 function G.StopTools()
   if G.roadMode then G.SetRoadMode(false) end
@@ -3755,7 +3761,7 @@ function G.Init()
     -- a click on the map closes the map menu and the search panel
     if G.mapMenu then G.mapMenu:Hide() end
     if G.searchPanel then G.searchPanel:Hide() end
-    if (G.roadMode or G.wallMode) and not G.drawMode then
+    if (G.roadMode or G.wallMode) and not G.drawMode and not G.Held() then
       if button == "LeftButton" or button == "RightButton" then
         local erase = button == "RightButton"
         local wall = G.wallMode

@@ -3503,7 +3503,10 @@ def test_no_road_or_wall_tools_while_the_map_is_held(api):
     assert G.SetWallMode(True) is False and not G.wallMode
     assert G.StartDrawing("farm") is False and not G.drawMode
     assert said[len(said)] == "not during a game on the map"
+    ns.settings = lua.eval("{ gps = { showWalls = true } }")
+    assert G.ShowsWalls() is False  # (no wall outlines over the game's map)
     A.HoldMap("game", False)
+    assert G.ShowsWalls() is True and ns.settings.gps.showWalls  # (the option untouched)
     assert not G.roadMode  # (not back by itself)
     G.SetRoadMode(True)  # (turned on again after the game: fine)
     assert G.roadMode
