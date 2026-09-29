@@ -61,6 +61,6 @@ Everything else, every feature, option and command, is in the **[AzerothGPS wiki
 
 - **Discord:** questions, ideas and news on the **[AzerothGPS Discord](https://discord.gg/gktYHzs2c)**.
 - **Bugs and bad routes:** open an issue on [GitHub](https://github.com/AzerothGPS/AzerothGPS/issues) or post on the Discord, with the zone and your start and destination coordinates (shown at the bottom of the map).
-- **Map fixes:** draw them with the road or wall tools, then **Copy map data...** (Options → Help improve) and paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or on the Discord.
+- **Map fixes:** draw them with the road or wall tools, then **Copy Map Data...** (Options → Help improve) and paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or on the Discord.
 
 _AzerothGPS is a fan-made addon and is not affiliated with or endorsed by Blizzard Entertainment. World of Warcraft and Azeroth are trademarks of Blizzard Entertainment, Inc._

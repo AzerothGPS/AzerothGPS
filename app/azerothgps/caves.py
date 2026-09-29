@@ -419,7 +419,16 @@ def build_continent(cd: ClientData, cont: int, data_dir, log=print, only=None, r
             g.add_edge(nid, end, pts, source="entrance")
             joins.append((end, pts[-1]))
         mouths = [n for n in mouths if n in g.nodes]
-        u.update({"name": name, "path": path, "uid": p.uid, "placement": p, "joins": joins, "mouths": mouths})
+        # its ways in, one a patch of ground at an opening: the patch's node nearest its middle
+        ways = []
+        for lst in by_patch.values():
+            pts_ = [g.nodes[nid] for nid in lst if nid in g.nodes]
+            if pts_:
+                mx = sum(q[0] for q in pts_) / len(pts_)
+                my = sum(q[1] for q in pts_) / len(pts_)
+                ways.append(min(pts_, key=lambda q: (q[0] - mx) ** 2 + (q[1] - my) ** 2))
+        u.update({"name": name, "path": path, "uid": p.uid, "placement": p, "joins": joins, "mouths": mouths,
+                  "ways": ways})
         out.append(u)
         log(f"    {label}: {len(g.nodes)} nodes, {g.total_length():.0f} yd of road, {len(mouths)} mouths, "
             f"{sum(1 for _, q in joins if q)} joined, grid {u['W']}x{u['H']}")
@@ -547,11 +556,13 @@ def caves_lua(cd: ClientData, continents=(0, 1), log=print, data_dir=None, debug
         if debug_dir:
             for u in built:
                 render_debug(u, debug_dir)
-        out.append(f"-- ns.Caves[{cont}] = {{ {{ name, grid key, x, y (its placement) }}, ... }}")
+        out.append(f"-- ns.Caves[{cont}] = {{ {{ name, grid key, x, y (its placement), {{ x, y, ... (its ways in: one a "
+                   f"patch of ground at an opening) }} }}, ... }}")
         out.append(f"ns.Caves[{cont}] = {{")
         for u in built:
             p = u["placement"]
-            out.append(f"  {{ {_lua_str(u['name'] or '')}, \"cave{u['uid']}\", {p.x:.1f}, {p.y:.1f} }},")
+            ways = ",".join(f"{q[0]:.0f},{q[1]:.0f}" for q in u.get("ways", []))
+            out.append(f"  {{ {_lua_str(u['name'] or '')}, \"cave{u['uid']}\", {p.x:.1f}, {p.y:.1f}, {{ {ways} }} }},")
         out.append("}")
         for u in built:
             cells = u["overlay"]

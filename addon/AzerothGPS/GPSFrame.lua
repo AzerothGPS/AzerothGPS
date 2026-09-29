@@ -2703,17 +2703,42 @@ end
 -- The caves' and mines' ways in on continent `cont`: { { x, y, name } }. Their mouths are in the
 -- caves' road data (caves.py): the nodes on the ground outside each opening, written into
 -- `bridge` along with the joins onto the land's roads, so bridge less joins. A cave's mouth
--- nodes within CAVE_MOUTH_MERGE yd are one way in (at the node nearest their middle), named
+-- nodes within CAVE_MOUTH_MERGE yd of each other (through others too) are one way in (at the
+-- node nearest their middle), named
 -- after the cave whose grid it opens from (the nearest; "Cave" when it has no name). Worked out
 -- once per continent, by buckets (no frame spent on it).
 G.CAVE_MOUTH_MERGE = 60
+G.CAVE_SAME_YD = 40 -- ... and ways in of the same name closer than this (neighboring models of one cave): one
 local caveEntrances = {}
+-- (neighboring models of one cave, same name, ways in side by side: one)
+local function SameNameMerge(list)
+  local near2, out = G.CAVE_SAME_YD ^ 2, {}
+  for _, m in ipairs(list) do
+    local dup = false
+    for _, o in ipairs(out) do
+      if o.name == m.name and (o.x - m.x) ^ 2 + (o.y - m.y) ^ 2 < near2 then dup = true break end
+    end
+    if not dup then out[#out + 1] = m end
+  end
+  return out
+end
 function G.CaveEntrances(cont)
   local list = caveEntrances[cont]
   if list then return list end
   list = {}
   caveEntrances[cont] = list
   local P, caves = ns.Passability, ns.Caves and ns.Caves[cont]
+  -- (the ways in as the cave builder wrote them, one an opening: each row's fifth field)
+  if caves and caves[1] and type(caves[1][5]) == "table" then
+    for _, c in ipairs(caves) do
+      local name, w = c[1] ~= "" and c[1] or "Cave", c[5]
+      for k = 1, #w - 1, 2 do list[#list + 1] = { x = w[k], y = w[k + 1], name = name } end
+    end
+    list = SameNameMerge(list)
+    caveEntrances[cont] = list
+    return list
+  end
+  -- (older data: worked out from the caves' roads)
   -- (the caves' roads: the first entry marked cave, from Data/Caves.lua; the capitals' floors
   -- under others are marked so too, and come after it: Data/Capitals.lua loads later)
   local entry
@@ -2757,21 +2782,40 @@ function G.CaveEntrances(cont)
       end
     end
   end
+  -- a cave's mouth nodes in groups: any two within CAVE_MOUTH_MERGE yd in one (through others
+  -- too), each group one way in at its node nearest the group's middle
   local merge2 = G.CAVE_MOUTH_MERGE ^ 2
   local order = {}
   for i in pairs(byCave) do order[#order + 1] = i end
   table.sort(order)
   for _, i in ipairs(order) do
-    local groups = {}
-    for _, p in ipairs(byCave[i]) do
-      local home
-      for _, gr in ipairs(groups) do
-        if (p[1] - gr[1][1]) ^ 2 + (p[2] - gr[1][2]) ^ 2 < merge2 then home = gr break end
+    local pts = byCave[i]
+    local root = {}
+    for k = 1, #pts do root[k] = k end
+    local function find(k)
+      while root[k] ~= k do
+        root[k] = root[root[k]]
+        k = root[k]
       end
-      if home then table.insert(home, p) else groups[#groups + 1] = { p } end
+      return k
+    end
+    for k1 = 1, #pts do
+      for k2 = k1 + 1, #pts do
+        if (pts[k1][1] - pts[k2][1]) ^ 2 + (pts[k1][2] - pts[k2][2]) ^ 2 < merge2 then root[find(k1)] = find(k2) end
+      end
+    end
+    local groups, gorder = {}, {}
+    for k = 1, #pts do
+      local r = find(k)
+      if not groups[r] then
+        groups[r] = {}
+        gorder[#gorder + 1] = r
+      end
+      table.insert(groups[r], pts[k])
     end
     local name = caves[i][1] ~= "" and caves[i][1] or "Cave"
-    for _, gr in ipairs(groups) do
+    for _, r in ipairs(gorder) do
+      local gr = groups[r]
       local mx, my = 0, 0
       for _, p in ipairs(gr) do mx, my = mx + p[1] / #gr, my + p[2] / #gr end
       local pick, pd
@@ -2782,6 +2826,8 @@ function G.CaveEntrances(cont)
       list[#list + 1] = { x = pick[1], y = pick[2], name = name }
     end
   end
+  list = SameNameMerge(list)
+  caveEntrances[cont] = list
   return list
 end
 
@@ -3472,7 +3518,7 @@ end
 function G.QuestRoute()
   if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return end
   if InCombatLockdown and InCombatLockdown() then
-    ns.Print("Quest route: not in combat (the game hides quest locations then).")
+    ns.Print("Quest Route: not in combat (the game hides quest locations then).")
     return
   end
   if not (ns.Layers and ns.Layers.QuestStops) then return end
@@ -3480,14 +3526,14 @@ function G.QuestRoute()
   local stops, c = ns.Layers.QuestStops(onlyZone)
   if #stops == 0 then
     ns.Print(onlyZone and c.elsewhere > 0
-      and string.format("Quest route: none of your quests are in this zone (%d elsewhere; Options > Routing: only this zone).", c.elsewhere)
-      or "Quest route: no quest locations found in your quest log.")
+      and string.format("Quest Route: none of your quests are in this zone (%d elsewhere; Options > Routing: only this zone).", c.elsewhere)
+      or "Quest Route: no quest locations found in your quest log.")
     return
   end
   if ns.Nav.SetStops(stops, true) == false then return end -- (asked first: a zone too high)
   ns.Nav.questRouteStale = nil
   G.RouteChanged()
-  local msg = string.format("Quest route: %d stop%s (%d to do, %d to turn in).", #ns.Nav.stops,
+  local msg = string.format("Quest Route: %d stop%s (%d to do, %d to turn in).", #ns.Nav.stops,
     #ns.Nav.stops == 1 and "" or "s", c.todo, c.turnin)
   if (c.elsewhere or 0) > 0 then msg = msg .. string.format(" %d in other zones left out.", c.elsewhere) end
   if #c.missing > 0 then msg = msg .. " No location for: " .. table.concat(c.missing, ", ") .. "." end
@@ -3513,22 +3559,22 @@ function G.BossRoute(quiet)
   local lvl = view.instance or ns.Nav.CurrentInstance()
   local info = lvl and ns.Instances and ns.Instances[lvl]
   if not info then
-    ns.Print("Boss route: open a dungeon's map (click its entrance on the map) or go inside one.")
+    ns.Print("Boss Route: open a dungeon's map (click its entrance on the map) or go inside one.")
     return
   end
   local stops, dead = G.BossStops(lvl)
   if #stops == 0 then
     if G.NextBoss(lvl) then -- (bosses up, but none with a spot: WoW Forever's own dungeons, their map only)
-      ns.Print(string.format("Boss route: %s's bosses have no spots on its map yet; the map still shows which is next.", info.name))
+      ns.Print(string.format("Boss Route: %s's bosses have no spots on its map yet; the map still shows which is next.", info.name))
     else
-      ns.Print(string.format("Boss route: %s's bosses are all down.", info.name))
+      ns.Print(string.format("Boss Route: %s's bosses are all down.", info.name))
     end
     return
   end
   ns.Nav.SetStops(stops, false, true) -- (the usual order: kept)
   G.RouteChanged()
   ns.Print(string.format("%s: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
-    quiet and "Dungeon route" or "Boss route", info.name, #stops, #stops == 1 and "" or "es",
+    quiet and "Dungeon route" or "Boss Route", info.name, #stops, #stops == 1 and "" or "es",
     dead > 0 and string.format(" (%d already down)", dead) or ""))
 end
 
@@ -3674,7 +3720,7 @@ function G.SetDungeonRoute(on)
       ns.Nav.Clear()
       G.RouteChanged()
     end
-    ns.Print("Dungeon route off: routes are yours again (the Boss route button still makes one).")
+    ns.Print("Dungeon route off: routes are yours again (the Boss Route button still makes one).")
   end
   if G.LayoutQuick then G.LayoutQuick() end
   elapsed = 1
@@ -4001,7 +4047,7 @@ function G.Init()
   recenter:SetScript("OnClick", function() G.Follow() end)
   recenter:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Back to your position", 1, 1, 1)
+    GameTooltip:SetText("Back to Your Position", 1, 1, 1)
     GameTooltip:Show()
   end)
   recenter:SetScript("OnLeave", GameTooltip_Hide)
@@ -4022,7 +4068,7 @@ function G.Init()
   import:SetScript("OnClick", function() ns.Import.Toggle() end)
   import:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Import and share waypoints", 1, 1, 1)
+    GameTooltip:SetText("Import and Share Waypoints", 1, 1, 1)
     GameTooltip:AddLine("Paste TomTom /way lines to make them the route's stops, or copy or send your route to someone else.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
@@ -4032,9 +4078,9 @@ function G.Init()
 
   -- Map menu (bottom-left): a round button that opens the map type and the map layers.
   local STYLES = {
-    { "minimap", "Interface\\Icons\\INV_Misc_Map02", "Terrain view", "The ground seen from above, like the minimap." },
-    { "zone", "Interface\\Icons\\INV_Misc_Map05", "World map", "The world map, fully explored. Right-click to zoom out to the continent; click a zone to open it." },
-    { "nospoiler", "Interface\\Icons\\INV_Misc_Map03", "No Spoiler map", "The world map as your character has explored it: undiscovered parts stay hidden. Routes still use every road." },
+    { "minimap", "Interface\\Icons\\INV_Misc_Map02", "Terrain View", "The ground seen from above, like the minimap." },
+    { "zone", "Interface\\Icons\\INV_Misc_Map05", "World Map", "The world map, fully explored. Right-click to zoom out to the continent; click a zone to open it." },
+    { "nospoiler", "Interface\\Icons\\INV_Misc_Map03", "No Spoiler Map", "The world map as your character has explored it: undiscovered parts stay hidden. Routes still use every road." },
   }
   local mapButton = CreateFrame("Button", nil, top)
   mapButton:SetSize(MAP_BUTTON, MAP_BUTTON)
@@ -4207,7 +4253,7 @@ function G.Init()
   end)
   search:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Search places", 1, 1, 1)
+    GameTooltip:SetText("Search Places", 1, 1, 1)
     GameTooltip:AddLine("Type 2+ letters, then pick a place to add it as a stop (Enter takes the first).", nil, nil, nil, true)
     GameTooltip:AddLine("Finds: towns and places, zones, landmarks, flight masters, and boat and zeppelin docks, on every continent.", 0.8, 0.8, 0.8, true)
     GameTooltip:AddLine("Not NPCs: the game doesn't tell addons where NPCs are. A zone's result is the middle of the zone.", 0.8, 0.8, 0.8, true)
@@ -4247,7 +4293,7 @@ function G.Init()
   qr:SetScript("OnClick", function() G.QuestRoute() end)
   qr:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Quest route", 1, 1, 1)
+    GameTooltip:SetText("Quest Route", 1, 1, 1)
     GameTooltip:AddLine("A route through your quest log: where each quest's objectives are, and where finished quests are turned in, in the fastest order. Replaces the current route.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
@@ -4257,22 +4303,22 @@ function G.Init()
   -- nowhere: gps.quick[id] = G.QUICK_PLACES (Options: Quick buttons). What
   -- doesn't fit on the bar at the map's size goes in the menu.
   local QUICK = {
-    { id = "search", button = search, label = "Search places" },
-    { id = "questRoute", button = qr, label = "Quest route" },
-    { id = "hearth", key = "useHearthstone", icon = "Interface\\Icons\\INV_Misc_Rune_01", label = "Use hearthstone",
+    { id = "search", button = search, label = "Search Places" },
+    { id = "questRoute", button = qr, label = "Quest Route" },
+    { id = "hearth", key = "useHearthstone", icon = "Interface\\Icons\\INV_Misc_Rune_01", label = "Use Hearthstone",
       tip = "A route may start with your Hearthstone when it's ready and faster.", route = true, defaultOn = true },
-    { id = "offroad", key = "offroad", icon = "Interface\\Icons\\INV_Boots_05", label = "Off-road shortcuts",
+    { id = "offroad", key = "offroad", icon = "Interface\\Icons\\INV_Boots_05", label = "Off-Road Shortcuts",
       tip = "Routes cut across open ground where that's faster. Off: they follow the roads.", route = true },
     { id = "quests", key = "layerQuests", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective, label = "Quests",
       tip = "Your quests' objectives and turn-ins on the map." },
     { id = "questAreas", key = "layerQuestAreas", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective,
-      label = "Quest areas", tip = "The quests' areas outlined on the map, like on the minimap.", needs = "layerQuests",
+      label = "Quest Areas", tip = "The quests' areas outlined on the map, like on the minimap.", needs = "layerQuests",
       tint = { 0.45, 0.6, 1 } },
     { id = "herbs", key = "layerHerbs", icon = "Interface\\Icons\\INV_Misc_Herb_07", label = "Herbs", tip = "Herb nodes you know." },
     { id = "ore", key = "layerOre", icon = "Interface\\Icons\\INV_Ore_Copper_01", label = "Ore", tip = "Ore nodes you know." },
-    { id = "city", key = "layerCity", icon = "Interface\\Icons\\INV_Helmet_03", label = "City locations",
+    { id = "city", key = "layerCity", icon = "Interface\\Icons\\INV_Helmet_03", label = "City Locations",
       tip = "Places guards pointed out to you (trainers, bank, ...), for all your characters.", defaultOn = true },
-    { id = "bossRoute", icon = "Interface\\Icons\\Ability_DualWield", label = "Boss route",
+    { id = "bossRoute", icon = "Interface\\Icons\\Ability_DualWield", label = "Boss Route",
       tip = "In a dungeon or raid, or with its map open: a route through its bosses in the usual order (optional ones left out). Each stop is done when its boss dies. Replaces the current route.",
       action = function()
         if G.mapMenu then G.mapMenu:Hide() end
@@ -4282,16 +4328,16 @@ function G.Init()
     -- client hides the player's position in dungeons, so the route it starts never can)
     { id = "caves", key = "layerCaves", icon = CAVE_ICON, label = "Caves", defaultOn = true,
       tip = "Cave and mine entrances on the map (not on a continent's map). Double-click one for a stop there." },
-    { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and raids", defaultOn = true,
+    { id = "instances", key = "layerInstances", icon = INSTANCE_ICON, label = "Dungeons and Raids", defaultOn = true,
       tip = "Their entrances on the map (every map style). Click one for its map, with its bosses in the usual order; right-click goes back out." },
-    { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road tools", dev = true,
+    { id = "roadTools", icon = "Interface\\Icons\\INV_Misc_Note_02", label = "Road Tools", dev = true,
       tip = "Click to turn on, click again when done. On the map: left-drag along a road the routes miss to add it (joined to the roads it meets; where it runs along one, that road stays), right-drag over a road that isn't there to erase it (red), middle-drag to pan. Routes use your changes at once. (Shown with the road tools option, or /agps dev)",
       isOn = function() return G.roadMode end,
       action = function()
         if G.mapMenu then G.mapMenu:Hide() end
         G.ToggleRoadMode()
       end },
-    { id = "wallTools", icon = "Interface\\Icons\\Ability_Warrior_ShieldWall", label = "Wall tools", wallDev = true,
+    { id = "wallTools", icon = "Interface\\Icons\\Ability_Warrior_ShieldWall", label = "Wall Tools", wallDev = true,
       tip = "Click to turn on, click again when done. On the map: left-drag along a wall, fence or cliff edge the routes try to walk through (blood red): routes go around it like a mountain, and roads it crosses are cut there (leave a gap for a gate; flight paths still cross it). Right-drag over walls to erase them (circle an area for all in it), middle-drag to pan. (Shown with the wall tools option)",
       isOn = function() return G.wallMode end,
       action = function()
@@ -4304,7 +4350,7 @@ function G.Init()
         if G.mapMenu then G.mapMenu:Hide() end
         ns.Record.Undo()
       end },
-    { id = "farm", icon = "Interface\\Icons\\INV_Misc_Shovel_01", label = "Draw a farming area",
+    { id = "farm", icon = "Interface\\Icons\\INV_Misc_Shovel_01", label = "Draw a Farming Area",
       tip = "Drag a loop around nodes on the map: the route visits every known node inside that's shown (herbs, ore or both), round and round (the nearest 60 at most). Right-click cancels.",
       action = function()
         G.mapMenu:Hide()
@@ -4324,12 +4370,12 @@ function G.Init()
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {
-    { id = "styles", label = "Map style", members = { "style_minimap", "style_zone", "style_nospoiler" },
+    { id = "styles", label = "Map Style", members = { "style_minimap", "style_zone", "style_nospoiler" },
       tip = "The map's look: click to choose." },
     { id = "questsG", label = "Quests", members = { "quests", "questAreas" }, tip = "Quests and quest areas on the map." },
-    { id = "dungeonsG", label = "Caves/Dungeons/Raids", members = { "caves", "instances", "bossRoute" },
+    { id = "dungeonsG", label = "Caves/Dungeons/Raids", icon = INSTANCE_ICON, members = { "caves", "instances", "bossRoute" },
       tip = "Cave, dungeon and raid entrances on the map, and a route through a dungeon's bosses." },
-    { id = "gather", label = "Herbs, ore and farming", members = { "herbs", "ore", "farm" },
+    { id = "gather", label = "Herbs, Ore and Farming", members = { "herbs", "ore", "farm" },
       tip = "Herb and ore nodes on the map, and drawing a farming area." },
   }
   G.GROUP_IDLE = 8 -- seconds an opened group stays open with the mouse away
@@ -4464,7 +4510,7 @@ function G.Init()
   G.groupOf = {}
   local memberOf = {}
   for _, grp in ipairs(G.QUICK_GROUPS) do
-    local slot = { id = grp.id, label = grp.label, tip = grp.tip, members = {}, group = true }
+    local slot = { id = grp.id, label = grp.label, tip = grp.tip, members = {}, group = true, icon = grp.icon }
     for _, mid in ipairs(grp.members) do
       local m = byId[mid]
       if m then
@@ -4472,7 +4518,7 @@ function G.Init()
         memberOf[mid] = slot
       end
     end
-    slot.icon = slot.members[1] and slot.members[1].icon
+    slot.icon = slot.icon or (slot.members[1] and slot.members[1].icon)
     local b, icon = RoundButton(26, slot.icon)
     slot.button, slot.iconTex = b, icon
     b:SetScript("OnClick", function() G.ToggleGroup(slot) end)
@@ -4766,7 +4812,7 @@ function G.Init()
   cancel:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     if S().navCloseClears then
-      GameTooltip:SetText("Cancel the route", 1, 1, 1)
+      GameTooltip:SetText("Cancel the Route", 1, 1, 1)
     else
       GameTooltip:SetText("Close", 1, 1, 1)
       GameTooltip:AddLine("Hides this panel; the route goes on. It comes back when the route changes. To cancel the route: Clear Route, or /agps clear.", nil, nil, nil, true)
@@ -4820,7 +4866,7 @@ function G.Init()
   end)
   more:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Show all the steps", 1, 1, 1)
+    GameTooltip:SetText("Show All the Steps", 1, 1, 1)
     GameTooltip:Show()
   end)
   G.stepsMore = more

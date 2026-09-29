@@ -319,8 +319,8 @@ local function Build()
     end
     if chrome.PortraitContainer then chrome.PortraitContainer:Hide() end
     if chrome.portrait then chrome.portrait:Hide() end
-    if chrome.SetTitle then chrome:SetTitle("Import and share waypoints")
-    elseif chrome.TitleContainer and chrome.TitleContainer.TitleText then chrome.TitleContainer.TitleText:SetText("Import and share waypoints") end
+    if chrome.SetTitle then chrome:SetTitle("Import and Share Waypoints")
+    elseif chrome.TitleContainer and chrome.TitleContainer.TitleText then chrome.TitleContainer.TitleText:SetText("Import and Share Waypoints") end
     if chrome.CloseButton then chrome.CloseButton:SetScript("OnClick", function() f:Hide() end) end -- works in combat too
     TOP = 30
   else
@@ -329,7 +329,7 @@ local function Build()
     f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
     local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOPLEFT", 12, -10)
-    title:SetText("Import and share waypoints")
+    title:SetText("Import and Share Waypoints")
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetScript("OnClick", function() f:Hide() end) -- works in combat too
     close:SetPoint("TOPRIGHT", 2, 2)
@@ -367,7 +367,7 @@ local function Build()
   local copy = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   copy:SetSize(150, 22)
   copy:SetPoint("BOTTOMLEFT", 12, 68)
-  copy:SetText("Copy route as /way")
+  copy:SetText("Copy Route as /way")
   copy:SetScript("OnClick", function()
     local text, skipped = I.ExportText(ns.Nav.stops)
     if text == "" then
@@ -383,7 +383,7 @@ local function Build()
   end)
   copy:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Copy route as /way", 1, 1, 1)
+    GameTooltip:SetText("Copy Route as /way", 1, 1, 1)
     GameTooltip:AddLine("Writes your route's stops as TomTom /way lines in the box, selected for copying.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
@@ -391,7 +391,7 @@ local function Build()
 
   local sendLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   sendLabel:SetPoint("LEFT", copy, "RIGHT", 12, 0)
-  sendLabel:SetText("Send to")
+  sendLabel:SetText("Send To")
   local who = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
   who:SetSize(100, 20)
   who:SetPoint("LEFT", sendLabel, "RIGHT", 10, 0)
@@ -401,7 +401,7 @@ local function Build()
   f.who = who
   who:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Send to", 1, 1, 1)
+    GameTooltip:SetText("Send To", 1, 1, 1)
     GameTooltip:AddLine("A player's name (Name or Name-Realm). Shift+click a name in chat to fill it in, or target the player before opening this window.", nil, nil, nil, true)
     GameTooltip:Show()
   end)

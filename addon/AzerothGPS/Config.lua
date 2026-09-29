@@ -23,8 +23,8 @@ local HELP = {
   "/agps lock | unlock [map|arrow]  (both, or just one; unlocked they can be moved)",
   "/agps reset              (restore default position and settings)",
   "/agps roads on|off       (show the extracted road network)",
-  "/agps dev                 (the Road tools button on the map)",
-  "/agps walltools           (the Wall tools button on the map)",
+  "/agps dev                 (the Road Tools button on the map)",
+  "/agps walltools           (the Wall Tools button on the map)",
   "/agps walls on|off        (show the walls routes go around)",
   "/agps draw [undo|list|delete <n>]  (road tools on/off: left-drag draws, right-drag erases, middle-drag pans)",
   "/agps minimap on|off     (minimap button)",
@@ -106,13 +106,13 @@ SlashCmdList.AZEROTHGPS = function(msg)
     gps.showWalls = OnOff(b, gps.showWalls)
   elseif a == "walltools" then
     gps.wallTools = not gps.wallTools
-    ns.Print("the Wall tools button on the map: " .. (gps.wallTools and "shown" or "hidden"))
+    ns.Print("the Wall Tools button on the map: " .. (gps.wallTools and "shown" or "hidden"))
     if not gps.wallTools and ns.GPS.wallMode then ns.GPS.SetWallMode(false) end
     if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     return
   elseif a == "dev" then
     gps.devTools = not gps.devTools
-    ns.Print("the Road tools button on the map: " .. (gps.devTools and "shown" or "hidden"))
+    ns.Print("the Road Tools button on the map: " .. (gps.devTools and "shown" or "hidden"))
     if not gps.devTools and ns.GPS.roadMode then ns.GPS.SetRoadMode(false) end
     if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     return

@@ -214,7 +214,7 @@ O.SHARE_INFO = {
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
   " ",
   "|cffffd100How to share your roads and walls|r",
-  "1. Click |cffffd100Copy map data...|r and press |cffffd100Ctrl+C|r.",
+  "1. Click |cffffd100Copy Map Data...|r and press |cffffd100Ctrl+C|r.",
   "2. Paste it in either place (click an address below, Ctrl+C, and open it in your browser):",
   "    |cffffd100GitHub|r: the first address opens a new \"Road data\" issue.",
   "    |cffffd100Discord|r: the second is the AzerothGPS Discord.",
@@ -229,7 +229,7 @@ local roadsCopy
 local function ShowRoadsText()
   local text, n = ns.Feedback.RoadsText()
   if n == 0 then
-    ns.Print("no drawn or erased roads to share yet (Road tools: left-drag draws, right-drag erases)")
+    ns.Print("no drawn or erased roads to share yet (Road Tools: left-drag draws, right-drag erases)")
     return
   end
   if not roadsCopy then
@@ -348,7 +348,7 @@ local function ShowShareInfo()
     local copy = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     copy:SetSize(150, 22)
     copy:SetPoint("TOPLEFT", f.discord, "BOTTOMLEFT", -6, -8)
-    copy:SetText("Copy map data...")
+    copy:SetText("Copy Map Data...")
     copy:SetScript("OnClick", function() O.ShowRoadsText() end)
     shareInfo = f
   end
@@ -747,7 +747,7 @@ local function BuildWindow()
       GPS().questing = v
       ns.Nav.Invalidate(true, true)
     end)
-  check("Quest route: only this zone", "The quest route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
+  check("Quest route: only this zone", "The Quest Route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
     function() return GPS().questZoneOnly end, function(v) GPS().questZoneOnly = v end)
   check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The addon never uses it for you; the directions just say to.",
     function() return GPS().useHearthstone ~= false end, function(v)
@@ -831,13 +831,13 @@ local function BuildWindow()
     function() return GPS().showRoads end, function(v) GPS().showRoads = v end)
   header("Fixing roads")
   note("With the road tools on, on the map: left-drag along a road the routes miss, right-drag over a \"road\" that isn't there (red), middle-drag to pan. Routes use it right away. A drawn road joins the roads it meets; where it runs along one, that road stays.")
-  check("Road tools button on the map", "Adds a Road tools toggle to the map's buttons (the up column). Also /agps dev.",
+  check("Road tools button on the map", "Adds a Road Tools toggle to the map's buttons (the up column). Also /agps dev.",
     function() return GPS().devTools end, function(v)
       GPS().devTools = v
       if not v and ns.GPS.roadMode then ns.GPS.SetRoadMode(false) end
       if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     end)
-  local drawBtn = Button(page, "Road tools on/off", 150, function() ns.GPS.ToggleRoadMode() end)
+  local drawBtn = Button(page, "Road Tools On/Off", 150, function() ns.GPS.ToggleRoadMode() end)
   place(drawBtn, 28, 4)
   local undoBtn = Button(page, "Take back the last", 150, function() ns.Record.Undo() end)
   local listBtn = Button(page, "List drawn roads", 150, function() ns.Record.List() end)
@@ -855,13 +855,13 @@ local function BuildWindow()
     function() return GPS().showWalls end, function(v) GPS().showWalls = v end)
   header("Fixing walls")
   note("With the wall tools on, on the map: left-drag along a wall the routes try to walk through, right-drag over a wall that isn't there, or a mountain edge that's really walkable (circle an area to open all of it), middle-drag to pan. Routes go around your walls right away, like a mountain, and a road a wall crosses is cut there: leave a gap for a gate. Flight paths still cross them.")
-  check("Wall tools button on the map", "Adds a Wall tools toggle to the map's buttons (the up column).",
+  check("Wall tools button on the map", "Adds a Wall Tools toggle to the map's buttons (the up column).",
     function() return GPS().wallTools end, function(v)
       GPS().wallTools = v
       if not v and ns.GPS.wallMode then ns.GPS.SetWallMode(false) end
       if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     end)
-  local wallBtn = Button(page, "Wall tools on/off", 150, function() ns.GPS.ToggleWallMode() end)
+  local wallBtn = Button(page, "Wall Tools On/Off", 150, function() ns.GPS.ToggleWallMode() end)
   place(wallBtn, 28, 4)
   local wUndo = Button(page, "Take back the last", 150, function() ns.Record.Undo() end)
   local wList = Button(page, "List drawn walls", 150, function() ns.Record.List() end)
@@ -883,7 +883,7 @@ local function BuildWindow()
   place(counts, 18, 4)
   local howBtn = Button(page, "How to share...", 150, ShowShareInfo)
   place(howBtn, 28, 4)
-  local copyBtn = Button(page, "Copy map data...", 150, ShowRoadsText)
+  local copyBtn = Button(page, "Copy Map Data...", 150, ShowRoadsText)
   copyBtn:SetPoint("LEFT", howBtn, "RIGHT", 6, 0)
   controls[#controls + 1] = function()
     local _, t = ns.Feedback.Counts()
