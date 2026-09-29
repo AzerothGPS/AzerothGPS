@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 1) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 2) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -31,7 +31,9 @@ center, +x right and +y up.
 | `MapShown()` | whether the map is visible |
 | `MapButton(name)` | the map's `"recenter"` button (Back to your position; shown only while panned away) or `"import"` button (always shown), to place your buttons around them |
 | `View()` | center x, y, continent, rotation, scale (UI units per yard), half width |
-| `CursorWorld()` | x, y, continent under the mouse pointer; nil unless it's over the map |
+| `CursorWorld()` | x, y, continent under the mouse pointer; nil unless it's over the map. On a dungeon's map: its level as the continent, and a 4th value, z: the height there on the floor shown |
+| `Instance()` | the dungeon or raid whose map is in view: level (20000 + MapID: its coordinates' "continent"), MapID, name, the floor shown (0: all, else counted from the top), how many floors; nil when none is. The game hides the player's position inside, so pick spots here by browsing its map (its entrance's icon, or it's shown while the player is in it) with the `+` / `-` floor buttons |
+| `InstanceFloors(level)` | its floors, lowest first: `{ { lowest z, highest z }, ... }` |
 | `WorldToMap(x, y)` | the point's offset from the map's center as drawn now |
 
 ## Drawing on the map

@@ -3393,11 +3393,11 @@ def multi(lua, f, *args):
 
 def test_public_api_exposes_documented_functions(api):
     lua, ns, A = api
-    for name in ("PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
+    for name in ("Instance", "InstanceFloors", "PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
                  "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton"):
         assert A[name] is not None, name
-    assert A.version == 1
+    assert A.version == 2
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 
 

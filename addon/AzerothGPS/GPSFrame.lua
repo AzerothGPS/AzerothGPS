@@ -1511,7 +1511,7 @@ function G.Update()
   -- a dungeon or raid: the player in one (the game reports its map), or one opened from its
   -- entrance's icon. Its map is its floors' outline (no map art for them here).
   local inst = G.InstanceOf(ns.Nav.InstanceLevel and ns.Nav.InstanceLevel(viewCont) or viewCont)
-  view.instance = inst
+  view.instance, view.floor = inst, nil
   local quads
   -- Indoors inside a known building: show its interior map, like the game minimap.
   local place, wmo, room
@@ -1545,6 +1545,7 @@ function G.Update()
     -- the game's minimap art of its models, one floor or all; none: its floors' outline (G.DrawFloors, below)
     local floors = G.InstanceFloors(inst)
     instFloor = G.ShownFloor(inst, view.mine and pz or nil)
+    view.floor = instFloor
     instBand = instFloor > 0 and floors[#floors - instFloor + 1] or nil
     quads = G.LayoutInstanceArt(cx, cy, inst, rot, zoom, half, instBand)
     instArt = #quads > 0
@@ -3160,8 +3161,20 @@ function G.CursorWorld()
   local mx, my = GetCursorPosition()
   local sc = canvas:GetEffectiveScale()
   local x, y = G.ScreenToWorld(view.x, view.y, mx / sc - ox, my / sc - oy, view.rot, view.s)
-  return x, y, view.cont
+  local inst = view.instance
+  if not inst then return x, y, view.cont end
+  -- a dungeon's map: its level, and the height there on the floor shown (all of them: the top
+  -- floor's; one: its height there when that's on it, else the floor's bottom)
+  local z = ns.Nav.CityHeight and ns.Nav.CityHeight(inst, x, y)
+  local floors = view.floor and view.floor > 0 and G.InstanceFloors(inst)
+  local band = floors and floors[#floors - view.floor + 1]
+  if band and not (z and z >= band[1] - 1 and z <= band[2] + 1) then z = band[1] end
+  return x, y, inst, z
 end
+
+-- The dungeon whose map is in view (its level: 20000 + its MapID) and the floor shown (0 all,
+-- else counted from the top), or nil.
+function G.ViewInstance() return view.instance, view.floor end
 
 -- What the picture depends on, compared with the last redraw (no garbage: values are
 -- kept in `sig`). Returns true when any of it changed.

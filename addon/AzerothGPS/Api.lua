@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 1 }
+local API = { version = 2 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -63,9 +63,28 @@ function API.View()
   if not GPS() then return nil end
   return GPS().ViewState()
 end
--- The world point under the mouse pointer: x, y, continent; nil unless it's over the map.
+-- The world point under the mouse pointer: x, y, continent (on a dungeon's map: its level,
+-- and z, the height there on the floor shown); nil unless it's over the map.
 function API.CursorWorld()
   if GPS() then return GPS().CursorWorld() end
+end
+
+-- The dungeon or raid whose map is in view (browsed from its entrance's icon, or the one the
+-- player is in: the game hides their position there): level (20000 + its MapID, the
+-- "continent" its coordinates are in), MapID, name, the floor shown (0: all of them, else
+-- counted from the top; the map's "+" / "-" buttons), how many floors. nil when none is.
+function API.Instance()
+  local G = GPS()
+  if not (G and G.ViewInstance) then return nil end
+  local lvl, floor = G.ViewInstance()
+  local info = lvl and ns.Instances and ns.Instances[lvl]
+  if not info then return nil end
+  return lvl, info.map, info.name, floor or 0, #G.InstanceFloors(lvl)
+end
+-- A dungeon's floors, lowest first: { { lowest height, highest }, ... } (world z).
+function API.InstanceFloors(level)
+  local G = GPS()
+  return G and G.InstanceFloors and G.InstanceFloors(level) or {}
 end
 -- A world point's offset from the map's center in UI units (+x right, +y up), as drawn now.
 function API.WorldToMap(x, y)
