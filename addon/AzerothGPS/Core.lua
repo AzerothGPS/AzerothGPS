@@ -241,6 +241,17 @@ do
           local ok, _, _, _, _, _, _, _, mapID = pcall(GetInstanceInfo)
           if ok then pcall(ns.Taxi.NoteEntrance, mapID, GetTime()) end
         end
+        -- (after a /reload or logging in: the continent's roads and terrain prepared in the
+        -- background now, not in the frame of the first route or the first showing of the roads)
+        if C_Timer and C_Timer.After and ns.Router and ns.Router.WarmUp then
+          C_Timer.After(2, function()
+            local x, y, c = ns.Geo.PlayerWorld()
+            if not x then return end
+            pcall(ns.Router.WarmUp, c, x, y)
+            local lvl = ns.Nav and ns.Nav.PlayerLevel and ns.Nav.PlayerLevel(c)
+            if lvl and lvl ~= c then pcall(ns.Router.WarmUp, lvl, x, y) end
+          end)
+        end
         -- (in or out of a dungeon: its boss route started or ended, once the position settles)
         if ns.GPS and ns.GPS.DungeonEntered then
           if C_Timer and C_Timer.After then C_Timer.After(1.5, ns.GPS.DungeonEntered) else ns.GPS.DungeonEntered() end

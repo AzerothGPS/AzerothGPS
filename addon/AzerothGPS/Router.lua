@@ -2410,6 +2410,11 @@ end
 R.WARM = true -- tests: off
 R.WARM_WAIT = 10
 R.WARM_TERRAIN_YD = 800
+-- Whether `cont`'s road graph is built (or it has no roads): drawing the road network waits for
+-- it (built in the background by WarmUp) rather than building it all at once in a frame.
+function R.GraphReady(cont) return graphs[cont] ~= nil end
+R.Breathe = Breathe -- (long loops elsewhere that may run inside the background work: GPSFrame's road index)
+
 function R.WarmUp(cont, x, y)
   if not R.WARM or R.SYNC_WALKS then return false end
   local started = warming[cont]
@@ -2428,6 +2433,9 @@ function R.WarmUp(cont, x, y)
     SegIndex(g)
     NodeBuckets(g)
     if ns.Passability and ns.Passability.WarmRows then ns.Passability.WarmRows(cont, x, y, R.WARM_TERRAIN_YD) end
+    -- (the map's index of the roads for drawing them, and the zones too high for the player)
+    if ns.GPS and ns.GPS.WarmRoadIndex then ns.GPS.WarmRoadIndex(cont) end
+    R.RedZones()
   end) })
   return true
 end

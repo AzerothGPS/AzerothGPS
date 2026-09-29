@@ -156,8 +156,10 @@ local function RoadIndex(cont)
   local c = roadIndex[cont]
   if c and c.g == g then return c.idx end
   local idx = {}
+  local breathe = ns.Router and ns.Router.Breathe
   if edges then
-    for _, e in ipairs(edges) do
+    for ei, e in ipairs(edges) do
+      if breathe then breathe(ei, 300) end -- (in the background work: a slice per frame)
       local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
       for i = 5, #e, 2 do
         local x, y = e[i], e[i + 1]
@@ -172,6 +174,9 @@ local function RoadIndex(cont)
   roadIndex[cont] = { g = g, idx = idx }
   return idx
 end
+
+-- Built ahead in the background (Router.WarmUp), not in the first frame that shows the roads.
+function G.WarmRoadIndex(cont) RoadIndex(cont) end
 
 G.MAX_SEGMENTS = 1500
 
@@ -351,6 +356,15 @@ end
 local RECORDED = 9 -- (Router.SOURCE_RECORDED)
 function G.LayoutRoads(px, py, cont, rot, zoom, half)
   local segs = {}
+  -- (the road graph not built yet, after a /reload: built in the background, drawn once ready)
+  local R = ns.Router
+  if R and R.GraphReady and R.WARM and not R.SYNC_WALKS and GetTime then -- (no game clock, the tests: at once)
+    if not R.GraphReady(cont) then
+      R.WarmUp(cont, px, py)
+      return segs
+    end
+    if R.Warming and R.Warming() then return segs end -- (its index for drawing still being built)
+  end
   local s = half / zoom
   local reach = zoom * 1.5
   local minStep = 2 / s -- skip points closer than ~2 UI units when zoomed out
@@ -1706,7 +1720,10 @@ function G.Update()
           or (ay < -reach and by < -reach) then return end
       local style = ROUTE_STYLE[kind] or ROUTE_STYLE[1]
       local col = color(stop, kind, style[1])
-      if partCont and partCont ~= shown and (ns.CityLevels and (ns.CityLevels[partCont] or ns.CityLevels[shown])) then
+      local under = partCont and partCont ~= shown and ns.CityLevels and ns.CityLevels[partCont]
+      if under and not under.instance and not ns.CityLevels[shown] then
+        -- (down in an underground city while the player is up top: not drawn over the land above)
+      elseif partCont and partCont ~= shown and (ns.CityLevels and (ns.CityLevels[partCont] or ns.CityLevels[shown])) then
         AddSeg(ax, ay, bx, by, col, math.max(2, style[2] - 2), 0.45, true, true) -- (another level)
       elseif not style[3] then
         AddSeg(ax, ay, bx, by, col, style[2], 1, true)
