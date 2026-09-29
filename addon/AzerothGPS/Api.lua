@@ -34,6 +34,12 @@ function API.Roads(cont) return ns.Roads and ns.Roads[cont] end
 -- The nearest point on the road network routing uses: x, y, distance (yards), edge index.
 function API.NearestRoad(cont, x, y)
   local R = ns.Router
+  -- (the continent's roads not built yet, after a /reload: built in the background, nil meanwhile,
+  -- rather than all at once in this frame)
+  if R and R.WARM and not R.SYNC_WALKS and R.GraphReady and (not R.GraphReady(cont) or (R.Warming and R.Warming())) then
+    R.WarmUp(cont, x, y)
+    return nil
+  end
   local n = R and R.Nearest and R.Nearest(cont, x, y)
   if not n then return nil end
   return n.px, n.py, n.dist, n.edge

@@ -1186,6 +1186,28 @@ local function DrawLines(n, thickness, colors, alpha)
   linesUsed, dashesUsed = nl, nd
 end
 
+-- The lines made ahead, hidden, a slice a frame (in Router.WarmUp's background work after a
+-- /reload): the first showing of the road network (MAX_SEGMENTS lines, and a companion addon's
+-- overlay on top) would otherwise make them all in one frame.
+G.WARM_LINES, G.WARM_DASHES = G.MAX_SEGMENTS + 500, 200
+function G.WarmLines()
+  if not lineLayer then return end
+  local breathe = ns.Router and ns.Router.Breathe
+  for i = #lines + 1, G.WARM_LINES do
+    local l = lineLayer:CreateLine(nil, "OVERLAY")
+    l:Hide()
+    lines[i] = l
+    if breathe then breathe(i, 100) end
+  end
+  for i = #dashes + 1, G.WARM_DASHES do
+    local l = lineLayer:CreateLine(nil, "OVERLAY")
+    l:SetTexture(DASH_TEXTURE, "REPEAT", "REPEAT")
+    l:Hide()
+    dashes[i] = l
+    if breathe then breathe(i, 100) end
+  end
+end
+
 -- Quest area outlines: drawn once on their own layer around an anchor point (the view's
 -- centre then), which just slides as the view moves: one SetPoint a frame instead of every
 -- outline segment. Redrawn when the zoom, rotation, continent or outlines change, every

@@ -18,7 +18,7 @@ center, +x right and +y up.
 | `LocateWorld(cont, x, y)` | uiMapID, zone name, u (east), v (south) of the smallest zone there |
 | `MapToWorld(uiMapID, u, v)` | x, y, continent |
 | `Roads(cont)` | the shipped road network, read only (`Data/Roads.lua` format) |
-| `NearestRoad(cont, x, y)` | x, y, distance, edge index of the closest road point routing uses |
+| `NearestRoad(cont, x, y)` | x, y, distance, edge index of the closest road point routing uses; nil while that continent's roads are still being built in the background (a moment after a /reload) |
 | `RoadEdge(cont, edge)` | that edge's table, read only; its points start at index 5 |
 
 ## The map window

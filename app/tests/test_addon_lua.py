@@ -3489,6 +3489,19 @@ def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
     assert G.HeldClick(1, 2, 0) is False
 
 
+def test_nearest_road_waits_for_the_background_build(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Api.lua")
+    A, R = lua.globals().AzerothGPS, ns.Router
+    R.WARM = True  # (as in game: the roads built in the background after a /reload)
+    assert A.NearestRoad(1, -600.0, -4400.0) is None  # not built in this frame
+    clock = lua.eval("function() return os.clock() * 1000 end")
+    while R.HasWork():
+        R.Pump(clock() + 200, clock)
+    x, y, dist, edge = multi(lua, A.NearestRoad, 1, -600.0, -4400.0)
+    assert dist is not None and dist < 200
+
+
 def test_public_api_map_to_world_inverts_locate(api):
     lua, ns, A = api
     ns.Maps = lua.eval("{ [1411] = { name = 'Durotar', type = 3, continent = 1,"

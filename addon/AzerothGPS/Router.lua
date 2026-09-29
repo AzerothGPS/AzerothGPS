@@ -2436,6 +2436,7 @@ function R.WarmUp(cont, x, y)
     -- (the map's index of the roads for drawing them, and the zones too high for the player)
     if ns.GPS and ns.GPS.WarmRoadIndex then ns.GPS.WarmRoadIndex(cont) end
     R.RedZones()
+    if ns.GPS and ns.GPS.WarmLines then ns.GPS.WarmLines() end -- (and the map's lines for them)
   end) })
   return true
 end
