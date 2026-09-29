@@ -476,9 +476,13 @@ def zone_name(cd: ClientData, cont: int, x: float, y: float, cache: dict) -> str
     return (a or {}).get("AreaName_lang") or ""
 
 
-def instance_roads(u: dict) -> tuple[list, list, dict]:
+def instance_roads(u: dict) -> tuple[list, list, dict, list | None]:
+    """Nodes, edges, drops, and the nodes' heights (None without layers)."""
+    if u.get("layered"):
+        from .layers import roads
+        return roads(u["layered"], u, SMOOTH)
     from .caves import cave_roads
-    return cave_roads(u)
+    return (*cave_roads(u), None)
 
 
 def _words(s: str) -> frozenset:
@@ -548,7 +552,7 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
            "-- ns.Roads[level]: its roads (a road's points packed: from its first node, each move in whole",
            "-- yards, caves.pack_points); ns.RoadDrops[level]: one-way drops off ledges (yards fallen);",
            "-- ns.CityHeights[level]: each cell's floor height, runs of (height character, length);",
-           "-- ns.Instances[level]: name, map, raid, entrances { cont, x, y, inside x, y }, bosses { name, npc,",
+           "-- ns.Instances[level]: name, map, raid, entrances { cont, x, y, inside x, y, z }, bosses { name, npc,",
            "-- x, y, z, enc = DungeonEncounter IDs, order = the usual kill order when known }. Each entrance",
            "-- is a portal in ns.Transports (continent end, instance end).",
            "local _, ns = ...",
@@ -563,7 +567,7 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         out.append(f"-- {inst.name} (map {inst.map_id}, {'raid' if inst.raid else 'dungeon'})")
         out.append(f"ns.CityLevels[{L}] = {{ base = {inst.map_id}, name = {_lua_str(inst.name)}, instance = true"
                    f"{', raid = true' if inst.raid else ''} }}")
-        ents = ", ".join(f"{{ {c}, {x:.1f}, {y:.1f}, {ix:.1f}, {iy:.1f} }}" for c, x, y, _z, ix, iy, _iz, _n in inst.entrances)
+        ents = ", ".join(f"{{ {c}, {x:.1f}, {y:.1f}, {ix:.1f}, {iy:.1f}, {iz:.1f} }}" for c, x, y, _z, ix, iy, iz, _n in inst.entrances)
         bl = []
         for b in inst.bosses:
             if b["x"] is None:
@@ -596,9 +600,11 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         for row in top:
             out.append(f'  "{height_runs("".join(height_char(z, z0, step) for z in row))}",')
         out.append("} }")
-        nodes, edges, drops = instance_roads(u)
+        nodes, edges, drops, zs = instance_roads(u)
         out.append(f"ns.Roads[{L}] = {{")
         out.append("  n = {" + ",".join(f"{x:.0f},{y:.0f}" for x, y in nodes) + "},")
+        if zs:  # (each node's height: the floors over floors are told apart by it)
+            out.append("  z = {" + ",".join(f"{z:.0f}" for z in zs) + "},")
         out.append("  e = {")
         from .caves import pack_points
         for i, (a, b, pts) in enumerate(edges):
@@ -612,10 +618,10 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         out.append("  },")
         out.append("}")
         out.append(f"ns.RoadDrops[{L}] = {{ " + ", ".join(f"[{i + 1}] = {h}" for i, h in sorted(drops.items())) + " }")
-        for c, x, y, _z, ix, iy, _iz, _n in inst.entrances:
+        for c, x, y, _z, ix, iy, iz, _n in inst.entrances:
             place = zone_name(cd, c, x, y, zcache) or inst.name
             out.append(f"ns.Transports[#ns.Transports + 1] = {{ {c}, {x:.1f}, {y:.1f}, {L}, {ix:.1f}, {iy:.1f}, "
-                       f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(inst.name)}, \"portal\" }}")
+                       f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(inst.name)}, \"portal\", iz = {iz:.1f} }}")
     # the game's own minimap art of each instance's models (its map in the addon; the floors'
     # outline where there's none), like the buildings' in Interiors.lua, keyed by its map id
     out.append("-- ns.WMOs / ns.Interiors[map id]: the instances' interior maps (Interiors.lua's format)")
@@ -650,6 +656,13 @@ def build_all(cd: ClientData, data_dir, log=print, only=None, report=None) -> li
                 why = "; ".join(inst.notes) or "no walk network"
         if u is not None:
             keep_reached(u, inst, log=lambda *a: None)
+            # floors over floors: the roads in layers, each node's height (layers.py)
+            from . import layers
+            seeds = [(e[4], e[5], e[6]) for e in inst.entrances] +                 [(b["x"], b["y"], b["z"]) for b in inst.bosses if b["x"] is not None]
+            lay = layers.build(u, seeds, prune=PRUNE, fill=FILL, log=lambda *a: None)
+            keep_reached({"graph": lay["graph"]}, inst, log=lambda *a: None)
+            if lay["graph"].edges:
+                u["layered"] = lay
             if u["graph"].total_length() < MIN_ROAD:
                 why, u = f"only {u['graph'].total_length():.0f} yd of road", None
         if u is None:

@@ -60,7 +60,14 @@ The addon is going public, so every change must keep it policy-safe:
     right-clicked without the profession, imported; unconfirmed until gathered), and city
     locations guards point out (`C_GossipInfo` points of interest, saved account-wide).
   - `Import.lua`: TomTom `/way` import, export and in-game route sharing.
-  - `Taxi.lua`: known flight masters, recorded flight times, the flight being taken.
+  - `Taxi.lua`: known flight masters, recorded flight times, the flight being taken. Zeppelins'
+    and boats' timetables: Data/Transports.lua has each one's `cycle` (the server's, from the
+    CMaNGOS dump's `transports` periods, else the path's estimate), `ride1`/`ride2`, `wait1`/`wait2`;
+    the game doesn't tell addons where a transport is, so a departure is learned when the player
+    rides one (`TransportTick`: near a dock, then carried off it without walking, two checks in a
+    row), kept per realm in `ns.db.transports`, and `TransportTimes` gives the next arrival and
+    departure at either dock. The map shows every dock with points of interest on (`G.DockTimes`:
+    the countdown under the icon; double-click for a stop).
   - `Teleports.lua`: hearthstone, Astral Recall and class teleports ready right now.
   - `Record.lua`: the player's road fixes, drawn on the map with the road tools (Options >
     Road tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
@@ -215,7 +222,21 @@ The addon is going public, so every change must keep it policy-safe:
     in that order; a stop with `boss` (its NPC entry) is done when it dies, not on arrival
     (`Nav.BossKilled` from ENCOUNTER_END / BOSS_KILL by DungeonEncounter id or name, and the
     combat log's UNIT_DIED / PARTY_KILL by NPC entry, registered only inside an instance;
-    kept per character, `BOSS_KILL_HOURS`). Entrances, bosses (the server's encounters
+    kept per character, `BOSS_KILL_HOURS`). **The position is hidden in dungeons** (probed in
+    Ragefire Chasm: `UnitPosition`, `GetPlayerFacing`, `C_Map.GetBestMapForUnit` all nil; speed
+    and `GetInstanceInfo` given), so there's no dead reckoning: the map puts up the dungeon's
+    map (`hiddenShown`, from `Nav.CurrentInstance`) with no arrow and no route from the player,
+    and shows the run's progress: `G.NextBoss` (the first in `G.BossOrder` not dead), the
+    usual way's stretches to bosses down faded and the one to the next bright (`SuggestedPath`'s
+    `legs`), bosses down faint and "Defeated". **Floors over floors** (`app/azerothgps/layers.py`):
+    the floors reached (walknet's bands) split into layers, each at most one floor per cell;
+    roads per layer, a layer's road pieces joined over its floor, layers joined where they meet
+    (and through bits too small for roads), pieces with the way in or a boss joined across the
+    smallest gap (`GAP_MAX`); `ns.Roads[level].z` holds each node's height, portals' `iz`, the
+    entrances' 6th value. In `Router` such a level is `layered`: roads only, the start and stop
+    snapped to roads at their heights (`opts.z`/`opts.tz`, `NearestEdges(..., z)`, `LAYER_Z`), gap
+    links only on one floor, straight only on one floor; routes carry `zs`, and
+    `G.FloorChanges` puts stairs icons (up/down) where the route climbs a floor. Entrances, bosses (the server's encounters
     and rank 3 NPCs, positions from their spawns) come from the CMaNGOS dump under
     `data/thirdparty`; the AreaTrigger and DungeonEncounter layouts this client has are in
     `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into

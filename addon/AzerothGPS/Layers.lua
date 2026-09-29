@@ -1302,6 +1302,7 @@ local function OnTooltip(tip)
     if tip.GetUnit and tip:GetUnit() then return end
     local fs = _G[tip:GetName() .. "TextLeft1"]
     local text = fs and fs:GetText()
+    if ns.IsSecret(text) then return end -- (hidden from addons: in a dungeon, in combat)
     if text and text ~= "" then L.NoteWorldObject(strtrim(text), GetTime()) end
     return
   end
@@ -1311,7 +1312,7 @@ local function OnTooltip(tip)
   for i = 1, tip:NumLines() do
     local fs = _G[tip:GetName() .. "TextLeft" .. i]
     local text = fs and fs:GetText()
-    if text then
+    if text and not ns.IsSecret(text) then
       for line in text:gmatch("[^\n]+") do
         local name = line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "")
         name = strtrim(name)
@@ -1407,14 +1408,16 @@ function L.Init()
       L.AddNode(p.cont, p.x, p.y, p.name, p.kind)
     end
   end)
-  GameTooltip:HookScript("OnShow", OnTooltip)
+  -- (a tooltip the game hides values of, or anything else odd in it: never an error each frame)
+  local function Watch(tip) pcall(OnTooltip, tip) end
+  GameTooltip:HookScript("OnShow", Watch)
   -- moving across blips changes the tooltip's text without showing it again
   local since = 0
   GameTooltip:HookScript("OnUpdate", function(tip, dt)
     since = since + dt
     if since >= 0.25 then
       since = 0
-      OnTooltip(tip)
+      Watch(tip)
     end
   end)
   if WorldMapFrame then

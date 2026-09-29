@@ -29,6 +29,7 @@ R.ON_ROAD_YD = 8 -- a straight leg this close to a road is drawn (and counted) a
 R.ON_ROAD_MIN = 25 -- yards: shorter stretches along a road stay off-road
 R.NODE_LINKS = 8 -- offroad mode: straight shortcuts from each road node, one per direction
 R.NODE_LINK_MAX = 1500 -- yards
+R.LAYER_Z = 5 -- a dungeon's floors (roads with heights): a road this far above or below is another floor
 R.NODE_LINK_TRIES = 3 -- ... the nearest this many nodes tried in each direction (past rock, give that one up)
 R.NODE_LINK_MS = 12 -- ... worked out for this long per route calculation, the rest in the background (a long
 -- route's search reaches thousands of nodes: done at once, the game froze)
@@ -535,7 +536,11 @@ R.BRIDGE_SAMPLE = 60 -- nodes per group of pieces tried when joining groups far 
 -- `nearOverlay(x, y)`: whether a spot is inside a city's ruins (short links shorter there);
 -- `skip[n]`: nodes left out (true: inside a cave, joined to the rest by its way out), or
 -- only in short links ("short": a cave's mouth, not a way to join pieces of road up).
-local function Bridges(nodes, adj, short, nearOverlay, skip)
+local function Bridges(nodes, adj, short, nearOverlay, skip, zs)
+  -- (roads with heights, a dungeon's floors: only between roads on about the same floor)
+  local function zok(a, b)
+    return not zs or not zs[a] or not zs[b] or math.abs(zs[a] - zs[b]) <= R.LAYER_Z
+  end
   local parent = {}
   local function find(a)
     local r = a
@@ -584,7 +589,7 @@ local function Bridges(nodes, adj, short, nearOverlay, skip)
   end
   local function consider(a, b, ax, ay, pa)
     local pb = piece[b]
-    if pa == pb then return end
+    if pa == pb or not zok(a, b) then return end
     local dx, dy = nodes[b * 2 - 1] - ax, nodes[b * 2] - ay
     local d2 = dx * dx + dy * dy
     local lo, hi = pa, pb
@@ -670,7 +675,7 @@ local function Bridges(nodes, adj, short, nearOverlay, skip)
           for _, b in ipairs(samples[gj]) do
             local dx, dy = nodes[b * 2 - 1] - ax, nodes[b * 2] - ay
             local d2 = dx * dx + dy * dy
-            if not bd or d2 < bd then bd, ba, bb = d2, a, b end
+            if (not bd or d2 < bd) and zok(a, b) then bd, ba, bb = d2, a, b end
           end
         end
         if bd then far[#far + 1] = { math.sqrt(bd), ba, bb, order[gi], order[gj] } end
@@ -944,14 +949,14 @@ function BuildGraph(cont)
     end or nil
   P1("router: build roads: costs", pt)
   pt = P0()
-  local bridges = Bridges(nodes, adj, grid and grid.slack and 0 or nil, nearOverlay, noBridge)
+  local bridges = Bridges(nodes, adj, grid and grid.slack and 0 or nil, nearOverlay, noBridge, roads.z)
   for ei in pairs(drops) do
     local e = edges[ei]
     if e then adj[e[1]][#adj[e[1]] + 1] = { e[2], e[3], ei, true } end
   end
   P1("router: build roads: gap links", pt)
   local g = { adj = adj, n = nodes, e = edges, count = #nodes / 2, bridges = bridges, drops = drops, side = side,
-    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones }
+    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones, z = roads.z }
   -- (built in the background by WarmUp, a route may have built it meanwhile: keep that one)
   if graphs[cont] == nil then graphs[cont] = g end
   return graphs[cont] or nil
@@ -1496,9 +1501,20 @@ R.NEAREST_MAX_RINGS = 60 -- SEG_BUCKET rings searched (12 km) before scanning ev
 -- The closest point of the road edges near (x, y) to it, nearest first: every edge within
 -- ENTRY_SLACK of the nearest one (enough for getting on/off the road).
 -- { { edge, px, py, dist, along = yards from the edge's first node }, ... }
-function R.NearestEdges(cont, x, y)
+-- A road's height `along` yards from its first node (a dungeon's roads: from its ends'), or nil.
+function R.EdgeZ(g, ei, along)
+  local e = g and g.z and g.e[ei]
+  if not e then return nil end
+  local za, zb = g.z[e[1]], g.z[e[2]]
+  if not za or not zb then return za or zb end
+  return za + (zb - za) * math.max(0, math.min(1, along / math.max(e[3], 1)))
+end
+
+-- `z`: with roads with heights (a dungeon's floors), only those about at that height.
+function R.NearestEdges(cont, x, y, z)
   local g = Graph(cont)
   if not g then return {} end
+  if not g.z then z = nil end
   local idx = SegIndex(g)
   local bx, by = math.floor(x / SEG_BUCKET), math.floor(y / SEG_BUCKET)
   local best, bestD = {}, nil
@@ -1517,19 +1533,25 @@ function R.NearestEdges(cont, x, y)
               local e = g.e[ei]
               local ax, ay, cx, cy = e[i], e[i + 1], e[i + 2], e[i + 3]
               local d2, t = SegDist2(x, y, ax, ay, cx, cy)
-              local b = best[ei]
-              if not b or d2 < b.d2 then
-                best[ei] = { edge = ei, px = ax + (cx - ax) * t, py = ay + (cy - ay) * t, d2 = d2,
-                  along = along + Dist(ax, ay, cx, cy) * t }
+              local at = along + Dist(ax, ay, cx, cy) * t
+              local ez = z and R.EdgeZ(g, ei, at)
+              if not (ez and math.abs(ez - z) > R.LAYER_Z) then
+                local b = best[ei]
+                if not b or d2 < b.d2 then
+                  best[ei] = { edge = ei, px = ax + (cx - ax) * t, py = ay + (cy - ay) * t, d2 = d2, along = at }
+                end
+                if not bestD or d2 < bestD * bestD then bestD = math.sqrt(d2) end
               end
-              if not bestD or d2 < bestD * bestD then bestD = math.sqrt(d2) end
             end
           end
         end
       end
     end
   end
-  if not bestD then return R.NearestEdgesAll(cont, x, y) end
+  if not bestD then
+    if z then return R.NearestEdges(cont, x, y) end -- (none on that floor: any)
+    return R.NearestEdgesAll(cont, x, y)
+  end
   local list = {}
   for _, b in pairs(best) do
     b.dist = math.sqrt(b.d2)
@@ -1676,16 +1698,17 @@ local function EdgePoints(e, from, to)
       if cum[i] >= a then
         local seg = cum[i] - cum[i - 1]
         local t = seg > 0 and (a - cum[i - 1]) / seg or 0
-        return { pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t, pts[i - 1][2] + (pts[i][2] - pts[i - 1][2]) * t }
+        return { pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t, pts[i - 1][2] + (pts[i][2] - pts[i - 1][2]) * t, a }
       end
     end
-    return pts[#pts]
+    return { pts[#pts][1], pts[#pts][2], total }
   end
+  -- (each point's yards from the road's first node: out[k][3])
   local out = { At(from) }
   if from <= to then
-    for i = 1, #pts do if cum[i] > from and cum[i] < to then out[#out + 1] = pts[i] end end
+    for i = 1, #pts do if cum[i] > from and cum[i] < to then out[#out + 1] = { pts[i][1], pts[i][2], cum[i] } end end
   else
-    for i = #pts, 1, -1 do if cum[i] < from and cum[i] > to then out[#out + 1] = pts[i] end end
+    for i = #pts, 1, -1 do if cum[i] < from and cum[i] > to then out[#out + 1] = { pts[i][1], pts[i][2], cum[i] } end end
   end
   out[#out + 1] = At(to)
   return out
@@ -1726,9 +1749,15 @@ end
 -- Straight legs that run along a road are split, and those stretches count as road.
 local function Build(g, pieces)
   local flat, kinds, length, road = {}, {}, 0, 0
-  local function add(x, y, kind)
+  -- (a dungeon's roads with heights: each point's height, `zs`, for the stairs between floors)
+  local zs = g and g.z and {} or nil
+  local function add(x, y, kind, z)
     local n = #flat
-    if n >= 2 and math.abs(flat[n - 1] - x) < 0.01 and math.abs(flat[n] - y) < 0.01 then return end
+    if n >= 2 and math.abs(flat[n - 1] - x) < 0.01 and math.abs(flat[n] - y) < 0.01 then
+      if zs and z and not zs[n / 2] then zs[n / 2] = z end
+      return
+    end
+    if zs then zs[n / 2 + 1] = z or false end
     if n >= 2 then
       local d = Dist(flat[n - 1], flat[n], x, y)
       length = length + d
@@ -1763,12 +1792,21 @@ local function Build(g, pieces)
   for _, p in ipairs(pieces) do
     if p.edge then
       local kind = g.drops and g.drops[p.edge] and R.KIND_DROP or R.KIND_ROAD
-      for _, q in ipairs(EdgePoints(g.e[p.edge], p.from, p.to)) do add(q[1], q[2], kind) end
+      for _, q in ipairs(EdgePoints(g.e[p.edge], p.from, p.to)) do add(q[1], q[2], kind, zs and R.EdgeZ(g, p.edge, q[3])) end
     else
       straight(p[2], p[3], p[4], p[5])
     end
   end
-  return { pts = flat, kinds = kinds, length = length, road = road }
+  if zs then -- (points off the roads: the height of the nearest one on a road before, else after)
+    local n, last = #flat / 2, nil
+    for i = 1, n do
+      if zs[i] then last = zs[i] elseif last then zs[i] = last end
+    end
+    for i = n, 1, -1 do
+      if zs[i] then last = zs[i] elseif last then zs[i] = last end
+    end
+  end
+  return { pts = flat, kinds = kinds, length = length, road = road, zs = zs }
 end
 
 local function Straight(g, sx, sy, tx, ty)
@@ -2017,14 +2055,23 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     return v
   end
   local direct = not Pass or Pass.SegmentCost(cont, sx, sy, tx, ty)
+  -- a dungeon's floors over floors (roads with heights): the start and the stop on theirs
+  -- (opts.z / opts.tz), no shortcuts off the roads (the terrain grid is only the top floor),
+  -- and straight only on one floor
+  local layered = g and g.z and true or false
+  local sz, tz = opts and opts.z, opts and opts.tz
+  if layered then
+    offroad = false
+    if not (sz and tz and math.abs(sz - tz) <= R.LAYER_Z) then direct = nil end
+  end
   -- (straight past the other faction's guards isn't a way to go if there's another)
   if direct and R.HostileYards(cont, sx, sy, tx, ty) > 0 then direct = nil end
   -- (straight at once when it's open, unless through a zone too high for the player: then it's
   -- weighed against the ways round, below)
   local directSafe = direct and DangerLine(sx, sy, tx, ty) == 0
   if not g or (offroad and directSafe) then return Straight(g, sx, sy, tx, ty) end
-  local ss = R.NearestEdges(cont, sx, sy)
-  local ts = R.NearestEdges(cont, tx, ty)
+  local ss = R.NearestEdges(cont, sx, sy, layered and sz or nil)
+  local ts = R.NearestEdges(cont, tx, ty, layered and tz or nil)
   -- the caves (Data/Caves.lua): in one, on by its roads; outside, not onto them, but for a
   -- way in to a cave at the other end. Over a mine under walkable ground the player may be
   -- up top: opts.indoors, from IsIndoors, tells (under a capital's floor, opts.z: their height).
@@ -2048,7 +2095,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   -- a city: roads on the same floor as the start or the stop (the nearest may be on a
   -- walk right above or below)
-  local H = grid and grid.slack and ns.Nav and ns.Nav.CityHeight
+  local H = not layered and grid and grid.slack and ns.Nav and ns.Nav.CityHeight
   if H then
     local function sameFloor(list, x, y, around)
       local h0 = around and ns.Nav.CityFloor(cont, x, y) or H(cont, x, y)
@@ -2076,7 +2123,8 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local function Leg(x1, y1, x2, y2, must, walk)
     local d = Dist(x1, y1, x2, y2)
     local c, path = d, nil
-    if Pass then c = SegCost(cont, x1, y1, x2, y2) end
+    if Pass and not layered then c = SegCost(cont, x1, y1, x2, y2) end
+    if layered then walk = false end
     -- (in a capital no walk around: the terrain grid's cells are coarser than its streets,
     -- and blind to its floors over each other; a leg there is straight, its walls real)
     local capital = not c and (R.CapitalAt(cont, x1, y1) or R.CapitalAt(cont, x2, y2))
@@ -2290,7 +2338,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   -- (Searched only when it could win: the walk is at least the straight distance. Not in a
   -- city or its ruins up top, whose grids are floors and walls, not terrain.)
   local directFactor = offroad and R.OFFROAD_TIE or R.ROAD_DIRECT_PENALTY
-  if Pass and not cityPenalty and not (Pass.Overlay and (Pass.Overlay(cont, sx, sy) or Pass.Overlay(cont, tx, ty))) then
+  if Pass and not cityPenalty and not layered and not (Pass.Overlay and (Pass.Overlay(cont, sx, sy) or Pass.Overlay(cont, tx, ty))) then
     local d = Dist(sx, sy, tx, ty)
     local best = gscore[GOAL] or math.huge
     if d <= R.OFFROAD_WALK_AROUND and best > d * directFactor then
@@ -2341,7 +2389,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     for _, p in ipairs(list) do
       -- a gap the terrain blocks in a straight line: walked around it once searched (from
       -- the player's position: a search that goes stale as they move on)
-      local path = p.gap and Pass and Pass.FindPath
+      local path = p.gap and Pass and Pass.FindPath and not layered
         and select(2, Walk(cont, p[2], p[3], p[4], p[5], opts and opts.transient and p[2] == sx and p[3] == sy or false))
       if path then
         for i = 1, #path - 2, 2 do pieces[#pieces + 1] = { OFF, path[i], path[i + 1], path[i + 2], path[i + 3] } end

@@ -3550,3 +3550,71 @@ def test_a_stop_in_a_zone_too_high_is_confirmed_first(nav_env):
     lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
     ns.settings.gps.avoidHighZones = False
     assert N.SetStops(lua.table(stop)) and lua.eval("ASKED") is None
+
+
+def test_zeppelin_timetable_learned_from_a_ride(env):
+    # Brill's zeppelin to Durotar: standing on the tower, then carried off it without walking
+    # (aboard): that departure, and the cycle, give every later arrival and departure.
+    lua, ns = env
+    lua.execute("GetRealmName = function() return 'Test' end")
+    lua.execute("CreateFrame = function() return { RegisterEvent = function() end, SetScript = function() end } end")
+    ns.db = lua.eval("{}")
+    load(lua, ns, "Data/Transports.lua", "Taxi.lua")
+    T = ns.Taxi
+    i = next(k for k in range(1, len(ns.Transports) + 1)
+             if ns.Transports[k][9] == "Jaggedswine Farm, Durotar" and ns.Transports[k][10] == "Brill, Tirisfal Glades")
+    t = ns.Transports[i]
+    bx, by = t[5], t[6]  # the Brill end (side 2)
+    assert T.DockAt(0, bx + 10, by) == (i, 2)
+    assert T.TransportTimes(i, 2, 1000) is None  # never seen
+    # waiting on the tower (walking about a little), then aboard: carried off at 10 yd/s
+    now, server = 0.0, 5000
+    T.TransportTick(now, server, bx + 12, by, 0, 7.0)
+    T.TransportTick(now + 0.5, server, bx + 12, by, 0, 0.0)  # (standing: not carried yet)
+    x = bx + 12
+    for k in range(1, 20):
+        x += 5
+        T.TransportTick(now + 0.5 + k * 0.5, server + 10 + k // 2, x, by, 0, 0.0)
+    seen = T.Sightings()[f"{t[9]} | {t[10]}"]
+    assert seen.side == 2 and seen.at == 5010  # (left when the carrying began)
+    # a cycle later: it leaves Brill again right then; it's at Durotar after the ride there
+    arr, dep, age = T.TransportTimes(i, 2, 5010 + t.cycle - 30)
+    assert dep == pytest.approx(30, abs=0.01) and arr == pytest.approx((30 - t.wait2) % t.cycle, abs=0.01)
+    arr1, dep1, _ = T.TransportTimes(i, 1, 5010 + 1)
+    assert arr1 == pytest.approx(t.ride2 - 1, abs=0.01)  # (Brill to Durotar: ride2, dock 2 round to 1)
+    assert dep1 == pytest.approx(t.ride2 + t.wait1 - 1, abs=0.01)
+    # walking off the tower down the stairs isn't a departure
+    T2 = T.Sightings()
+    T2[f"{t[9]} | {t[10]}"] = None
+    for k in range(20):
+        T.TransportTick(100 + k * 0.5, 9000 + k, bx + 10 + k * 4, by, 0, 7.0)
+    assert T.Sightings()[f"{t[9]} | {t[10]}"] is None
+
+
+def test_boats_and_zeppelins_only_of_the_players_faction(nav_env):
+    lua, ns = nav_env
+    load(lua, ns, "Data/Hostile.lua")
+    N = ns.Nav
+
+    def row(a, b):
+        return next(ns.Transports[k] for k in range(1, len(ns.Transports) + 1)
+                    if ns.Transports[k][9] == a and ns.Transports[k][10] == b)
+
+    zep = row("Jaggedswine Farm, Durotar", "Brill, Tirisfal Glades")
+    menethil = row("Menethil Harbor, Wetlands", "Theramore Isle, Dustwallow Marsh")
+    booty = row("Ratchet, The Barrens", "Booty Bay, Stranglethorn Vale")
+    store = lua.eval("{}")
+    ns.CharDB = lua.eval("function(s) return function() return s end end")(store)
+    store.faction = "Horde"
+    assert N.TransportUsable(zep) and not N.TransportUsable(menethil) and N.TransportUsable(booty)
+    store.faction = "Alliance"
+    assert not N.TransportUsable(zep) and N.TransportUsable(menethil) and N.TransportUsable(booty)
+    # planning: an Alliance character from Brill to Orgrimmar isn't put on the zeppelin
+    d = lua.table(cont=1, x=1600.0, y=-4400.0)
+    legs = N.Plan(0, 2066.0, 290.0, 7.0, d)
+    legs = legs[0] if isinstance(legs, tuple) else legs
+    rides = [legs[i].ride for i in range(1, len(legs) + 1) if legs[i].ride] if legs else []
+    assert all(r[9] != "Jaggedswine Farm, Durotar" and r[10] != "Brill, Tirisfal Glades" for r in rides)
+    store.faction = "Horde"
+    legs = N.Plan(0, 2066.0, 290.0, 7.0, d)[0]
+    assert any(legs[i].ride and legs[i].ride[10] == "Brill, Tirisfal Glades" for i in range(1, len(legs) + 1))

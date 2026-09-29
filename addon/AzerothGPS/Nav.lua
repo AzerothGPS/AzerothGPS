@@ -64,7 +64,7 @@ local version = 0 -- bumped when the stops change (cache key for the stretches b
 
 local function Copy(d)
   return { x = d.x, y = d.y, cont = d.cont, name = d.name, icon = d.icon, corpse = d.corpse, questRoute = d.questRoute,
-    tex = d.tex, boss = d.boss, enc = d.enc }
+    tex = d.tex, boss = d.boss, enc = d.enc, z = d.z }
 end
 
 -- The stops are saved per character, so /reload and relogging keep the route.
@@ -353,6 +353,33 @@ local function Faction()
 end
 N.Faction = Faction
 
+-- Whether transport row t (a boat, a zeppelin, a lift, a dungeon's portal) is one the player's
+-- faction can take: not with either end among the other faction's guards (Data/Hostile.lua:
+-- within DOCK_GUARDS_YD of them; the ship waits off the quay). Worked out once per faction.
+N.DOCK_GUARDS_YD = 100
+local usable = {}
+function N.TransportUsable(t)
+  local side = Faction()
+  local R = ns.Router
+  if not (side and R and R.HostileAt and ns.Hostile) then return true end
+  usable[side] = usable[side] or {}
+  local v = usable[side][t]
+  if v == nil then
+    local function guarded(c, x, y)
+      for a = 0, 15 do
+        for k = 0, 3 do
+          local r = N.DOCK_GUARDS_YD * k / 3
+          if R.HostileAt(c, x + math.cos(a * math.pi / 8) * r, y + math.sin(a * math.pi / 8) * r, side) then return true end
+        end
+      end
+      return false
+    end
+    v = not (guarded(t[1], t[2], t[3]) or guarded(t[4], t[5], t[6]))
+    usable[side][t] = v
+  end
+  return v
+end
+
 -- Every trip between two known flight masters, connecting through known ones like the
 -- game does: rows in the transports' format { c, x1, y1, c, x2, y2, seconds, "flight",
 -- fromName, toName, "flight master", pts = { x, y, ... } via the connecting stops }.
@@ -445,7 +472,7 @@ function N.Plan(cont, px, py, speed, d, teleports)
   end
   for i, t in ipairs(ns.Transports or {}) do
     -- (a dungeon's way in only for a trip from or to inside it: never through one as a shortcut)
-    if t[8] ~= "portal" or t[4] == cont or t[4] == d.cont then
+    if (t[8] ~= "portal" or t[4] == cont or t[4] == d.cont) and N.TransportUsable(t) then
       nodes[#nodes + 1] = { t[1], t[2], t[3], t = i, side = 1 }
       nodes[#nodes + 1] = { t[4], t[5], t[6], t = i, side = 2 }
     end
@@ -530,13 +557,25 @@ function N.PlayerZ()
   return z
 end
 
-local function Stretch(cont, sx, sy, d, walk, opts)
+-- A walking leg's options: `base` with the heights it starts and ends at, when known (a
+-- dungeon's floors over floors: Router takes the roads on those floors).
+local function LegOpts(base, z, tz)
+  if not z and not tz then return base end
+  local o = {}
+  for k, v in pairs(base) do o[k] = v end
+  o.z, o.tz = z or base.z, tz
+  return o
+end
+
+-- `sz`: the height the stretch starts at, when known (a stop's).
+local function Stretch(cont, sx, sy, d, walk, opts, sz)
   -- from the player's position: the teleports ready now may start the trip
   local tps = opts.teleports -- the teleports this stretch may start with (AssignTeleports)
   local legs = N.Plan(cont, sx, sy, walk, d, tps)
   if not legs then return nil end
   local st = { parts = {}, legs = legs, first = 0, walk = 0, ride = 0, road = 0 }
   local rode = false
+  local legZ = sz -- (the height the next walking leg starts at, when known)
   for _, leg in ipairs(legs) do
     if leg.ride then
       local t = leg.ride
@@ -553,10 +592,13 @@ local function Stretch(cont, sx, sy, d, walk, opts)
       end
       st.ride = st.ride + t[7]
       rode = true
+      legZ = leg.from == 1 and t.iz or nil -- (into a dungeon: where its portal puts you)
     else
+      local toStop = leg.x2 == d.x and leg.y2 == d.y
       local lr = ns.Router.Route(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2,
-        (opts.transient and leg.x1 == sx and leg.y1 == sy) and opts or opts.fixed)
-      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds }
+        LegOpts((opts.transient and leg.x1 == sx and leg.y1 == sy) and opts or opts.fixed, legZ, toStop and d.z or nil))
+      legZ = toStop and d.z or nil
+      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs }
       st.walk, st.road = st.walk + lr.length, st.road + lr.road
       if lr.pending then st.pending = true end
       leg.yards = lr.length
@@ -598,7 +640,13 @@ local function Follow(r, px, py)
     np[#np + 1], np[#np + 2] = pts[2 * i + 1], pts[2 * i + 2]
     nk[#nk + 1] = kinds[i]
   end
-  local trimmed = { cont = full.cont, pts = np, kinds = nk, stop = full.stop }
+  local nz -- (a dungeon's floors: the points' heights, trimmed alike)
+  local zs = full.zs
+  if zs and zs[bi] and zs[bi + 1] then
+    nz = { zs[bi] + (zs[bi + 1] - zs[bi]) * bt }
+    for i = bi, #pts / 2 - 1 do nz[#nz + 1] = zs[i + 1] end
+  end
+  local trimmed = { cont = full.cont, pts = np, kinds = nk, stop = full.stop, zs = nz }
   r.parts[1], r.pts, r.kinds = trimmed, np, nk
   r.followIdx, r.consumed = bi, consumed
   local b = r.base
@@ -644,7 +692,7 @@ function N.FlyingRoute(px, py, cont, walk, offroad, f)
     local laterSt = {}
     for i = 2, N.PlannedStops() do
       local a = N.stops[i - 1]
-      laterSt[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, { offroad = offroad, fixed = fixed }) or false
+      laterSt[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, { offroad = offroad, fixed = fixed }, a.z) or false
     end
     flyingRest = { key = key, st = rest, later = laterSt }
   end
@@ -781,7 +829,7 @@ local function FillLater(walk, offroad, budget)
       local opts = { offroad = offroad }
       opts.fixed = { offroad = offroad }
       if later.tp and later.tp[i] then opts.teleports = TeleportsFrom(a.cont, a.x, a.y, { [later.tp[i]] = true }) end
-      later[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, opts) or false
+      later[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, opts, a.z) or false
       later.done[i] = true
       budget = budget - 1
     end

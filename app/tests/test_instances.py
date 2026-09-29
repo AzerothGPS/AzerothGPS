@@ -57,21 +57,19 @@ def test_instances_load_as_levels(inst_env):
 def test_route_to_a_boss_follows_the_instances_roads(inst_env):
     lua, ns = inst_env
     R, P = ns.Router, ns.Passability
-    r = R.Route(DM, *DM_INSIDE, *VANCLEEF, lua.table(offroad=False))
+    # (from the way in, at its height, to VanCleef on his ship's deck: the floors told apart by height)
+    e = ns.Instances[DM].entrances[1]
+    r = R.Route(DM, *DM_INSIDE, *VANCLEEF, lua.table(offroad=False, z=e[6], tz=boss(ns, DM, "Edwin VanCleef")[5]))
     pts, kinds = pts_kinds(r)
     assert r.length > 800  # (down the mine, through the foundry, out to the cove)
     road = sum(math.dist(pts[i], pts[i + 1]) for i, k in enumerate(kinds) if k == 0)
     assert road / r.length > 0.9
     assert math.dist(pts[-1], VANCLEEF) < 1
-    # the legs off the roads stay on the floors (but for a few yards where the mine's tunnel
-    # comes out into the cove: the floors don't quite meet there)
-    bad = 0.0
+    # only short steps off the roads (on and off them): no cutting through the rock (the grid
+    # here is the top floor only, so the floors under it are judged by the builder's 3D check)
     for i, k in enumerate(kinds):
         if k == 1:
-            (x1, y1), (x2, y2) = pts[i], pts[i + 1]
-            n = max(1, int(math.dist(pts[i], pts[i + 1])))
-            bad += sum(1 for s in range(1, n) if not P.IsOpen(DM, x1 + (x2 - x1) * s / n, y1 + (y2 - y1) * s / n))
-    assert bad <= 8
+            assert math.dist(pts[i], pts[i + 1]) < 25, (pts[i], pts[i + 1])
 
 
 def test_route_from_outside_to_a_boss_takes_the_portal(inst_env):
@@ -259,7 +257,7 @@ def test_right_click_leaves_a_dungeons_map_for_the_view_it_came_from(inst_env):
     assert G.BrowseState()[1] is None
 
 
-def test_mouse_wheel_steps_a_dungeons_floors(inst_env):
+def test_plus_and_minus_step_a_dungeons_floors(inst_env):
     lua, ns = inst_env
     load(lua, ns, "Data/Interiors.lua", "Data/Instances.lua", "GPSFrame.lua")
     G = ns.GPS
@@ -270,21 +268,16 @@ def test_mouse_wheel_steps_a_dungeons_floors(inst_env):
     G.ShowInstance(SFK)
     fit = ns.settings.gps.zoom
     assert G.ShownFloor(SFK, None) == 0  # all floors
-    # scrolling in: each floor down from the top, the zoom kept
-    for k in range(1, n + 1):
-        assert G.FloorWheel(1)
-        assert G.ShownFloor(SFK, None) == k and ns.settings.gps.zoom == pytest.approx(fit)
-    assert not G.FloorWheel(1)  # past the bottom floor: the usual zoom in
-    G.SetZoom(fit * 0.64)
-    # scrolling out: back to where the floors were stepped, then up them, then all, then zoom out
-    assert G.FloorWheel(-1) and G.FloorWheel(-1)
-    assert ns.settings.gps.zoom == pytest.approx(fit) and G.ShownFloor(SFK, None) == n
-    for k in range(n - 1, -1, -1):
-        assert G.FloorWheel(-1) and G.ShownFloor(SFK, None) == k
-    assert not G.FloorWheel(-1)
-    # one floor only (the Stockade): the wheel zooms
+    assert not G.FloorStep(True)  # (above all of them: nothing)
+    for k in range(1, n + 1):  # "-": down from the top, the zoom kept
+        assert G.FloorStep(False)
+        assert G.ShownFloor(SFK, None) == k and ns.settings.gps.zoom == fit
+    assert not G.FloorStep(False)  # (the bottom floor)
+    for k in range(n - 1, -1, -1):  # "+": back up, then all of them
+        assert G.FloorStep(True) and G.ShownFloor(SFK, None) == k
+    # one floor only (the Stockade): no stepping
     G.ShowInstance(20034)
-    assert not G.FloorWheel(1)
+    assert not G.FloorStep(False)
 
 
 def test_dungeon_route_holds_off_other_routes(inst_env):
@@ -326,8 +319,9 @@ def test_a_dungeons_map_shows_the_usual_way_through(inst_env):
     order = G.BossOrder(DM)
     names = [order[i][1] for i in range(1, len(order) + 1)]
     assert names[0] == "Rhahk'Zor" and names[-1] == "Edwin VanCleef" and "Cookie" not in names
-    path = G.SuggestedPath(DM)
+    path, zs, legs = G.SuggestedPath(DM)
     pts = [(path[i], path[i + 1]) for i in range(1, len(path), 2)]
+    assert len(legs) == len(order)  # (a stretch to each boss)
     assert len(pts) > 20
     assert math.hypot(pts[0][0] - DM_INSIDE[0], pts[0][1] - DM_INSIDE[1]) < 1  # from the way in
     last = order[len(order)]
@@ -339,8 +333,21 @@ def test_a_dungeons_map_shows_the_usual_way_through(inst_env):
         near = [k for k, (x, y) in enumerate(pts) if k >= at and math.hypot(x - row[3], y - row[4]) < 15]
         assert near, b
         at = near[0]
-    # along the dungeon's floors: no long straight cuts through its walls
-    P = ns.Passability
+    # no long straight cuts (a gap the floors don't quite close is crossed within layers.GAP_MAX)
     for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
-        if math.hypot(x2 - x1, y2 - y1) > 30:
-            assert P.SegmentCost(DM, x1, y1, x2, y2) is not None
+        assert math.hypot(x2 - x1, y2 - y1) <= 60, ((x1, y1), (x2, y2))
+
+
+def test_a_kill_moves_the_dungeons_map_on_to_the_next_boss(inst_env):
+    lua, ns = inst_env
+    load(lua, ns, "GPSFrame.lua")
+    G, N = ns.GPS, ns.Nav
+    lua.execute("time = function() return 1000 end")
+    i, b = G.NextBoss(DM)
+    assert i == 1 and b[1] == "Rhahk'Zor"
+    N.BossKilled(DM, 644)  # Rhahk'Zor
+    i, b = G.NextBoss(DM)
+    assert i == 2 and b[1] == "Sneed"
+    for row in G.BossOrder(DM).values():
+        N.BossKilled(DM, row[2])
+    assert G.NextBoss(DM) is None  # (all down)

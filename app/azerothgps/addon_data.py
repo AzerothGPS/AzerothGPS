@@ -224,6 +224,29 @@ TRANSPORT_SPEED = 30.0  # yd/s, roughly how fast zeppelins and boats travel
 TRANSPORT_WAIT = 120.0  # s, average wait for the next departure
 
 
+def transport_periods() -> dict[int, float]:
+    """Each transport's full cycle (seconds) by its TaxiPath id, from the CMaNGOS dump under
+    data/thirdparty (its `transports` periods; gameobject_template type 15's data0 is the
+    path). Empty without the dump."""
+    import gzip
+    import re
+
+    from .paths import data_dir
+
+    dump = data_dir() / "thirdparty" / "cmangos-classic-db" / "ClassicDB_1_12_1_z2815.sql.gz"
+    if not dump.exists():
+        return {}
+    txt = gzip.open(dump, "rt", encoding="utf-8", errors="replace").read()
+    m = re.search(r"INSERT INTO `transports` VALUES (.*?);\n", txt, re.S)
+    period = {int(e): int(ms) / 1000.0 for e, ms in re.findall(r"\((\d+),'(?:[^'\\]|\\.)*',(\d+)\)", m.group(1))} if m else {}
+    out = {}
+    for m in re.finditer(r"INSERT INTO `gameobject_template` VALUES (.*?);\n", txt, re.S):
+        for e, path in re.findall(r"\((\d+),15,\d+,'(?:[^'\\]|\\.)*',\d+,\d+,\d+,[\d.]+,(\d+),", m.group(1)):
+            if int(e) in period:
+                out[int(path)] = period[int(e)]
+    return out
+
+
 def transports_lua(cd: ClientData) -> str:
     """ns.Transports = { {cont1, x1, y1, cont2, x2, y2, seconds, kind, name1, name2}, ... }
 
@@ -249,6 +272,7 @@ def transports_lua(cd: ClientData) -> str:
     nodes = defaultdict(list)
     for n in cd.table("TaxiPathNode"):
         nodes[n["PathID"]].append(n)
+    periods = transport_periods()
     seen, rows = set(), []
     for pid, ns_ in sorted(nodes.items()):
         ns_ = sorted(ns_, key=lambda n: n["NodeIndex"])
@@ -264,11 +288,21 @@ def transports_lua(cd: ClientData) -> str:
         (i1, a), (i2, b) = stops
         if a["ContinentID"] not in CONTINENTS or b["ContinentID"] not in CONTINENTS:
             continue
-        dist = 0.0
-        for j in range(i1, i2):  # along the path between the docks (same-continent legs only)
-            p, q = ns_[j]["Loc"], ns_[j + 1]["Loc"]
-            if ns_[j]["ContinentID"] == ns_[j + 1]["ContinentID"]:
-                dist += math.dist(p[:2], q[:2])
+        def along(js, ns_=ns_):  # yards along the path over these legs (same-continent ones only)
+            d = 0.0
+            for j in js:
+                p, q = ns_[j]["Loc"], ns_[(j + 1) % len(ns_)]["Loc"]
+                if ns_[j]["ContinentID"] == ns_[(j + 1) % len(ns_)]["ContinentID"]:
+                    d += math.dist(p[:2], q[:2])
+            return d
+        dist = along(range(i1, i2))  # from the first dock to the second
+        back = along(list(range(i2, len(ns_))) + list(range(0, i1)))  # and on round to the first
+        # the timetable: the whole cycle (the server's when known), the waits at the docks, and
+        # the rides between (the moving time shared by length)
+        wait1, wait2 = a["Delay"], b["Delay"]
+        cycle = periods.get(pid) or (dist + back) / TRANSPORT_SPEED + wait1 + wait2
+        moving = max(cycle - wait1 - wait2, 1.0)
+        ride1, ride2 = moving * dist / max(dist + back, 1.0), moving * back / max(dist + back, 1.0)
         key = tuple(sorted([(a["ContinentID"], round(a["Loc"][0]), round(a["Loc"][1])),
                             (b["ContinentID"], round(b["Loc"][0]), round(b["Loc"][1]))]))
         if key in seen:
@@ -278,8 +312,11 @@ def transports_lua(cd: ClientData) -> str:
         secs = dist / TRANSPORT_SPEED + TRANSPORT_WAIT
         (c1, x1, y1), (c2, x2, y2) = (a["ContinentID"], *a["Loc"][:2]), (b["ContinentID"], *b["Loc"][:2])
         rows.append(f'  {{ {c1}, {x1:.1f}, {y1:.1f}, {c2}, {x2:.1f}, {y2:.1f}, {secs:.0f}, "{kind}", '
-                    f'{_lua_str(place_name(c1, x1, y1))}, {_lua_str(place_name(c2, x2, y2))} }},')
-    return "\n".join([_header(cd, "Zeppelins and boats: docks, ride + average wait."), "ns.Transports = {", *rows, "}"]) + "\n"
+                    f'{_lua_str(place_name(c1, x1, y1))}, {_lua_str(place_name(c2, x2, y2))}, '
+                    f'cycle = {cycle:.1f}, ride1 = {ride1:.1f}, ride2 = {ride2:.1f}, wait1 = {wait1}, wait2 = {wait2}'
+                    f'{", server = true" if pid in periods else ""} }},')
+    return "\n".join([_header(cd, "Zeppelins and boats: docks, ride + average wait; the timetable: cycle (s), ride1 (dock 1"
+                              " to 2), ride2 (back round), wait1 / wait2 (at each dock)."), "ns.Transports = {", *rows, "}"]) + "\n"
 
 
 def flights_lua(cd: ClientData) -> str:

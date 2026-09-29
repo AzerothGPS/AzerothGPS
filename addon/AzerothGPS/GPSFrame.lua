@@ -706,7 +706,7 @@ end
 ---------------------------------------------------------------------------
 
 local frame, canvas, lineLayer, arrow, northLabel, infoText, noMapText, recenter
-local floorText -- a dungeon's map: which floor is shown
+local floorText, floorBar, floorUp, floorDown -- a dungeon's map: which floor is shown, and "+" / "-" for another
 local free -- nil while following the player; else the frozen view { x, y, rot }
 local approachZoom, approachFor, approachSkip -- near a stop: the zoom now (animated); for which stop; skipped for (G.UpdateApproach)
 local view = { x = 0, y = 0, rot = 0, s = 1 } -- last drawn view
@@ -851,29 +851,86 @@ local suggested = {}
 function G.SuggestedPath(inst)
   local c = suggested[inst]
   local now = GetTime and GetTime() or 0
-  if c and (c.done or now - c.at < 2) then return c.pts end
+  if c and (c.done or now - c.at < 2) then return c.pts, c.zs, c.legs end
   local info = ns.Instances and ns.Instances[inst]
   local R = ns.Router
   local e = info and info.entrances and info.entrances[1]
   if not (e and R and R.Route) then return {} end
-  local pts, pending = {}, false
-  local x, y = e[4], e[5]
+  local pts, zs, pending = {}, {}, false
+  local legs = {} -- { { first point, last point, boss row }, ... }: the way to each boss in turn
+  local x, y, z = e[4], e[5], e[6]
   for _, b in ipairs(G.BossOrder(inst)) do
-    local ok, r = pcall(R.Route, inst, x, y, b[3], b[4], { offroad = false })
+    local first = #pts / 2 + 1
+    -- (from floor to floor: the heights say which, the stairs between them in the route)
+    local ok, r = pcall(R.Route, inst, x, y, b[3], b[4], { offroad = false, z = z, tz = b[5] })
     if ok and r and r.pts then
       pending = pending or r.pending
       for i = 1, #r.pts - 1, 2 do
         pts[#pts + 1], pts[#pts + 2] = r.pts[i], r.pts[i + 1]
+        zs[#zs + 1] = r.zs and r.zs[(i + 1) / 2] or false
       end
     end
-    x, y = b[3], b[4]
+    legs[#legs + 1] = { first, #pts / 2, b }
+    x, y, z = b[3], b[4], b[5]
   end
-  suggested[inst] = { pts = pts, at = now, done = not pending }
-  return pts
+  suggested[inst] = { pts = pts, zs = zs, legs = legs, at = now, done = not pending }
+  return pts, zs, legs
+end
+
+-- The run so far in a dungeon: the first boss in the usual order still up (its index in
+-- G.BossOrder, and its row), or nil when all are down. (Kills: Nav.BossKilled.)
+function G.NextBoss(inst)
+  for i, b in ipairs(G.BossOrder(inst)) do
+    if not ns.Nav.BossDead({ cont = inst, boss = b[2] }) then return i, b end
+  end
+  return nil
+end
+
+-- Where a route in a dungeon goes up or down to another floor: the foot (or top) of each
+-- stair or ramp (a run of legs climbing more than STAIR_SLOPE, joined across flat bits
+-- shorter than STAIR_JOIN yards) rising or falling STAIR_RISE yards or more. { { x, y, up,
+-- yards along } }, the first `max` of them.
+G.STAIR_RISE, G.STAIR_SLOPE, G.STAIR_JOIN = 4, 0.2, 4
+function G.FloorChanges(pts, zs, max)
+  local out = {}
+  if not (pts and zs) then return out end
+  local n = #pts / 2
+  local run, along = nil, 0
+  local function close()
+    if run and math.abs(run.dz) >= G.STAIR_RISE then
+      out[#out + 1] = { run.x, run.y, run.dz > 0, run.along }
+    end
+    run = nil
+  end
+  for i = 1, n - 1 do
+    local x1, y1, x2, y2 = pts[2 * i - 1], pts[2 * i], pts[2 * i + 1], pts[2 * i + 2]
+    local z1, z2 = zs[i], zs[i + 1]
+    local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+    if z1 and z2 and len > 0 then
+      local dz = z2 - z1
+      if math.abs(dz) / len >= G.STAIR_SLOPE then
+        if run and (dz > 0) == (run.dz >= 0) and along - run.last <= G.STAIR_JOIN then
+          run.dz, run.last = run.dz + dz, along + len
+        else
+          close()
+          run = { x = x1, y = y1, dz = dz, along = along, last = along + len }
+        end
+      elseif run and along + len - run.last > G.STAIR_JOIN then
+        close()
+      end
+    end
+    along = along + len
+    if max and #out >= max then break end
+  end
+  close()
+  if max then
+    while #out > max do table.remove(out) end
+  end
+  return out
 end
 
 -- The floor shown in a dungeon's map: 0 all of them, else counted from the top. Picked with the
--- mouse wheel (G.FloorWheel); until then the player's (at height pz, in it), else all.
+-- "+" and "-" buttons (G.FloorStep); until then the player's (at height pz, in it), else all.
 local floorSel, floorInst, floorBaseZoom
 function G.ShownFloor(inst, pz)
   local floors = G.InstanceFloors(inst)
@@ -891,27 +948,22 @@ function G.ShownFloor(inst, pz)
   return 0
 end
 
--- The mouse wheel over a dungeon's map with floors: in goes down a floor, out up one (all of
--- them past the top); past the bottom floor it zooms in, past "all floors" out (and back to
--- the zoom the floors were stepped at first). True when it did.
-function G.FloorWheel(delta)
+-- A dungeon's map with floors: the "+" button goes up a floor (all of them past the top one),
+-- "-" down one. True when it did.
+function G.FloorStep(up)
   local inst = view.instance or (free and free.instance)
   local floors = inst and G.InstanceFloors(inst)
   local n = floors and #floors or 0
   if n < 2 then return false end
-  local px, py, _, pz = Geo.PlayerWorld()
+  local _, _, _, pz = Geo.PlayerWorld()
   local k = G.ShownFloor(inst, view.mine and pz or nil)
-  local z, zb = S().zoom, floorBaseZoom or S().zoom
-  if delta > 0 then
-    if z > zb * 1.01 then G.SetZoom(math.max(zb, z * 0.8)) return true end
-    if k >= n then return false end
-    floorSel = k + 1
-  else
-    if z < zb * 0.99 then G.SetZoom(math.min(zb, z * 1.25)) return true end
+  if up then
     if k <= 0 then return false end
     floorSel = k - 1
+  else
+    if k >= n then return false end
+    floorSel = k + 1
   end
-  floorBaseZoom = z
   elapsed = 1
   return true
 end
@@ -1184,6 +1236,17 @@ local function PoiButton(i)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)
+  b:SetScript("OnUpdate", function(self, dt)
+    -- (a dock's timer: the tooltip counts down with it)
+    if not self.dock or GameTooltip:GetOwner() ~= self then return end
+    self.agpsTick = (self.agpsTick or 0) + dt
+    if self.agpsTick < 1 then return end
+    self.agpsTick = 0
+    local _, lines = G.DockTimes(self.dock[1], self.dock[2])
+    self.note = lines and table.concat(lines, "\n") or nil
+    local onEnter = self:GetScript("OnEnter")
+    if onEnter then onEnter(self) end
+  end)
   b:SetScript("OnClick", function(self)
     if self.cityMap then G.ShowCity(self.cityMap) end -- (a capital on a continent's map)
     if self.instance then G.ShowInstance(self.instance) end -- (a dungeon's entrance: its map)
@@ -1200,6 +1263,31 @@ end
 
 local INSTANCE_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
 local SUGGESTED_COLOR = { 1, 0.78, 0.15 } -- a dungeon's usual way through, on its map
+local SUGGESTED_NEXT = { 1, 0.95, 0.45 } -- ... its stretch to the next boss still up
+local DOCK_ICON = { zeppelin = "Interface\\AddOns\\AzerothGPS\\Media\\Zeppelin",
+  boat = "Interface\\AddOns\\AzerothGPS\\Media\\Ship" } -- (our own art, Media/)
+
+-- A zeppelin's or boat's dock: its timer ("in 2:10" to its next arrival, "leaves 0:45" while
+-- it's docked) and the tooltip's lines, from Taxi's learned timetable.
+local function Clock(sec)
+  sec = math.max(0, math.floor(sec + 0.5))
+  return string.format("%d:%02d", math.floor(sec / 60), sec % 60)
+end
+function G.DockTimes(i, side)
+  local T, t = ns.Taxi, ns.Transports and ns.Transports[i]
+  if not (T and T.TransportTimes and t) then return nil end
+  local now = GetServerTime and GetServerTime() or (time and time()) or 0
+  local arr, dep, age = T.TransportTimes(i, side, now)
+  if not arr then return nil, { "Timetable: ride it once and the addon learns it" } end
+  local wait = side == 1 and t.wait1 or t.wait2
+  local docked = dep <= wait
+  local short = docked and ("leaves " .. Clock(dep)) or Clock(arr)
+  local lines = { docked and ("At the dock: leaves in " .. Clock(dep)) or ("Arrives in " .. Clock(arr) .. ", leaves in " .. Clock(dep)) }
+  if age > 6 * 3600 then
+    lines[#lines + 1] = string.format("(learned %d h ago: a server restart since would put it off)", math.floor(age / 3600))
+  end
+  return short, lines, docked
+end
 local BOSS_ICON = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
 local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 
@@ -1228,7 +1316,26 @@ local function DrawPois(pois, zoom)
       b.name, b.wx, b.wy = p[4], p[5], p[6]
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.preview, b.cityMap, b.instance, b.exit = nil, nil, nil, nil
-      if p[1] == 6 then -- a dungeon's or raid's entrance: click for its map
+      b.dock = nil
+      if b.timer then b.timer:Hide() end
+      if p[1] == 10 then -- a zeppelin's or boat's dock: its next arrival under it
+        ns.SetIcon(b.icon, DOCK_ICON[p.kind])
+        b.stopTex, b.questID = DOCK_ICON[p.kind], nil
+        b.dock = p.dock
+        local short, lines, docked = G.DockTimes(p.dock[1], p.dock[2])
+        b.note = lines and table.concat(lines, "\n") or nil
+        if short then
+          if not b.timer then
+            b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            b.timer:SetPoint("TOP", b, "BOTTOM", 0, -1)
+            b.timer:SetShadowOffset(1, -1)
+          end
+          b.timer:SetText(short)
+          b.timer:SetTextColor(docked and 0.4 or 1, docked and 1 or 0.9, docked and 0.4 or 0.6)
+          b.timer:Show()
+        end
+        b:SetSize(18, 18)
+      elseif p[1] == 6 then -- a dungeon's or raid's entrance: click for its map
         ns.SetIcon(b.icon, p.raid and "atlas:Raid" or "atlas:Dungeon", INSTANCE_ICON)
         b.stopTex, b.questID = nil, nil
         b.note = (p.raid and "Raid" or "Dungeon") .. ". Click: show its map"
@@ -1237,8 +1344,14 @@ local function DrawPois(pois, zoom)
       elseif p[1] == 7 then -- a boss, in a dungeon's map
         ns.SetIcon(b.icon, BOSS_ICON)
         b.stopTex, b.questID = BOSS_ICON, nil
-        b.note = p.optional and "Optional" or nil
-        b:SetSize(18, 18)
+        b.note = p.dead and "|cff40ff40Defeated|r" or p.next and "|cffffd100Next|r" or p.optional and "Optional" or nil
+        b:SetSize(p.next and 22 or 18, p.next and 22 or 18)
+      elseif p[1] == 9 then -- stairs to another floor (a dungeon's), up or down
+        ns.SetIcon(b.icon, p.up and "atlas:poi-door-up" or "atlas:poi-door-down",
+          p.up and "Interface\\Buttons\\Arrow-Up-Up" or "Interface\\Buttons\\Arrow-Down-Up")
+        b.stopTex, b.questID = nil, nil
+        b.note = p.note
+        b:SetSize(p.next and 22 or 16, p.next and 22 or 16)
       elseif p[1] == 8 then -- a dungeon's way out, in its map
         ns.SetIcon(b.icon, "atlas:poi-door", EXIT_ICON)
         b.stopTex, b.questID = nil, nil
@@ -1344,12 +1457,35 @@ local function DrawStopPins(toScreen, viewCont)
   for i = n + 1, #stopPins do stopPins[i]:Hide() end
 end
 
+local hiddenShown -- the dungeon whose map was put up because the game hides the player's position in it
 function G.Update()
   local st = S()
   local px, py, cont, pz = Geo.PlayerWorld()
+  -- In a dungeon the game hides the player's position: its map still (the art, the usual way
+  -- through, the bosses), without them on it and without a route from where they stand.
+  local hidden
+  if not px then
+    local lvl = ns.Nav.CurrentInstance and ns.Nav.CurrentInstance()
+    local inst = lvl and G.InstanceOf(lvl)
+    if inst then
+      hidden = inst
+      if not free or hiddenShown ~= inst then
+        local x0, x1, y0, y1 = ns.Passability.GridBounds(inst)
+        browse, browseZoom, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil, nil
+        free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cont = inst, instance = inst }
+        st.zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
+        hiddenShown = inst
+      end
+      px, py, cont, pz = free.x, free.y, free.cont, nil
+    end
+  else
+    hiddenShown = nil
+  end
   if not px then
     DrawQuads({})
     DrawLines(0, 1, ROAD_COLORS, 1)
+    DrawPois({}, 0) -- (no names left over from the last map)
+    G.DrawFloors(false)
     noMapText:SetText("No map here")
     noMapText:Show()
     arrow:Hide()
@@ -1371,7 +1507,7 @@ function G.Update()
   view.x, view.y, view.rot, view.s = cx, cy, rot, s
   -- The continent whose coordinates this view uses (browsing may show the other one).
   local viewCont = ViewCont(cont)
-  local here = viewCont == cont
+  local here = viewCont == cont and not hidden
   -- a dungeon or raid: the player in one (the game reports its map), or one opened from its
   -- entrance's icon. Its map is its floors' outline (no map art for them here).
   local inst = G.InstanceOf(ns.Nav.InstanceLevel and ns.Nav.InstanceLevel(viewCont) or viewCont)
@@ -1416,8 +1552,14 @@ function G.Update()
     if floorText then
       local route = st.layerInstances ~= false and "\n|cffffc726Gold: the usual way through, boss by boss|r" or ""
       floorText:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0
-        and string.format("All %d floors  |cff9d9d9d(scroll in for each)|r", n)
-        or string.format("Floor %d of %d, from the top  |cff9d9d9d(scroll)|r", instFloor, n)) .. route)
+        and string.format("All %d floors", n)
+        or string.format("Floor %d of %d, from the top", instFloor, n)) .. route)
+      floorUp:SetShown(n >= 2)
+      floorDown:SetShown(n >= 2)
+      floorUp:SetAlpha(instFloor > 0 and 1 or 0.4)
+      floorDown:SetAlpha(instFloor < n and 1 or 0.4)
+      floorText:ClearAllPoints()
+      floorText:SetPoint("TOPLEFT", floorBar, "TOPLEFT", n >= 2 and 40 or 0, -1)
     end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
@@ -1438,7 +1580,7 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
-  if floorText then floorText:SetShown(inst ~= nil and not browse) end
+  if floorBar then floorBar:SetShown(inst ~= nil and not browse) end
   -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
   -- still show where you can walk)
   G.DrawFloors(inst and not browse, inst and not browse and not instBand and G.BlockEdges(inst, cx, cy, zoom) or nil,
@@ -1460,14 +1602,26 @@ function G.Update()
     end
     -- the usual way through, boss by boss (gold, dotted; a route set in here goes over it)
     if not browse and st.layerInstances ~= false then
-      local path, reach = G.SuggestedPath(inst), half * 1.5
+      -- (the stretches to bosses already down faded, the one to the next boss bright)
+      local path, _, legs = G.SuggestedPath(inst)
+      local reach = half * 1.5
+      local nextIdx = G.NextBoss(inst) or math.huge
       local lx, ly
+      local leg = 1
       for i = 1, #path - 1, 2 do
+        local k = (i + 1) / 2 -- (this point's number)
+        while legs and legs[leg] and k > legs[leg][2] do leg = leg + 1 end
         local dx, dy = Geo.ScreenOffset(cx, cy, path[i], path[i + 1])
         dx, dy = Geo.Rotate(dx * s, dy * s, rot)
-        if lx and not ((lx > reach and dx > reach) or (lx < -reach and dx < -reach)
-            or (ly > reach and dy > reach) or (ly < -reach and dy < -reach)) then
-          AddSeg(lx, ly, dx, dy, SUGGESTED_COLOR, 3, 0.85, true, true)
+        if lx and k > (legs and legs[leg] and legs[leg][1] or 0) and not ((lx > reach and dx > reach)
+            or (lx < -reach and dx < -reach) or (ly > reach and dy > reach) or (ly < -reach and dy < -reach)) then
+          if leg < nextIdx then
+            AddSeg(lx, ly, dx, dy, SUGGESTED_COLOR, 2, 0.25, true, true) -- (done)
+          elseif leg == nextIdx then
+            AddSeg(lx, ly, dx, dy, SUGGESTED_NEXT, 5, 1, true, true) -- (the way to the next boss)
+          else
+            AddSeg(lx, ly, dx, dy, SUGGESTED_COLOR, 3, 0.7, true, true)
+          end
         end
         lx, ly = dx, dy
       end
@@ -1485,7 +1639,7 @@ function G.Update()
   -- Route: solid along roads, dotted for the legs to and from the road; destination pin.
   ns.Nav.Tick()
   local dest = ns.Nav.dest
-  local route = ns.Nav.Route(px, py, cont)
+  local route = not hidden and ns.Nav.Route(px, py, cont) or nil
   if route then
     -- Every part of the route, converted into this view's continent coordinates.
     local reach = half * 1.5
@@ -1630,10 +1784,29 @@ function G.Update()
     for _, e in ipairs(info.entrances or {}) do
       add({ 8, 0, 0, "Way out: " .. info.name, e[4], e[5], exit = e })
     end
+    -- stairs to another floor: along the usual way through, and the route's next one
+    local function stairs(list, next_)
+      for _, c in ipairs(list) do
+        add({ 9, 0, 0, c[3] and "Stairs up" or "Stairs down", c[1], c[2], up = c[3],
+          note = next_ and (c[3] and "The route goes up to the floor above here" or "The route goes down to the floor below here")
+            or (c[3] and "The usual way goes up a floor here" or "The usual way goes down a floor here"), next = next_ })
+      end
+    end
+    local mine = route and route.parts and route.parts[1]
+    if mine and mine.cont == inst and mine.zs then
+      stairs(G.FloorChanges(mine.pts, mine.zs, 1), true)
+    end
+    if st.layerInstances ~= false then
+      local sp, sz = G.SuggestedPath(inst)
+      stairs(G.FloorChanges(sp, sz), false)
+    end
+    local _, nextBoss = G.NextBoss(inst)
     for _, b in ipairs(info.bosses or {}) do
-      -- (on another floor than the one shown: faint)
+      -- (on another floor than the one shown: faint; down already: faint, and said so)
       local off = instBand and b[5] and (b[5] < instBand[1] - G.FLOOR_HEAD or b[5] > instBand[2] + G.FLOOR_HEAD)
-      add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional, dim = off })
+      local dead = ns.Nav.BossDead({ cont = inst, boss = b[2] })
+      add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional,
+        dim = off or dead, dead = dead, next = nextBoss == b })
     end
     DrawPois(DropUnderStops(pois), zoom)
   elseif (not place or browse) and not worldView then
@@ -1655,6 +1828,27 @@ function G.Update()
           dx, dy = Geo.Rotate(dx * s, dy * s, rot)
           if math.abs(dx) <= half and math.abs(dy) <= half then
             pois[#pois + 1] = { 5, dx, dy, m.name, x, y, cityMap = id }
+          end
+        end
+      end
+    end
+    -- zeppelins' and boats' docks (with points of interest, every map style but the world map):
+    -- their next arrival, double-click for a stop there
+    if st.poiPoi ~= false then
+      local base = Geo.Base(viewCont)
+      for i, t in ipairs(ns.Transports or {}) do
+        if DOCK_ICON[t[8]] and ns.Nav.TransportUsable(t) then -- (only the player's faction's)
+          for side = 1, 2 do
+            local c, x, y = t[side == 1 and 1 or 4], t[side == 1 and 2 or 5], t[side == 1 and 3 or 6]
+            if c == base then
+              local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
+              dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+              if math.abs(dx) <= half and math.abs(dy) <= half then
+                local to = side == 1 and t[10] or t[9]
+                pois[#pois + 1] = { 10, dx, dy, (t[8] == "zeppelin" and "Zeppelin to " or "Boat to ") .. (to or "?"), x, y,
+                  dock = { i, side }, kind = t[8], level = c }
+              end
+            end
           end
         end
       end
@@ -1702,8 +1896,16 @@ function G.Update()
   end
   ns.PerfEnd("redraw: icons", pt)
   pt = ns.PerfStart()
-  local status = ns.Nav.Status(px, py, cont)
-  local steps = status and ns.Nav.StepsText(st.stepsAll and 99 or 3) or ""
+  local status
+  if hidden then -- (no directions without the player's position: the next boss, when on its route)
+    local i, b = G.NextBoss(hidden)
+    local n = #G.BossOrder(hidden)
+    status = (b and string.format("Next: |cffffd100%s|r  (%d of %d)", b[1], i, n) or "|cff40ff40All the bosses are down|r")
+      .. "\n|cff9d9d9dThe game hides your position in dungeons|r"
+  else
+    status = ns.Nav.Status(px, py, cont)
+  end
+  local steps = status and not hidden and ns.Nav.StepsText(st.stepsAll and 99 or 3) or ""
   -- a walk with no other legs: its next turn and the one after (as the arrow shows them)
   if status and steps == "" and route and not route.flying and ns.Turns and not ns.Nav.questing then
     -- (worked out twice a second, not every redraw)
@@ -1737,11 +1939,20 @@ function G.Update()
   navPanel:SetHeight(navText:GetStringHeight() + 12 + (steps ~= "" and stepsText:GetStringHeight() + 4 or 0))
   -- closed with its X: hidden until the route changes (unless the X clears the route)
   navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version())
+  -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
+  if floorBar and floorBar:IsShown() then
+    floorBar:ClearAllPoints()
+    if navPanel:IsShown() then
+      floorBar:SetPoint("TOPLEFT", navPanel, "BOTTOMLEFT", 6, -4)
+    else
+      floorBar:SetPoint("TOPLEFT", floorBar:GetParent(), "TOPLEFT", 8, -8)
+    end
+  end
   ns.PerfEnd("redraw: text", pt)
   -- Once the player starts moving after choosing a destination, follow them again --
   -- but not during the Route Here tour: only dragging or zooming cancels that, and it
   -- ends by zooming in on the player anyway.
-  if dest and free and not browse and dest.watchX and not tour then
+  if dest and free and not browse and dest.watchX and not tour and not hidden then
     local mx, my = px - dest.watchX, py - dest.watchY
     if mx * mx + my * my > 4 then
       dest.watchX = nil
@@ -2807,7 +3018,7 @@ function G.BossStops(lvl)
     if ns.Nav.BossDead({ cont = lvl, boss = b[2] }) then
       dead = dead + 1
     else
-      stops[#stops + 1] = { x = b[3], y = b[4], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
+      stops[#stops + 1] = { x = b[3], y = b[4], z = b[5], cont = lvl, name = b[1], tex = BOSS_ICON, boss = b[2], enc = b.enc }
     end
   end
   return stops, dead
@@ -3084,7 +3295,6 @@ function G.Init()
   frame:SetScript("OnMouseWheel", function(_, delta)
     tour = nil
     lastActivity = GetTime()
-    if not browseZoom and G.FloorWheel(delta) then return end -- (a dungeon's floors)
     local f = delta > 0 and 0.8 or 1.25
     if browseZoom then
       browseZoom = math.max(MIN_ZOOM, browseZoom * f)
@@ -4060,8 +4270,43 @@ function G.Init()
 
   noMapText = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   noMapText:SetPoint("CENTER")
-  floorText = top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  floorText:SetPoint("TOPLEFT", 8, -8)
+  -- a dungeon's map: "+" up a floor (all of them past the top), "-" down one, and which is shown
+  floorBar = CreateFrame("Frame", nil, top)
+  floorBar:SetSize(220, 18)
+  floorBar:SetPoint("TOPLEFT", 8, -8)
+  floorBar:Hide()
+  local function FloorButton(text, tip, up)
+    local b = CreateFrame("Button", nil, floorBar)
+    b:SetSize(16, 16)
+    local edge = b:CreateTexture(nil, "BACKGROUND")
+    edge:SetAllPoints()
+    edge:SetColorTexture(1, 0.82, 0, 0.6)
+    local fill = b:CreateTexture(nil, "BORDER")
+    fill:SetPoint("TOPLEFT", 1, -1)
+    fill:SetPoint("BOTTOMRIGHT", -1, 1)
+    fill:SetColorTexture(0.12, 0.07, 0.03, 1)
+    local hover = b:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints(fill)
+    hover:SetColorTexture(1, 1, 1, 0.15)
+    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    b.label:SetPoint("CENTER", 0, 1)
+    b.label:SetText(text)
+    b:SetScript("OnClick", function() G.FloorStep(up) end)
+    b:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetText(tip, 1, 1, 1)
+      GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", GameTooltip_Hide)
+    return b
+  end
+  floorUp = FloorButton("+", "Up a floor (all of them past the top one)", true)
+  floorUp:SetPoint("TOPLEFT", 0, 0)
+  floorDown = FloorButton("-", "Down a floor", false)
+  floorDown:SetPoint("LEFT", floorUp, "RIGHT", 4, 0)
+  floorText = floorBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  floorText:SetPoint("TOPLEFT", 40, -1)
+  floorText:SetJustifyH("LEFT")
   floorText:SetShadowOffset(1, -1)
 
   -- Hidden (closed, a key, combat) with stops placed but not confirmed yet: they become the

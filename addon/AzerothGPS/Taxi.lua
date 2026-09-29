@@ -109,3 +109,124 @@ ev:SetScript("OnEvent", function(_, event)
     C_Timer.After(0.5, function() pcall(OnTaxiChanged) end)
   end
 end)
+
+---------------------------------------------------------------------------
+-- Zeppelins and boats: their timetables (Data/Transports.lua: cycle, ride1 / ride2, wait1 /
+-- wait2) and when one was seen leaving a dock (the player aboard it: standing still, carried
+-- away from the dock), for the next arrivals and departures at both its docks. The game
+-- doesn't tell addons where a transport is; the server keeps its own time, so it's learned
+-- per realm, and an old sighting (a server restart since) may be off.
+---------------------------------------------------------------------------
+T.DOCK_YD = 45 -- this close to a dock: waiting there (or aboard, docked)
+T.RIDE_YD = 60 -- carried this far from it without walking: it left
+T.CARRY_YD = 1.5 -- moved this far between checks without walking: carried
+
+local function Realm() return (GetRealmName and GetRealmName()) or "?" end
+local function RowKey(t) return (t[9] or "?") .. " | " .. (t[10] or "?") end
+
+-- The sightings: { [realm] = { [row key] = { side, at (server time, seconds), cycle? } } }.
+function T.Sightings()
+  if not ns.db then return {} end
+  ns.db.transports = ns.db.transports or {}
+  local r = Realm()
+  ns.db.transports[r] = ns.db.transports[r] or {}
+  return ns.db.transports[r]
+end
+
+-- The dock (transport index, side 1 or 2) within DOCK_YD of (x, y) on `cont`, nearest.
+function T.DockAt(cont, x, y)
+  local best, bi, bs
+  for i, t in ipairs(ns.Transports or {}) do
+    for side = 1, 2 do
+      local c, dx, dy = t[side == 1 and 1 or 4], t[side == 1 and 2 or 5], t[side == 1 and 3 or 6]
+      if c == cont then
+        local d = math.sqrt((dx - x) ^ 2 + (dy - y) ^ 2)
+        if d <= T.DOCK_YD and (not best or d < best) then best, bi, bs = d, i, side end
+      end
+    end
+  end
+  return bi, bs
+end
+
+-- A departure seen: transport i left dock `side` at server time `at`. A second one from the
+-- same dock sharpens the cycle (the server's may run a little off the data's).
+function T.Departed(i, side, at)
+  local t = ns.Transports and ns.Transports[i]
+  if not t then return end
+  local seen = T.Sightings()
+  local key = RowKey(t)
+  local old = seen[key]
+  local cycle = old and old.cycle
+  if old and old.side == side and t.cycle then
+    local n = math.floor((at - old.at) / t.cycle + 0.5)
+    if n >= 1 and n <= 40 then
+      local c = (at - old.at) / n
+      if math.abs(c - t.cycle) < t.cycle * 0.1 then cycle = c end
+    end
+  end
+  seen[key] = { side = side, at = at, cycle = cycle }
+end
+
+-- Called every half second: near a dock, then carried away from it (not walking): it left.
+local near -- { i, side, x, y, since }
+local last -- { x, y, cont }
+local carried -- (server time the carrying began)
+local streak, streakAt = 0, nil -- (checks in a row carried: one alone may be the last step walked)
+function T.TransportTick(now, serverNow, px, py, cont, speed)
+  if not px then
+    last = nil
+    return
+  end
+  local walking = speed == nil or speed > 0.1
+  local i, side = T.DockAt(cont, px, py)
+  if i then
+    near = { i = i, side = side, since = near and near.i == i and near.side == side and near.since or now, cont = cont }
+    local t = ns.Transports[i]
+    near.x, near.y = t[side == 1 and 2 or 5], t[side == 1 and 3 or 6]
+  end
+  local moved = last and last.cont == cont and math.sqrt((px - last.x) ^ 2 + (py - last.y) ^ 2) or 0
+  if near and not walking and moved >= T.CARRY_YD then
+    streak = streak + 1
+    if streak == 1 then streakAt = serverNow end
+    if streak >= 2 then carried = carried or streakAt end
+  else
+    streak = 0
+    if walking then carried = nil end
+  end
+  if near and near.cont == cont and carried then
+    local d = math.sqrt((px - near.x) ^ 2 + (py - near.y) ^ 2)
+    if d >= T.RIDE_YD then
+      T.Departed(near.i, near.side, carried)
+      near, carried = nil, nil
+    end
+  end
+  if near and not i and now - near.since > 600 then near = nil end
+  last = { x = px, y = py, cont = cont }
+end
+
+-- The next arrival at and departure from dock `side` of transport i: seconds from `serverNow`
+-- (arrival, departure), and how long ago it was learned; nil when never seen.
+function T.TransportTimes(i, side, serverNow)
+  local t = ns.Transports and ns.Transports[i]
+  local s = t and T.Sightings()[RowKey(t)]
+  if not (s and t.cycle and t.ride1) then return nil end
+  local P = s.cycle or t.cycle
+  local ride = s.side == 1 and t.ride1 or t.ride2
+  local waitOther = s.side == 1 and t.wait2 or t.wait1
+  local waitHere = side == 1 and t.wait1 or t.wait2
+  local dep0 = side == s.side and s.at or s.at + ride + waitOther
+  local arr0 = dep0 - waitHere
+  local function nextAfter(t0) return t0 + math.ceil((serverNow - t0) / P) * P - serverNow end
+  return nextAfter(arr0), nextAfter(dep0), serverNow - s.at
+end
+
+do
+  local function tick()
+    local ok, px, py, _, cont = pcall(UnitPosition, "player")
+    if not ok or (ns.IsSecret and (ns.IsSecret(px) or ns.IsSecret(py))) then return end
+    local sok, speed = pcall(GetUnitSpeed, "player")
+    if not sok or (ns.IsSecret and ns.IsSecret(speed)) then speed = nil end
+    pcall(T.TransportTick, GetTime(), GetServerTime and GetServerTime() or time(), px, py, cont, speed)
+  end
+  if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(0.5, tick) end
+end
