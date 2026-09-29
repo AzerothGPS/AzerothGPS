@@ -3403,7 +3403,7 @@ end
 function G.Init()
   if frame then return end
   frame = CreateFrame("Frame", "AzerothGPSFrame", UIParent, "BackdropTemplate")
-  frame:SetFrameStrata("MEDIUM")
+  frame:SetFrameStrata("BACKGROUND") -- (under every other window: the game's and other addons')
   frame:SetClampedToScreen(true)
   frame:EnableMouse(true)
   -- Left-drag pans the map (free view); Shift+left-drag moves the frame.
