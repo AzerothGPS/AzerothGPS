@@ -1567,16 +1567,15 @@ function G.Update()
     instArt = #quads > 0
     local n = #floors
     if fl.text then
-      local route = st.layerInstances ~= false and "\n|cffffc726Gold: the usual way through, boss by boss|r" or ""
-      fl.text:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0
-        and string.format("All %d floors", n)
+      -- (the note at the bottom: which floor, and what the gold line is)
+      local route = st.layerInstances ~= false and "  |cffffc726Gold: the usual way through|r" or ""
+      fl.text:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0 and string.format("All %d floors", n)
         or string.format("Floor %d of %d, from the top", instFloor, n)) .. route)
+      fl.count:SetText(n < 2 and "" or instFloor == 0 and "All" or (instFloor .. "/" .. n))
       fl.up:SetShown(n >= 2)
       fl.down:SetShown(n >= 2)
-      fl.up:SetAlpha(instFloor > 0 and 1 or 0.4)
-      fl.down:SetAlpha(instFloor < n and 1 or 0.4)
-      fl.text:ClearAllPoints()
-      fl.text:SetPoint("TOPLEFT", fl.bar, "TOPLEFT", n >= 2 and 40 or 0, -1)
+      fl.up:SetEnabled(instFloor > 0)
+      fl.down:SetEnabled(instFloor < n)
     end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
@@ -1597,7 +1596,10 @@ function G.Update()
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
   DrawQuads(quads)
-  if fl.bar then fl.bar:SetShown(inst ~= nil and not browse) end
+  if fl.bar then
+    fl.bar:SetShown(inst ~= nil and not browse and #G.InstanceFloors(inst) >= 2)
+    fl.text:SetShown(inst ~= nil and not browse)
+  end
   -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
   -- still show where you can walk)
   G.DrawFloors(inst and not browse, inst and not browse and not instBand and G.BlockEdges(inst, cx, cy, zoom) or nil,
@@ -1959,14 +1961,7 @@ function G.Update()
   -- closed with its X: hidden until the route changes (unless the X clears the route)
   navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version())
   -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
-  if fl.bar and fl.bar:IsShown() then
-    fl.bar:ClearAllPoints()
-    if navPanel:IsShown() then
-      fl.bar:SetPoint("TOPLEFT", navPanel, "BOTTOMLEFT", 6, -4)
-    else
-      fl.bar:SetPoint("TOPLEFT", fl.bar:GetParent(), "TOPLEFT", 8, -8)
-    end
-  end
+  if fl.bar and fl.bar:IsShown() then G.PlaceFloorBar() end
   ns.PerfEnd("redraw: text", pt)
   -- Once the player starts moving after choosing a destination, follow them again --
   -- but not during the Route Here tour: only dragging or zooming cancels that, and it
@@ -2057,6 +2052,21 @@ end
 local function SavePosition()
   local p, rel, rp, x, y = frame:GetPoint(1)
   S().point = { p, rel and rel:GetName() or "UIParent", rp, x, y }
+end
+
+-- The floor buttons' column: right under the window frame's portrait (it hangs over the map's
+-- top-left), else under the top panel while it shows, else in the corner.
+function G.PlaceFloorBar()
+  local bar = fl.bar
+  if not bar then return end
+  bar:ClearAllPoints()
+  if G.chrome and G.chrome:IsShown() then
+    bar:SetPoint("TOPLEFT", bar:GetParent(), "TOPLEFT", 6, -(CHROME_PORTRAIT_INSET + 4))
+  elseif navPanel and navPanel:IsShown() then
+    bar:SetPoint("TOPLEFT", navPanel, "BOTTOMLEFT", 2, -4)
+  else
+    bar:SetPoint("TOPLEFT", bar:GetParent(), "TOPLEFT", 6, -6)
+  end
 end
 
 function G.ApplySettings()
@@ -4387,27 +4397,17 @@ function G.Init()
 
   noMapText = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   noMapText:SetPoint("CENTER")
-  -- a dungeon's map: "+" up a floor (all of them past the top), "-" down one, and which is shown
+  -- a dungeon's map: a column under the frame's portrait (G.PlaceFloorBar): "+" up a floor (all
+  -- of them past the top), which is shown, "-" down one; its note (the gold line) at the bottom
   fl.bar = CreateFrame("Frame", nil, top)
-  fl.bar:SetSize(220, 18)
+  fl.bar:SetSize(30, 74)
   fl.bar:SetPoint("TOPLEFT", 8, -8)
   fl.bar:Hide()
   local function FloorButton(text, tip, up)
-    local b = CreateFrame("Button", nil, fl.bar)
-    b:SetSize(16, 16)
-    local edge = b:CreateTexture(nil, "BACKGROUND")
-    edge:SetAllPoints()
-    edge:SetColorTexture(1, 0.82, 0, 0.6)
-    local fill = b:CreateTexture(nil, "BORDER")
-    fill:SetPoint("TOPLEFT", 1, -1)
-    fill:SetPoint("BOTTOMRIGHT", -1, 1)
-    fill:SetColorTexture(0.12, 0.07, 0.03, 1)
-    local hover = b:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints(fill)
-    hover:SetColorTexture(1, 1, 1, 0.15)
-    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    b.label:SetPoint("CENTER", 0, 1)
-    b.label:SetText(text)
+    local ok, b = pcall(CreateFrame, "Button", nil, fl.bar, "UIPanelButtonTemplate")
+    if not ok then b = CreateFrame("Button", nil, fl.bar) end
+    b:SetSize(28, 24)
+    b:SetText(text)
     b:SetScript("OnClick", function() G.FloorStep(up) end)
     b:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -4418,13 +4418,16 @@ function G.Init()
     return b
   end
   fl.up = FloorButton("+", "Up a floor (all of them past the top one)", true)
-  fl.up:SetPoint("TOPLEFT", 0, 0)
+  fl.up:SetPoint("TOP", fl.bar, "TOP", 0, 0)
+  fl.count = fl.bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  fl.count:SetPoint("TOP", fl.up, "BOTTOM", 0, -3)
+  fl.count:SetShadowOffset(1, -1)
   fl.down = FloorButton("-", "Down a floor", false)
-  fl.down:SetPoint("LEFT", fl.up, "RIGHT", 4, 0)
-  fl.text = fl.bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  fl.text:SetPoint("TOPLEFT", 40, -1)
-  fl.text:SetJustifyH("LEFT")
+  fl.down:SetPoint("TOP", fl.count, "BOTTOM", 0, -3)
+  fl.text = top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  fl.text:SetPoint("BOTTOM", infoText, "TOP", 0, 2)
   fl.text:SetShadowOffset(1, -1)
+  fl.text:Hide()
 
   -- Hidden (closed, a key, combat) with stops placed but not confirmed yet: they become the
   -- route now (the 5 s auto-confirm runs only while the map shows), so the direction arrow
