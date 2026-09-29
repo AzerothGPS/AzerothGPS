@@ -252,6 +252,7 @@ agps probes            # read /agps debug probe results from SavedVariables
 agps perf              # read /agps debug perf timings (saved on /reload)
 agps feedback          # export opt-in shared roads and trips to data/feedback/
 agps route-check        # routing on random trips in every zone; flags detours and cliff cuts
+agps route-sweep        # random trips routed as in game (background searches, moving): snapbacks, U-turns, spikes
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)

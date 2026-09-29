@@ -114,6 +114,15 @@ def cmd_route_check(args) -> int:
     return 0
 
 
+def cmd_route_sweep(args) -> int:
+    from .routesweep import sweep, write_report
+
+    result = sweep(trips=args.trips, seed=args.seed, only=args.zone)
+    out = write_report(result, DATA / "debug" / "route-sweep")
+    print(f"{len(result['flagged'])} flagged of {result['trips']} trips (seed {result['seed']}); details: {out}")
+    return 0
+
+
 def cmd_gen_addon_data(args) -> int:
     from .addon_data import generate
 
@@ -366,6 +375,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--mode", choices=("offroad", "road", "both"), default="offroad",
                     help="route with offroad shortcuts, along the roads, or both")
     sp.set_defaults(fn=cmd_route_check)
+
+    sp = sub.add_parser("route-sweep", help="random trips in random zones, routed as in game: snapbacks, U-turns, spikes")
+    sp.add_argument("--trips", type=int, default=60)
+    sp.add_argument("--seed", type=int, help="(random when left out)")
+    sp.add_argument("--zone", help="only zones whose name contains this")
+    sp.set_defaults(fn=cmd_route_sweep)
 
     sp = sub.add_parser("gen-addon-data", help="write addon/AzerothGPS/Data/*.lua from the client")
     client_args(sp)
