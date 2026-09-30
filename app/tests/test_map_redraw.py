@@ -155,3 +155,30 @@ def test_no_dev_tool_ships_with_the_addon():
         [f for f in files if "dev" in f]
     toc = (ADDON / "AzerothGPS.toc").read_text(encoding="utf-8").lower()
     assert "azerothgps_dev" not in toc
+
+
+def test_heading_up_puts_the_player_low_on_the_map(game):
+    # (asked) with "Turn the map with me" on, following: the player's icon low on the map (more of
+    # the way ahead shown), not in the middle; north-up keeps them in the middle
+    lua, ns = game
+    G, Geo = ns.GPS, ns.Geo
+    st = ns.settings.gps
+    lua.execute("GetPlayerFacing = function() return 0.7 end")
+
+    def player_on_screen():
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        x, y, cont, rot, s, half = G.ViewState()
+        dx, dy = Geo.ScreenOffset(x, y, lua.eval("AGPS_POS[1]"), lua.eval("AGPS_POS[2]"))
+        ax, ay = Geo.Rotate(dx * s, dy * s, rot)
+        return ax / half, ay / half
+    try:
+        st.rotate = True
+        ax, ay = player_on_screen()
+        assert abs(ax) < 0.01 and abs(ay + ns.GPS.HEADING_UP_LOW) < 0.01, (ax, ay)
+        st.rotate = False
+        ax, ay = player_on_screen()
+        assert abs(ax) < 0.01 and abs(ay) < 0.01
+    finally:
+        st.rotate = False
+        lua.execute("GetPlayerFacing = function() return 0 end")

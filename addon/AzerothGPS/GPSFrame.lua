@@ -922,6 +922,7 @@ local ROAD_COLORS = { [0] = { 1, 0.35, 0.1 }, [1] = { 0.1, 0.9, 1 }, [2] = { 0.3
 -- Route segment kinds -> { color, width, dotted }: road, off-road, transport ride, far-side walk.
 local ROUTE_STYLE = { [0] = { 3, 5, false }, [1] = { 3, 4, true }, [2] = { 4, 4, true }, [3] = { 5, 3, true } }
 local DASH, GAP = 7, 5 -- off-road route legs are dotted (UI units)
+G.HEADING_UP_LOW = 0.6 -- heading-up, following: the player this share of the half below the middle
 G.DETOUR_COLOR = { 0.62, 0.40, 0.18 } -- brown: the detour to a flight master not learned yet (Nav.LearnOnRoute)
 -- Dotted legs as one line each, with Media\Dash repeated along it (DASH on, GAP off per
 -- 32 pixels of the texture) instead of a line per dash. `/agps debug dashes` switches back
@@ -1767,6 +1768,11 @@ function G.Update()
   if free then cx, cy, rot = free.x, free.y, free.rot end
   local zoom = browseZoom or approachZoom or st.zoom
   local s = half / zoom
+  -- (heading-up, following: the player low on the map, more of the way ahead shown; the center
+  -- is the spot HEADING_UP_LOW of the half ahead of them)
+  if st.rotate and not free and not browse then
+    cx, cy = G.ScreenToWorld(px, py, 0, G.HEADING_UP_LOW * half, rot, s)
+  end
   view.x, view.y, view.rot, view.s = cx, cy, rot, s
   -- The continent whose coordinates this view uses (browsing may show the other one).
   local viewCont = ViewCont(cont)
