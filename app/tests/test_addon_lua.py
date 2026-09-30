@@ -4642,3 +4642,18 @@ def test_stops_routed_and_drawn_ahead_is_an_option(nav_env):
     addon = Path(__file__).parents[2] / "addon" / "AzerothGPS"
     assert "stopsAhead = 3" in (addon / "Core.lua").read_text(encoding="utf-8")
     assert 'slider("Stops routed and drawn ahead", 1, 8, 1' in (addon / "Options.lua").read_text(encoding="utf-8")
+
+
+def test_the_stops_not_routed_yet_are_listed_too(nav_env):
+    # (asked) with the route worked out a few stops ahead (the option), the steps still list the
+    # stops after them: about how far (the straight line, as planning counts), not routed yet
+    lua, ns = nav_env
+    N = ns.Nav
+    ns.settings = lua.eval("{ gps = { stopsAhead = 2 } }")
+    N.SetStops(lua.eval("""{ { x = -600, y = -4180, cont = 1 }, { x = -650, y = -4250, cont = 1 },
+      { x = -700, y = -4300, cont = 1 }, { x = -760, y = -4350, cont = 1, name = 'Last' } }"""))
+    N.Route(-550.0, -4150.0, 1)
+    steps = [N.Steps()[i] for i in range(1, len(N.Steps()) + 1)]
+    assert "not routed yet" not in steps[0]
+    later = [t for t in steps if "not routed yet" in t]
+    assert len(later) == 2 and "stop 3" in later[0] and "Last" in later[1] and later[0].startswith("|cff9d9d9dAbout ")

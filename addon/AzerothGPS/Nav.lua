@@ -2129,6 +2129,18 @@ function N.Steps()
       end
     end
   end
+  -- the stops after those routed (the option: stops routed and drawn ahead): listed too, not worked
+  -- out yet (about: the straight line from the one before, as planning counts it)
+  local planned = N.PlannedStops()
+  local prev = N.stops[planned]
+  for i = planned + 1, #N.stops do
+    local d = N.stops[i]
+    local far = prev and Geo.Base(prev.cont) == Geo.Base(d.cont)
+      and math.sqrt((d.x - prev.x) ^ 2 + (d.y - prev.y) ^ 2) * N.WALK_FACTOR
+    steps[#steps + 1] = string.format("|cff9d9d9d%s to %s (not routed yet)|r",
+      far and ("About " .. N.FormatDistance(far)) or "Then", StopLabel(i, d, count))
+    prev = d
+  end
   return steps
 end
 
