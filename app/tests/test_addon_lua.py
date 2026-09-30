@@ -3754,6 +3754,17 @@ def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
     assert G.HeldClick(1, 2, 0) is False
 
 
+def test_no_docks_or_dungeon_entrances_while_the_map_is_held(api):
+    # (StreetView asked: during its game, the zeppelins', boats' and dungeons' markers hidden)
+    lua, ns, A = api
+    G = ns.GPS
+    assert G.ShowsTravelMarkers()
+    A.HoldMap("StreetGuess", True)
+    assert not G.ShowsTravelMarkers()
+    A.HoldMap("StreetGuess", False)
+    assert G.ShowsTravelMarkers()
+
+
 def test_no_road_or_wall_tools_while_the_map_is_held(api):
     lua, ns, A = api
     G = ns.GPS

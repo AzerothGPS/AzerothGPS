@@ -1269,6 +1269,9 @@ G.holders = {}
 -- G.layoutHooks[owner] = fn(inset). G.topInset: the inset now.
 G.layoutHooks, G.topInset = {}, 4
 function G.Held() return next(G.holders) ~= nil end
+-- The map's own markers that stand in a holder's way (a game on the map): the zeppelins' and
+-- boats' docks and the dungeons' entrances, hidden while it's held.
+function G.ShowsTravelMarkers() return not G.Held() end
 local function HeldClick(x, y, cont)
   for _, h in pairs(G.holders) do
     if h.click then pcall(h.click, x, y, cont) end
@@ -2109,7 +2112,7 @@ function G.Update()
     end
     -- zeppelins' and boats' docks (with points of interest, every map style but the world map):
     -- their next arrival, double-click for a stop there
-    if st.poiPoi ~= false then
+    if st.poiPoi ~= false and G.ShowsTravelMarkers() then
       local base = Geo.Base(viewCont)
       for i, t in ipairs(ns.Transports or {}) do
         if DOCK_ICON[t[8]] and ns.Nav.TransportUsable(t) then -- (only the player's faction's)
@@ -2129,7 +2132,7 @@ function G.Update()
       end
     end
     -- dungeon and raid entrances (every map style but the world map): click for its map
-    if st.layerInstances ~= false then
+    if st.layerInstances ~= false and G.ShowsTravelMarkers() then
       local zoomedOut = bm and bm.type == 2
       for _, e in ipairs(G.InstanceEntrances(Geo.Base(viewCont))) do
         local dx, dy = Geo.ScreenOffset(cx, cy, e.x, e.y)
