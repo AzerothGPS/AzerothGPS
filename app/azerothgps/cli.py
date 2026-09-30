@@ -252,7 +252,14 @@ def cmd_city_places(args) -> int:
     from .paths import data_dir
 
     maps = map_bounds()
-    text, n, missing = with_heights(FILE.read_text(encoding="utf-8"), maps, npc_spawns(data_dir()))
+    spawns = npc_spawns(data_dir())
+    text = FILE.read_text(encoding="utf-8")
+    if args.add:
+        from .cityplaces import with_made
+
+        text, done = with_made(text, maps, spawns)
+        print("made from their NPCs: " + ", ".join(done))
+    text, n, missing = with_heights(text, maps, spawns)
     FILE.write_text(text, encoding="utf-8", newline="\n")
     print(f"{n} places with their NPC's height; none found for {len(missing)}: {', '.join(missing)}")
     return 0
@@ -508,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.set_defaults(fn=cmd_watch_roads)
 
     sp = sub.add_parser("city-places", help="heights of the capitals' service locations (Data/CityPlaces.lua) from NPC spawns")
+    sp.add_argument("--add", action="store_true", help="also make the Alliance capitals' places from their NPCs")
     sp.set_defaults(fn=cmd_city_places)
 
     sp = sub.add_parser("terrain-hpa", help="prepare the terrain's blocks for the walk search (Data/TerrainHPA.lua)")

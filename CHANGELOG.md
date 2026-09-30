@@ -48,6 +48,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
   - recalculating a route with a flight in it (up to 200 ms in game);
   - riding a zeppelin or a boat no longer works the route out again all the way;
   - the first road display after a /reload, and each road or wall edit.
+- Talking to a guard in Stormwind, Ironforge or Darnassus showed only the place you asked for: now all of that city's places show (trainers, the bank, the inn, the flight master and more), as in the Horde capitals.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.
 - Roads vanished from the map when zoomed out (road and wall tools).

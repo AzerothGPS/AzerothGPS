@@ -1,6 +1,8 @@
 """Heights for the capitals' service locations (addon/AzerothGPS/Data/CityPlaces.lua).
 
-The places are map percentages written by hand, with no height. Where a city's floors lie over
+The Horde capitals' places are map percentages written by hand; the Alliance capitals' are made
+from their NPCs (`from_spawns`, `agps city-places --add`: the same services, each at its NPC, as
+the hand-written ones are to within a few yards). Where a city's floors lie over
 each other (Undercity's walkways over its bank, a trainer under an arch), the route needs the
 floor: each place gets the height of its NPC (the nearest spawn in the CMaNGOS dump whose title
 says the service: "Cooking Trainer" for a cooking trainer, "Banker" for the bank), as a 4th
@@ -148,3 +150,72 @@ def places(ui: int, maps: dict | None = None) -> list[tuple[str, float, float, f
             u, v = float(e.group(1)), float(e.group(2))
             out.append((e.group(3).strip('"'), b[2] - v / 100 * (b[2] - b[0]), b[3] - u / 100 * (b[3] - b[1]), float(e.group(4))))
     return out
+
+
+# The services a capital's guards give directions to, for a city's places made from its NPCs
+# (`from_spawns`): the Horde capitals' lists were written by hand, the Alliance's are made so.
+SERVICES = ("Alchemy Trainer", "Blacksmithing Trainer", "Cooking Trainer", "Enchanting Trainer", "Engineering Trainer",
+            "First Aid Trainer", "Fishing Trainer", "Herbalism Trainer", "Leatherworking Trainer", "Mining Trainer",
+            "Skinning Trainer", "Tailoring Trainer", "Druid Trainer", "Hunter Trainer", "Mage Trainer", "Paladin Trainer",
+            "Priest Trainer", "Rogue Trainer", "Shaman Trainer", "Warlock Trainer", "Warrior Trainer", "Bank", "Inn",
+            "Auction House", "Guild Master", "Stable Master", "Weapon Master", "Gryphon Master", "Hippogryph Master",
+            "Wind Rider Master", "Bat Handler")
+CLUSTER_YD = 40.0  # NPCs of a service this close together are one place (a trainers' hall, the bank's counter)
+
+
+def from_spawns(ui: int, city: str, maps: dict, spawns) -> list[tuple[float, float, str, float]]:
+    """A capital's places from its NPCs: (u, v map percent, "<city> <service>", height) for each
+    service with an NPC inside the city's map. Where a service has NPCs in more than one spot,
+    the spot with the most of them, and its NPC nearest their middle."""
+    cont, b = maps[ui]
+    inside = [(x, y, z, t) for m, x, y, z, t in spawns if m == cont and b[0] <= x <= b[2] and b[1] <= y <= b[3]]
+    if not inside:
+        return []
+    mx = sum(s[0] for s in inside) / len(inside)
+    my = sum(s[1] for s in inside) / len(inside)
+    out = []
+    for svc in SERVICES:
+        hits = [s for s in inside if matches(svc, s[3])]
+        if not hits:
+            continue
+        # (single-linkage clusters)
+        groups: list[list] = []
+        for s in hits:
+            near = [g for g in groups if any(math.hypot(s[0] - o[0], s[1] - o[1]) <= CLUSTER_YD for o in g)]
+            merged = [s]
+            for g in near:
+                merged += g
+                groups.remove(g)
+            groups.append(merged)
+        # (the most NPCs; then the one nearer the city's middle)
+        g = max(groups, key=lambda g: (len(g), -math.hypot(sum(o[0] for o in g) / len(g) - mx, sum(o[1] for o in g) / len(g) - my)))
+        cx, cy = sum(o[0] for o in g) / len(g), sum(o[1] for o in g) / len(g)
+        x, y, z, _t = min(g, key=lambda o: math.hypot(o[0] - cx, o[1] - cy))
+        u = (b[3] - y) / (b[3] - b[1]) * 100
+        v = (b[2] - x) / (b[2] - b[0]) * 100
+        out.append((round(u, 1), round(v, 1), f"{city} {svc}", round(z, 1)))
+    out.sort(key=lambda p: p[2])
+    return out
+
+
+# The capitals whose places are made from their NPCs (the Horde's are written by hand): uiMap, name.
+MADE = ((1453, "Stormwind"), (1455, "Ironforge"), (1457, "Darnassus"))
+
+
+def with_made(text: str, maps: dict, spawns) -> tuple[str, list[str]]:
+    """CityPlaces.lua's text with the MADE capitals' places (from_spawns) put in, replacing any
+    there already; and what was written."""
+    done = []
+    for ui, city in MADE:
+        rows = from_spawns(ui, city, maps, spawns)
+        if not rows:
+            continue
+        block = f'  [{ui}] = {{ city = "{city}",\n' + "".join(
+            f'    {{ {u}, {v}, "{n}", {z} }},\n' for u, v, n, z in rows) + "  },\n"
+        pat = re.compile(r"  \[%d\] = \{ city = .*?\n  \},\n" % ui, re.S)
+        if pat.search(text):
+            text = pat.sub(lambda _m: block, text)
+        else:
+            text = text[:text.rstrip().rfind("}")] + block + "}\n"
+        done.append(f"{city} ({len(rows)})")
+    return text, done

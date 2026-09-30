@@ -1824,6 +1824,27 @@ def test_city_places_show_after_talking_to_a_guard(nav_env):
     assert not any(n.startswith("Orgrimmar") for n in names)
 
 
+def test_a_guard_in_any_capital_shows_all_its_places(nav_env):
+    # (reported: a Stormwind guard showed only the place asked for) every capital has its places,
+    # the Alliance's too: a guard there shows them all, and only that city's
+    lua, ns, UC = undercity_env(nav_env)
+    load(lua, ns, "Layers.lua", "Data/CityPlaces.lua")
+    L = ns.Layers
+    real = lua.eval("C_Map.GetBestMapForUnit")
+    try:
+        for ui, city, cont in ((1453, "Stormwind", 0), (1455, "Ironforge", 0), (1457, "Darnassus", 1),
+                               (1454, "Orgrimmar", 1), (1456, "Thunder Bluff", 1), (1458, "Undercity", 0)):
+            ns.db = lua.eval("{}")
+            lua.execute(f"C_Map.GetBestMapForUnit = function() return {ui} end")
+            L.RevealCity()
+            names = [p[3] for p in L.RevealedPlaces(cont).values()]
+            assert len(names) >= 19, (city, len(names))
+            assert f"{city} Bank" in names and f"{city} Inn" in names, city
+            assert all(n.startswith(city + " ") for n in names), city
+    finally:
+        lua.globals().C_Map.GetBestMapForUnit = real
+
+
 def test_undercity_places_show_only_down_in_the_city(nav_env):
     lua, ns, UC = undercity_env(nav_env)
     load(lua, ns, "Layers.lua", "Data/CityPlaces.lua")
