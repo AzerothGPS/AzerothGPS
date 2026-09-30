@@ -1613,6 +1613,17 @@ def test_undercitys_roads_are_on_floors_over_floors(nav_env):
         assert r.length < most, (x, y, r.length)
 
 
+def test_undercity_legs_off_the_roads_dont_cross_gaps_or_walls(nav_env):
+    # (the 600-trip sweep) a leg onto the roads went over a hole down to the floor below, and across
+    # a canal's water: on the one-floor grid, a top floor well under the leg is a gap at its height
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    zoff = ns.CityLevels[UC].zoff
+    assert R.WallYards(UC, 1594.4, 170.0, -104.0 + zoff, 1586.3, 165.8, -108.5 + zoff) > R.LAYER_VOID_YD  # (the hole)
+    assert R.VoidYards(UC, 1765.0, 240.0, 1743.0, 240.0) > R.LAYER_VOID_YD  # (the canal)
+    assert R.WallYards(UC, 1594.4, 170.0, -104.0 + zoff, 1602.3, 169.8, -103.5 + zoff) <= R.LAYER_VOID_YD  # (along the walkway)
+
+
 def test_undercity_routes_dont_drop_through_the_floors(nav_env):
     # (reported) from the walkway by the Apothecarium to the Enchanting trainer below: 55 yd, down
     # through the floor; on foot it's round by the passage (222 yd over the floors). Floors stacked

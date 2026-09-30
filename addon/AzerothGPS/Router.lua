@@ -30,7 +30,46 @@ R.ON_ROAD_MIN = 25 -- yards: shorter stretches along a road stay off-road
 R.NODE_LINKS = 8 -- offroad mode: straight shortcuts from each road node, one per direction
 R.NODE_LINK_MAX = 1500 -- yards
 R.LAYER_Z = 5 -- a dungeon's floors (roads with heights): a road this far above or below is another floor
-R.LAYER_LEG_FREE, R.LAYER_LEG_FACTOR = 3, 4 -- ...: a leg onto or off the roads, past this many yards, costs this per yard
+R.LAYER_LEG_FREE, R.LAYER_LEG_FACTOR = 3, 2 -- ...: a leg onto or off the roads, past this many yards, costs this per yard
+R.LAYER_VOID_YD = 2 -- ...: a leg over more than this with no floor at any height (a canal) isn't one
+
+-- Yards of the line (x1, y1, z1)-(x2, y2, z2) (the game's heights, at its ends) through walls or
+-- over gaps on its own floor in an underground city, by its floor heights (the top floor per
+-- cell): about the line's height there, a closed cell of its grid is a wall on it; well under it
+-- (the top floor there is lower), there's no floor at its height at all, a gap to fall down;
+-- well above it, a walkway over it, the grid tells nothing about the line's floor (0 there).
+R.WALL_Z = 4
+function R.WallYards(cont, x1, y1, z1, x2, y2, z2)
+  local H = ns.Nav and ns.Nav.CityHeight
+  local l = ns.CityLevels and ns.CityLevels[cont]
+  local P = ns.Passability
+  if not (H and l and l.zoff and z1 and z2 and P and P.IsOpen) then return 0 end
+  local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+  local n = math.max(1, math.ceil(d))
+  local wall = 0
+  for i = 1, n - 1 do
+    local t = i / n
+    local x, y = x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+    local h, z = H(cont, x, y), z1 + (z2 - z1) * t - l.zoff
+    if not h or h < z - R.WALL_Z or (math.abs(h - z) <= R.WALL_Z and not P.IsOpen(cont, x, y)) then wall = wall + d / n end
+  end
+  return wall
+end
+
+-- Yards of the line (x1, y1)-(x2, y2) over no floor at any height: an underground city's levels,
+-- where its floor heights (the top floor per cell) have none (a canal's water, a pit).
+function R.VoidYards(cont, x1, y1, x2, y2)
+  local H = ns.Nav and ns.Nav.CityHeight
+  if not (H and ns.CityHeights and ns.CityHeights[cont]) then return 0 end
+  local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+  local n = math.max(1, math.ceil(d))
+  local void = 0
+  for i = 1, n - 1 do
+    local t = i / n
+    if not H(cont, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t) then void = void + d / n end
+  end
+  return void
+end
 R.NODE_LINK_TRIES = 3 -- ... the nearest this many nodes tried in each direction (past rock, give that one up)
 R.NODE_LINK_MS = 12 -- ... worked out for this long per route calculation, the rest in the background (a long
 -- route's search reaches thousands of nodes: done at once, the game froze)
@@ -2260,15 +2299,18 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   -- Off-road leg: cost and pieces. Straight where the ground allows. Getting on/off the
   -- road (`must`) otherwise walks around obstacles over the terrain grid, and as a last
   -- resort goes straight at a heavy penalty; offroad mode's extra links are just dropped.
-  local function Leg(x1, y1, x2, y2, must, walk)
+  local function Leg(x1, y1, x2, y2, must, walk, z1, z2)
     local d = Dist(x1, y1, x2, y2)
     local c, path = d, nil
     if Pass and not layered then c = SegCost(cont, x1, y1, x2, y2) end
     if layered then
       walk = false
       -- (floors over floors: the grid can't tell what's between, a wall or a gap down to the
-      -- floor below; the roads can, so onto the nearest one: past a few yards, dearer)
+      -- floor below; the roads can, so onto the nearest one: past a few yards, dearer; and not
+      -- over a gap with no floor at any height, a canal's water, R.VoidYards)
       c = d + math.max(0, d - R.LAYER_LEG_FREE) * (R.LAYER_LEG_FACTOR - 1)
+      if R.VoidYards(cont, x1, y1, x2, y2) > R.LAYER_VOID_YD
+          or R.WallYards(cont, x1, y1, z1, x2, y2, z2) > R.LAYER_VOID_YD then c = nil end
     end
     -- (in a capital no walk around: the terrain grid's cells are coarser than its streets,
     -- and blind to its floors over each other; a leg there is straight, its walls real)
@@ -2350,7 +2392,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local goals = {}
   for i, c in ipairs(candidates(ts)) do
     local e = g.e[c.edge]
-    local cost, leg = Leg(c.px, c.py, tx, ty, true, i <= R.WALK_AROUND_CANDIDATES)
+    local cost, leg = Leg(c.px, c.py, tx, ty, true, i <= R.WALK_AROUND_CANDIDATES, layered and R.EdgeZ(g, c.edge, c.along), tz)
     goals[#goals + 1] = { c = c, cost = cost, leg = leg }
     goalVia(e[1], part(c.edge, c.along) + cost, Join({ { kind = ROAD, edge = c.edge, from = 0, to = c.along } }, leg))
     goalVia(e[2], part(c.edge, math.max(0, e[3] - c.along)) + cost, Join({ { kind = ROAD, edge = c.edge, from = e[3], to = c.along } }, leg))
@@ -2358,7 +2400,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   -- Start: onto a nearby edge's closest point, then either way along it.
   for i, c in ipairs(candidates(ss)) do
     local e = g.e[c.edge]
-    local cost, leg = Leg(sx, sy, c.px, c.py, true, i <= R.WALK_AROUND_CANDIDATES)
+    local cost, leg = Leg(sx, sy, c.px, c.py, true, i <= R.WALK_AROUND_CANDIDATES, sz, layered and R.EdgeZ(g, c.edge, c.along))
     relax(START, e[1], cost + part(c.edge, c.along), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = 0 } }))
     relax(START, e[2], cost + part(c.edge, math.max(0, e[3] - c.along)), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = e[3] } }))
     for _, gl in ipairs(goals) do

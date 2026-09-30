@@ -563,7 +563,7 @@ def point_heights(lay: dict, u: dict, eid, pts) -> list:
 
 SPUR_TRIES = 12  # the nearest road nodes tried for a place's road (spurs)
 SPUR_DETOUR = 2.0  # ...: on foot at most this many times as far as straight (and 20 yd)
-SHORT_REACH = 30.0  # yards: complete(): road nodes this near each other on foot are checked
+SHORT_REACH = 45.0  # yards: complete(): road nodes this near each other on foot are checked
 SHORT_RATIO, SHORT_SLACK = 1.5, 10.0  # ...: a road between them when the roads take longer than this
 
 
