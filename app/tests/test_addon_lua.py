@@ -1571,6 +1571,28 @@ def test_down_in_undercity_the_route_starts_on_the_players_own_floor(nav_env):
     assert all(N.CityHeight(UC, x, y) < -118 for x, y in near)  # (on the bottom floor, not up the walkway)
 
 
+def test_city_places_carry_their_npcs_height_to_the_stop(nav_env):
+    # (reported) the Cooking trainer and Guild Master are on the bank's level, 12 yd under the
+    # walkway the route went to: a place's height (its NPC's) tells the floor
+    lua, ns, UC = undercity_env(nav_env)
+    load(lua, ns, "Layers.lua", "Data/CityPlaces.lua")
+    L = ns.Layers
+    ns.db = lua.eval("{}")
+    ns.settings = lua.eval("{ gps = { layerCity = true, style = 'minimap' } }")
+    L.RevealCity()
+    cook = next(p for p in L.RevealedPlaces(0).values() if p[3] == "Undercity Cooking Trainer")
+    assert abs(cook.z - -55.3) < 0.5 and abs((cook.z - ns.CityLevels[UC].zoff) - N_bank(ns, UC)) < 5
+    marks = L.Marks(0, cook[1], cook[2], 400.0, lua.table(), UC)
+    mark = next(marks[i] for i in range(1, len(marks) + 1) if marks[i][4] == "Undercity Cooking Trainer")
+    assert mark[13] == cook.z
+    assert L.PlaceZ(UC, cook[1] + 3, cook[2], "Undercity Cooking Trainer") == cook.z  # (a guard's directions)
+    assert L.PlaceZ(UC, cook[1] + 80, cook[2], "Undercity Cooking Trainer") is None
+
+
+def N_bank(ns, UC):
+    return ns.Nav.CityHeight(UC, 1598.0, 262.0)  # (the bank's floor, the model's own height)
+
+
 def test_undercity_lift_tops_are_up_top(nav_env):
     # The halls at the lifts' tops report Undercity's map too, but they're up at the surface:
     # a stop in the Trade Quarter right below is down a lift, not a few yards away.

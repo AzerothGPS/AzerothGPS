@@ -964,9 +964,10 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
   local function near(x, y) return math.abs(x - cx) <= reach and math.abs(y - cy) <= reach end
   -- (`level`: the level a stop made from it is on: a city's places are down in it, wherever the
   -- floor data under them has a gap: a trainer's booth)
-  local function put(x, y, icon, name, note, size, r, g, b, questID, preview, level)
+  -- (`z`: its height, the game's: a city place's, from its NPC; the floor, where they lie over each other)
+  local function put(x, y, icon, name, note, size, r, g, b, questID, preview, level, z)
     if #out < L.MAX_MARKS and near(x, y) then
-      out[#out + 1] = { x, y, icon, name, note, size, r, g, b, questID, preview, level }
+      out[#out + 1] = { x, y, icon, name, note, size, r, g, b, questID, preview, level, z }
     end
   end
   if st.layerQuests then
@@ -996,7 +997,7 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
       if lc == cont or (lc == level and Geo.Base(lc) == cont) then
         for _, c in ipairs(list) do
           put(c[1], c[2], c[4] or L.CITY_DEFAULT_ICON, c[3], "City location (a guard pointed it out)", 16,
-            nil, nil, nil, nil, nil, lc)
+            nil, nil, nil, nil, nil, lc, L.PlaceZ(lc, c[1], c[2], c[3]))
           saved[#saved + 1] = c
         end
       end
@@ -1009,7 +1010,7 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
         if c[3] == p[3] or (c[1] - p[1]) ^ 2 + (c[2] - p[2]) ^ 2 <= L.CITY_SAME_YD ^ 2 then dup = true break end
       end
       if not dup then
-        put(p[1], p[2], L.CityIcon(p[3]) or L.CITY_DEFAULT_ICON, p[3], "City location", 16, nil, nil, nil, nil, true, p.cont)
+        put(p[1], p[2], L.CityIcon(p[3]) or L.CITY_DEFAULT_ICON, p[3], "City location", 16, nil, nil, nil, nil, true, p.cont, p.z)
       end
     end
   end
@@ -1105,7 +1106,7 @@ function L.RevealedPlaces(cont)
         local x, y, pc = L.MapToWorld(ui, p[1] / 100, p[2] / 100)
         if x then
           pc = L.CityLevelAt(pc, x, y) or pc
-          list[#list + 1] = { x, y, p[3], cont = pc }
+          list[#list + 1] = { x, y, p[3], cont = pc, z = p[4] }
         end
       end
       placeCache[ui] = list
@@ -1159,6 +1160,23 @@ function L.CityLevelAt(cont, x, y)
   local P, N = ns.Passability, ns.Nav
   for id, l in pairs(ns.CityLevels or {}) do
     if l.base == cont and ((N and N.CityHeight and N.CityHeight(id, x, y)) or (P and P.IsOpen(id, x, y))) then return id end
+  end
+  return nil
+end
+
+-- The height (the game's) of the city place named `name` near (x, y) on `cont` (a guard's
+-- directions to it, a spot a guard pointed out), from Data/CityPlaces.lua; nil when none.
+L.PLACE_Z_YD = 25
+function L.PlaceZ(cont, x, y, name)
+  if not (name and ns.CityPlaces) then return nil end
+  local want = name:lower()
+  for ui, c in pairs(ns.CityPlaces) do
+    for _, p in ipairs(c) do
+      if p[4] and p[3]:lower() == want then
+        local px, py, pc = L.MapToWorld(ui, p[1] / 100, p[2] / 100)
+        if px and Geo.Base(pc) == Geo.Base(cont) and (px - x) ^ 2 + (py - y) ^ 2 <= L.PLACE_Z_YD ^ 2 then return p[4] end
+      end
+    end
   end
   return nil
 end
@@ -1240,7 +1258,7 @@ function L.OnGossipPoi(asked)
     if d.name == info.name and d.cont == cont and (d.x - x) ^ 2 + (d.y - y) ^ 2 <= L.CITY_SAME_YD ^ 2 then return end
   end
   if ns.Import and ns.Import.AddMapPin then
-    ns.Import.AddMapPin({ cont = cont, x = x, y = y, name = info.name, tex = icon })
+    ns.Import.AddMapPin({ cont = cont, x = x, y = y, name = info.name, tex = icon, z = L.PlaceZ(cont, x, y, info.name) })
   end
 end
 

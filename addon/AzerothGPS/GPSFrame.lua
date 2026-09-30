@@ -1487,7 +1487,7 @@ local function PoiButton(i)
   b:SetScript("OnDoubleClick", function(self)
     if self.cityMap or self.exit then return end
     if G.Held() then return HeldClick(self.wx, self.wy, self.level or view.cont) end -- (the holder's)
-    G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex) -- like a double-click on the map, with its name and icon
+    G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex, self.z) -- like a double-click on the map, with its name and icon
   end)
   poiButtons[i] = b
   return b
@@ -1548,6 +1548,7 @@ local function DrawPois(pois, zoom)
       local b = PoiButton(nb)
       b.name, b.wx, b.wy = p[4], p[5], p[6]
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
+      b.z = p.z -- (a city place's height: its floor, where floors lie over each other)
       b.preview, b.cityMap, b.instance, b.exit = nil, nil, nil, nil
       b.dock = nil
       if b.timer then b.timer:Hide() end
@@ -2012,7 +2013,7 @@ function G.Update()
       dx, dy = Geo.Rotate(dx * s, dy * s, rot)
       if math.abs(dx) <= half and math.abs(dy) <= half then
         pois[#pois + 1] = { 4, dx, dy, m[4], m[1], m[2], nil, nil, icon = m[3], note = m[5], size = m[6], questID = m[10],
-          r = m[7], g = m[8], b = m[9], preview = m[11], level = m[12] }
+          r = m[7], g = m[8], b = m[9], preview = m[11], level = m[12], z = m[13] }
       end
     end
   end
@@ -3358,7 +3359,7 @@ function G.FinishRoad(line, erase, wall)
   elapsed = 1
 end
 
-function G.AddStopAt(x, y, name, stopCont, tex)
+function G.AddStopAt(x, y, name, stopCont, tex, z)
   local px, _, cont = Geo.PlayerWorld()
   if not px then return false end
   if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return false end
@@ -3377,7 +3378,8 @@ function G.AddStopAt(x, y, name, stopCont, tex)
   -- a place picked on the map (its icon: a guard's city location...) on a city's floors is
   -- down there, wherever the player is
   if tex and ns.Layers and ns.Layers.CityLevelAt then sc = ns.Layers.CityLevelAt(Geo.Base(sc), x, y) or sc end
-  local stop = { x = x, y = y, cont = sc, name = name, icon = ns.Nav.NextMarker(ns.Nav.stops, pending), tex = tex }
+  -- (`z`: its height, the game's, when known: a city place's, its floor where floors lie over each other)
+  local stop = { x = x, y = y, cont = sc, name = name, icon = ns.Nav.NextMarker(ns.Nav.stops, pending), tex = tex, z = z }
   if #ns.Nav.stops > 0 then
     ns.Nav.AddStop(stop, S().fastestOrder) -- a route is set: straight onto it
     G.appended = true -- after AUTO_CONFIRM seconds of quiet: the tour, then follow again

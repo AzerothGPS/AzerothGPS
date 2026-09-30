@@ -273,7 +273,11 @@ The addon is going public, so every change must keep it policy-safe:
     jump between levels, a long last leg, yards through closed cells).
   - `Data/CityPlaces.lua`: capitals' service locations (map %), shown once a guard in that
     city has been talked to (`Layers.RevealCity`, account-wide); a stop still comes from
-    asking a guard.
+    asking a guard. Each has a 4th value, its NPC's height (world yards, from the CMaNGOS
+    dump's spawns: `agps city-places`, `cityplaces.py`), carried to its stop (`d.z`): where
+    floors lie over each other it tells the floor (Router's city floor check, `CaveDown`, the
+    height hint). Undercity's heights in Cities.lua are its model's own: the game's less
+    `CityLevels[10001].zoff`; the player's own height (`Nav.PlayerCityZ`) tells their floor.
   - `Media/*.tga`: our own art: `Logo` (portraits), `Device` (minimap button and the
     addon list icon), `MapMenu` (the eye button), `Dash` (dotted route lines).
 - `app/`: Python developer tools (not shipped). They include a CASC/DB2 reader, road
@@ -307,6 +311,7 @@ agps capitals          # build the capitals (renders in data/debug/capitals/; --
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)
 agps watch-roads       # on every /reload: roads drawn in game go into overrides/ and the data, then install
 agps terrain-hpa        # prepare the terrain's blocks for the walk search (install-addon does it when stale)
+agps city-places       # the capitals' service locations' heights from their NPCs (after adding places)
 agps import-shared <file>  # roads and walls players copied from the share page ("Copy map data...") into the data
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 ```

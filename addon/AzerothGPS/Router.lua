@@ -2208,7 +2208,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   -- way in to a cave at the other end. Over a mine under walkable ground the player may be
   -- up top: opts.indoors, from IsIndoors, tells (under a capital's floor, opts.z: their height).
   if g.cave and next(g.cave) and Pass and Pass.OverlayRaw then
-    local sDown, tDown = R.CaveDown(cont, sx, sy, opts and opts.indoors, opts and opts.z), R.CaveDown(cont, tx, ty)
+    local sDown, tDown = R.CaveDown(cont, sx, sy, opts and opts.indoors, opts and opts.z), R.CaveDown(cont, tx, ty, nil, opts and opts.tz)
     -- (the ways out of the cave at the other end, however far: a cave with no land road
     -- near its mouth is reached across the land to it)
     local sWays = tDown and not sDown and R.CaveWaysOut(g, cont, ts, sx, sy)

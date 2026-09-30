@@ -237,6 +237,30 @@ def cmd_terrain_hpa(args) -> int:
     return 0
 
 
+def cmd_city_places(args) -> int:
+    """Heights of the capitals' service locations (Data/CityPlaces.lua) from their NPCs' spawns."""
+    import lupa
+
+    from .cityplaces import FILE, npc_spawns, with_heights
+    from .paths import data_dir
+
+    lua = lupa.LuaRuntime()
+    lua.execute("ns = {}")
+    loader = lua.eval("function(src) return assert(load(src, '@Maps.lua')) end")
+    loader((ADDON_DIR / "Data" / "Maps.lua").read_text(encoding="utf-8"))("AzerothGPS", lua.globals().ns)
+    maps = {}
+    Maps = lua.globals().ns.Maps
+    for k in Maps.keys():
+        m = Maps[k]
+        if m.bounds and m.continent is not None:
+            b = m.bounds
+            maps[int(k)] = (int(m.continent), (b[1], b[2], b[3], b[4]))
+    text, n, missing = with_heights(FILE.read_text(encoding="utf-8"), maps, npc_spawns(data_dir()))
+    FILE.write_text(text, encoding="utf-8", newline="\n")
+    print(f"{n} places with their NPC's height; none found for {len(missing)}: {', '.join(missing)}")
+    return 0
+
+
 def cmd_install_addon(args) -> int:
     import shutil
 
@@ -468,6 +492,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--interval", type=float, default=3.0, help="seconds between checks")
     sp.add_argument("--once", action="store_true", help="check once and stop")
     sp.set_defaults(fn=cmd_watch_roads)
+
+    sp = sub.add_parser("city-places", help="heights of the capitals' service locations (Data/CityPlaces.lua) from NPC spawns")
+    sp.set_defaults(fn=cmd_city_places)
 
     sp = sub.add_parser("terrain-hpa", help="prepare the terrain's blocks for the walk search (Data/TerrainHPA.lua)")
     sp.set_defaults(fn=cmd_terrain_hpa)
