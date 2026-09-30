@@ -1504,6 +1504,19 @@ def test_out_of_the_ruins_through_the_north_gate(nav_env):
                     assert run < 5, (offroad, stop, x1, y1, x2, y2)  # (a corner, not through a wall)
 
 
+def test_the_map_shows_undercitys_roads_down_in_it(nav_env):
+    # (reported) down in Undercity with the road tools on, the map showed the Ruins' roads up top
+    # (the continent's) over the city, while strokes went on the city's level
+    lua, ns, UC = undercity_env(nav_env)
+    G = ns.GPS
+    lua.execute("GetTime = function() return 10 end")
+    assert G.ShownLevel(0, 1560.0, 228.0, True) == UC  # the Trade Quarter's ring
+    assert G.ShownLevel(0, -9000.0, 400.0, True) == 0  # looking at Elwynn from down there
+    assert G.ShownLevel(0, 1560.0, 228.0, False) == 0  # the view somewhere else
+    lua.execute("AGPS_MAP = 1420 GetTime = function() return 100 end")  # back up in Tirisfal
+    assert G.ShownLevel(0, 1560.0, 228.0, True) == 0
+
+
 def test_undercity_lift_tops_are_up_top(nav_env):
     # The halls at the lifts' tops report Undercity's map too, but they're up at the surface:
     # a stop in the Trade Quarter right below is down a lift, not a few yards away.
