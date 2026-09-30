@@ -1338,7 +1338,9 @@ function R.Pump(deadline, now)
     if not ok or coroutine.status(j.co) == "dead" then
       table.remove(walkJobs, 1)
       walkQueued[j.key] = nil
-      if j.warm then
+      if j.bg then
+        if ok and j.done then j.done(c) end
+      elseif j.warm then
         warming[j.cont] = nil
       elseif j.links then -- (offroad links a route wanted: recalculate)
         finished, fixed = true, true
@@ -1353,6 +1355,22 @@ function R.Pump(deadline, now)
 end
 
 function R.HasWork() return walkJobs[1] ~= nil end
+
+-- Other work in the background, pumped with the searches: fn() (it may route: a route's search
+-- pauses every ROUTE_BREATHE nodes when run here), then done(result) with what it returned. One
+-- job per key at a time. (Tests, SYNC_WALKS: at once.) False when that key's job is queued already.
+R.ROUTE_BREATHE = 150
+function R.Background(key, fn, done)
+  if walkQueued[key] then return false end
+  if R.SYNC_WALKS then
+    local result = fn()
+    if done then done(result) end
+    return true
+  end
+  walkQueued[key] = true
+  walkJobs[#walkJobs + 1] = { key = key, bg = true, done = done, co = coroutine.create(fn) }
+  return true
+end
 -- Building a road network in the background: it gets more of each frame than searches do.
 function R.Warming() return walkJobs[1] ~= nil and walkJobs[1].warm or false end
 
@@ -2545,9 +2563,12 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     end
   end
 
+  local expanded = 0
   while #open > 0 do
     local n = Pop(open)[1]
     if n == GOAL then break end
+    expanded = expanded + 1
+    Breathe(expanded, R.ROUTE_BREATHE) -- (in a background job: pauses; in the frame: nothing)
     if not closed[n] then
       closed[n] = true
       local gf = goalFrom[n]

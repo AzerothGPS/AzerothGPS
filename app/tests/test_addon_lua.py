@@ -2979,7 +2979,7 @@ def test_a_walk_still_being_searched_doesnt_decide_against_the_flight_for_good(n
       AGPS_PENDING = true
       local route = AGPS_R.Route
       AGPS_R.Route = function(cont, sx, sy, tx, ty, opts)
-        if AGPS_PENDING and sx == 2254 and tx == -1441 then -- (the walk the whole way, still searched)
+        if AGPS_PENDING and math.abs(sx - 2254) < 60 and math.abs(sy - 293) < 60 and tx == -1441 then -- (the walk the whole way, still searched; the comparison's from about there)
           local d = math.sqrt((tx - sx) ^ 2 + (ty - sy) ^ 2)
           return { pts = { sx, sy, tx, ty }, kinds = { 1 }, length = d, road = 0, pending = true }
         end
@@ -3045,34 +3045,51 @@ def test_a_flight_master_learned_on_the_way_is_flown_to(nav_env):
 
 def test_a_flight_master_passed_on_the_way_is_recommended(nav_env):
     # (asked) the walk from the Sepulcher into Arathi goes by Tarren Mill's flight master, not
-    # learned yet: a detour to learn it (a step, a brown line on the map; the next trips may fly
-    # there); learned, not
+    # learned yet: a detour to learn it (a step where the walk passes it, a brown line on the map;
+    # the next trips may fly there); learned, not
     lua, ns = _flight_env(nav_env, [10, 11])
     N = ns.Nav
     ns.CharDB().faction = "Horde"
     N.SetDestination(-1441.0, -2332.0, 0, "Arathi")
     r = N.Route(2254.0, 293.0, 0)
-    hint = N.LearnOnRoute(r)
-    assert hint and hint.name == "Tarren Mill" and 350 < hint.off < 450
-    # (a detour: a step after the walk passing it, drawn brown to it from the route; not in the
-    # panel's own lines)
+    (hint,) = N.LearnOnRoute(r).values()
+    assert hint.name == "Tarren Mill" and 350 < hint.off < 450
+    assert (hint.x, hint.y) == (-0.1, -859.9) and hint.rx and hint.ry
+    # (the walk from the Sepulcher split where it passes: walk, detour, the rest of the walk)
     steps = [N.Steps()[i] for i in range(1, len(N.Steps()) + 1)]
     k = next(i for i, t in enumerate(steps) if "learn the flight path at Tarren Mill" in t)
-    # (before the walk passing it: step 5 of 6, not after the walk's end at the stop)
-    assert steps[k].startswith("|cffc08040Detour") and steps[k + 1].startswith("Walk") and k == len(steps) - 2
+    assert steps[k].startswith("|cffc08040Detour") and steps[k - 1].startswith("Walk 3.") and steps[k + 1].startswith("Walk 2.")
+    assert steps[k - 2].startswith("Take the flight to The Sepulcher")
     assert "learn the flight path" not in N.Status(2254.0, 293.0, 0)
-    assert (hint.x, hint.y) == (-0.1, -859.9) and hint.rx and hint.ry
-    ns.CharDB().faction = "Alliance"  # (not their faction's: Southshore's instead, near that walk too)
+    ns.CharDB().faction = "Alliance"  # (not their faction's: Southshore's instead, near that walk too; not an obsolete "zzOLD" one)
     r.learnAt = None
-    hint = N.LearnOnRoute(r)
-    assert hint and hint.name == "Southshore"
-    ns.CharDB().faction = "Horde"
+    names = [h.name for h in N.LearnOnRoute(r).values()]
+    assert "Southshore" in names and "Tarren Mill" not in names and not any(n.startswith("zz") for n in names)
     lua, ns = _flight_env(nav_env, [10, 11, 13])  # (learned)
     ns.CharDB().faction = "Horde"
     ns.Nav.SetDestination(-1441.0, -2332.0, 0, "Arathi")
     r = ns.Nav.Route(2254.0, 293.0, 0)
-    hint = ns.Nav.LearnOnRoute(r)
-    assert not (hint and hint.name == "Tarren Mill")
+    assert "Tarren Mill" not in [h.name for h in (ns.Nav.LearnOnRoute(r) or lua.table()).values()]
+
+
+def test_every_flight_master_passed_is_a_detour_and_the_flight_is_still_taken(nav_env):
+    # (reported) toward Hammerfall: only one flight master to learn was suggested (Tarren Mill's
+    # too, on the way), its detour came as step 1 before an 8.6k yd walk, and the route walked from
+    # Brill all the way (the plan with a ride, asked for, walked to the flight master and on: no
+    # ride in it to compare). Each detour where the walk passes it; one at the walk's end, after it.
+    lua, ns = _flight_env(nav_env, [10, 11])
+    N = ns.Nav
+    ns.CharDB().faction = "Horde"
+    N.SetDestination(-1300.0, -3400.0, 0, "Hammerfall way")
+    r = N.Route(2254.0, 293.0, 0)
+    assert [h.name for h in N.LearnOnRoute(r).values()] == ["Tarren Mill", "Hammerfall"]
+    steps = [N.Steps()[i] for i in range(1, len(N.Steps()) + 1)]
+    assert any("Take the flight to The Sepulcher" in t for t in steps)
+    tm = next(i for i, t in enumerate(steps) if "at Tarren Mill" in t)
+    hf = next(i for i, t in enumerate(steps) if "at Hammerfall" in t)
+    assert steps[tm - 1].startswith("Walk ") and steps[tm + 1].startswith("Walk ") and "Hammerfall way" in steps[tm + 1]
+    assert hf == len(steps) - 1  # (at the walk's end: after it)
+    assert not any(t.startswith("Walk 2 yd") for t in steps)
 
 
 def test_a_connecting_flight_is_drawn_through_its_stops(nav_env):

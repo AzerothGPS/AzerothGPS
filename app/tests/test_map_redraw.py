@@ -124,7 +124,7 @@ def test_a_detour_is_removed_for_this_route_by_its_pin(game):
     N.SetStops(stop, False, "red")  # (...and the yes to it)
     lua.execute("AGPS_T = 303")
     G.Update()
-    assert N.LearnOnRoute(N.route) and N.LearnOnRoute(N.route).node == 13
+    assert N.LearnOnRoute(N.route) and N.LearnOnRoute(N.route)[1].node == 13
 
 
 def test_the_dev_hooks_for_sharing(game):

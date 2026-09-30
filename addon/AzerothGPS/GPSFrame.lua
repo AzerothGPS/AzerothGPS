@@ -1714,9 +1714,8 @@ local function DrawStopPins(toScreen, viewCont)
   end
   -- the detour to a flight master not learned yet (Nav.LearnOnRoute): its pin, removable
   local learn = ns.Nav.route and not ns.Nav.QuestPaused() and ns.Nav.LearnOnRoute(ns.Nav.route)
-  if learn then
-    pin({ cont = learn.cont, x = learn.x, y = learn.y, learnNode = learn.node },
-      "Detour: learn the flight path at " .. learn.name)
+  for _, h in ipairs(learn or {}) do
+    pin({ cont = h.cont, x = h.x, y = h.y, learnNode = h.node }, "Detour: learn the flight path at " .. h.name)
   end
   for i = n + 1, #stopPins do stopPins[i]:Hide() end
 end
@@ -2010,16 +2009,14 @@ function G.Update()
     -- route, a detour (listed in the steps)
     -- (not `x, y = learn and ToContinent(...)`: `and` keeps only a call's first value, y was nil and
     -- the redraw failed there, the route and the panel not drawn at all)
-    local learn = not questing and ns.Nav.LearnOnRoute(route)
-    local lx1, ly1, lx2, ly2
-    if learn then
-      lx1, ly1 = Geo.ToContinent(learn.cont, learn.rx, learn.ry, viewCont)
-      lx2, ly2 = Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
-    end
-    if lx1 and ly1 and lx2 and ly2 then
-      local ax, ay = toScreen(lx1, ly1)
-      local bx, by = toScreen(lx2, ly2)
-      AddSeg(ax, ay, bx, by, G.DETOUR_COLOR, 3, 1, true, G.dashTexture and true or nil)
+    for _, h in ipairs(not questing and ns.Nav.LearnOnRoute(route) or {}) do
+      local lx1, ly1 = Geo.ToContinent(h.cont, h.rx, h.ry, viewCont)
+      local lx2, ly2 = Geo.ToContinent(h.cont, h.x, h.y, viewCont)
+      if lx1 and ly1 and lx2 and ly2 then
+        local ax, ay = toScreen(lx1, ly1)
+        local bx, by = toScreen(lx2, ly2)
+        AddSeg(ax, ay, bx, by, G.DETOUR_COLOR, 3, 1, true, G.dashTexture and true or nil)
+      end
     end
   end
   DrawStopPins(function(x, y)
@@ -2074,9 +2071,8 @@ function G.Update()
       end
     end
     -- (and a flight master's detour: its pin is that flight master's icon, right-clickable)
-    local learn = ns.Nav.route and ns.Nav.LearnOnRoute(ns.Nav.route)
-    if learn then
-      local x, y = Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
+    for _, h in ipairs(ns.Nav.route and ns.Nav.LearnOnRoute(ns.Nav.route) or {}) do
+      local x, y = Geo.ToContinent(h.cont, h.x, h.y, viewCont)
       if x then under[#under + 1] = { x, y } end
     end
     if not under[1] then return pois end
