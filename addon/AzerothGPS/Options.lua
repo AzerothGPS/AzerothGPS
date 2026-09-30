@@ -763,6 +763,7 @@ local function BuildWindow()
     ns.Nav.Invalidate(true)
     if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
   end)
+  note("Every stop is still in the fastest order and on the map. The stops past these are listed with an estimated distance until they're routed. Fewer routed stops is less work for the addon.")
   check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
     function() return GPS().fastestOrder end, function(v)
       GPS().fastestOrder = v
