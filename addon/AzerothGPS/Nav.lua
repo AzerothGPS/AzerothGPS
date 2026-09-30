@@ -750,6 +750,7 @@ end
 N.RIDE_CHECK_MIN_YD = 800 -- (shorter walks: not worth a second look)
 N.RIDE_CHECK_YD = 200
 local rideCheck = {} -- [key] = whether the way with a ride won
+local rideLast = {} -- [stop] = the last answer for it (from wherever: used while this square's is worked out)
 local function Weighed(cont, pts, walk, exempt)
   local yards = 0
   for i = 1, #pts - 3, 2 do
@@ -842,18 +843,25 @@ local function RideInstead(cont, sx, sy, d, walk, tps, opts, sz)
   local lvl = UnitLevel and UnitLevel("player")
   local key = string.format("%d:%d:%d:%s:%.0f:%.0f:%s", cont, math.floor(sx / N.RIDE_CHECK_YD), math.floor(sy / N.RIDE_CHECK_YD),
     tostring(d.cont), d.x, d.y, tostring(lvl))
-  if rideCheck[key] == nil then
+  -- (meanwhile, crossing into another RIDE_CHECK_YD square: the last answer for this stop, not the
+  -- plan's walk: that walked the whole way routed in the frame, then the ride again once compared)
+  local stopKey = string.format("%s:%.0f:%.0f:%s", tostring(d.cont), d.x, d.y, tostring(lvl))
+  local won = rideCheck[key]
+  if won == nil then
     ns.Router.Background("ride:" .. key, function()
       return CompareRide(cont, sx, sy, d, walk, tps, opts, sz)
     end, function(res)
       if not (res and res.final) then return end -- (asked again on the next recalculation)
-      rideCheck[key] = res.won
-      if res.won then N.Invalidate(false) end -- (the way with the ride: the route worked out again)
+      local before = rideLast[stopKey] or false
+      rideCheck[key], rideLast[stopKey] = res.won, res.won
+      if res.won ~= before then N.Invalidate(false) end -- (the other way: the route worked out again)
     end)
-  elseif rideCheck[key] then
+    won = rideCheck[key]
+    if won == nil then won = rideLast[stopKey] end
+  else
     N.lastRideCheck = (N.lastRideCheck or "") .. " [remembered]"
   end
-  if not rideCheck[key] then return nil end
+  if not won then return nil end
   return legs, WalkRoutes(legs, sx, sy, d, opts, sz)
 end
 
@@ -1507,7 +1515,7 @@ function N.Invalidate(all, fresh)
   N.route = nil -- (kept stays, to compare the recalculation with)
   if all ~= false then later.done = {} end -- redone a few a frame; shown until replaced
   if fresh then pairCosts, pairCount = {}, 0 end
-  if fresh then kept, rideCheck = nil, {} end
+  if fresh then kept, rideCheck, rideLast = nil, {}, {} end
   if all ~= false then legMemo, legMemoN = {}, 0 end
 end
 

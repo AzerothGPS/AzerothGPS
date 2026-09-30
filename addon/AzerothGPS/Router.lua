@@ -1713,6 +1713,7 @@ function R.NearestEdges(cont, x, y, z)
   local best, bestD = {}, nil
   local seen = {}
   for ring = 0, R.NEAREST_MAX_RINGS do
+    Breathe(ring + 1, 2)
     -- cells beyond this ring are at least (ring) buckets away
     if bestD and (ring - 1) * SEG_BUCKET > bestD + R.ENTRY_SLACK then break end
     for kx = bx - ring, bx + ring do
@@ -2268,7 +2269,9 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   local directSafe = direct and DangerLine(sx, sy, tx, ty) == 0
   if not g or (offroad and directSafe) then return Straight(g, sx, sy, tx, ty) end
   local ss = R.NearestEdges(cont, sx, sy, layered and sz or nil)
+  Breathe(1, 1) -- (in a background job: a pause between the parts; in the frame: nothing)
   local ts = R.NearestEdges(cont, tx, ty, layered and tz or nil)
+  Breathe(1, 1)
   -- the caves (Data/Caves.lua): in one, on by its roads; outside, not onto them, but for a
   -- way in to a cave at the other end. Over a mine under walkable ground the player may be
   -- up top: opts.indoors, from IsIndoors, tells (under a capital's floor, opts.z: their height).
@@ -2473,7 +2476,8 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       -- (not in a capital or a city: its streets are the way, its grid coarser than they are;
       -- nor in a cave or a city's ruins, whose grids can't tell a tunnel's walls)
       if cityPenalty or R.CapitalAt(cont, x, y) or (Pass.Overlay and Pass.Overlay(cont, x, y)) then return blocked end
-      for _, p in ipairs(alongPoints(list, x, y, R.JOIN_ALONG_MAX, true)) do
+      for k, p in ipairs(alongPoints(list, x, y, R.JOIN_ALONG_MAX, true)) do
+        Breathe(k, 6)
         if SegCost(cont, x, y, p[3], p[4]) then
           p.walk = false
           use(p)
