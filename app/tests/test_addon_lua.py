@@ -2772,13 +2772,25 @@ def test_keep_current_route_when_recalculation_is_longer(nav_env):
     assert K(old, longer, 7.0, 0)  # final but longer: keep it for a while...
     old.keptSince = 0
     assert not K(old, longer, 7.0, 25)  # ...then take the new one
-    similar = lua.eval("{ totalYards = 1050, totalRide = 0, pending = true }")
+    similar = lua.eval("{ totalYards = 1050, totalRide = 0 }")
     assert not K(old, similar, 7.0, 0)  # about as long: just take it
     shorter = lua.eval("{ totalYards = 800, totalRide = 0 }")
     assert not K(old, shorter, 7.0, 0)
     # rides count at walking speed
     ride = lua.eval("{ totalYards = 600, totalRide = 200, pending = true }")
     assert K(old, ride, 7.0, 0)
+
+
+def test_a_provisional_straight_line_never_stays_over_the_roads(nav_env):
+    # (reported) standing still a minute, the route became a straight line over the hills: each
+    # refresh's terrain search gave a provisional straight line (shorter), and when the roads
+    # came back worked out they were "clearly longer", so the straight line was kept
+    lua, ns = nav_env
+    K = ns.Nav.KeepOld
+    straight = lua.eval("{ totalYards = 633, totalRide = 0, pending = true }")
+    roads = lua.eval("{ totalYards = 1409, totalRide = 0 }")
+    assert not K(straight, roads, 7.0, 0)  # worked out: over a provisional one at once
+    assert K(roads, straight, 7.0, 0)  # and a provisional one doesn't replace it meanwhile
 
 
 def test_reroute_keeps_route_until_player_leaves_it(nav_env):

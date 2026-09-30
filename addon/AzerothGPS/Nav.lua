@@ -1270,7 +1270,12 @@ end
 -- Keep route `old` instead of the recalculated `new`? When `new` is clearly longer (the
 -- whole trip, rides counted at walking speed) and either still provisional or `old` hasn't
 -- been kept for KEEP_SECONDS yet. (The caller also checks the player is still on `old`.)
+-- A provisional route (a terrain search still running: straight across meanwhile) never
+-- stays over a worked-out one, nor replaces one: standing still, the refresh's search made
+-- a straight line over the hills each time and kept it, shorter than the roads.
 function N.KeepOld(old, new, walk, now)
+  if old.pending and not new.pending then return false end
+  if new.pending and not old.pending then return true end
   local function cost(r) return (r.totalYards or 0) + (r.totalRide or 0) * walk end
   if cost(new) <= cost(old) * LONGER_SHARE + LONGER_YD then return false end
   return new.pending or now - (old.keptSince or now) < KEEP_SECONDS
