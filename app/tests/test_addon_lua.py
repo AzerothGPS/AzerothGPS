@@ -1487,7 +1487,8 @@ def test_out_of_the_ruins_through_the_north_gate(nav_env):
     lua, ns, UC = undercity_env(nav_env)
     R, P = ns.Router, ns.Passability
     for offroad in (False, True):
-        for stop in ((2250.0, 280.0), (505.0, 1570.0), (-20.0, -900.0)):  # Brill, the Sepulcher, Tarren Mill
+        # Brill, the Sepulcher, Tarren Mill, and the road just west of the Ruins (reported: over the west bank)
+        for stop in ((2250.0, 280.0), (505.0, 1570.0), (-20.0, -900.0), (1560.0, 540.0)):
             r = R.Route(0, 1594.9, 290.8, stop[0], stop[1], lua.table(offroad=offroad))
             pts = [(r.pts[i], r.pts[i + 1]) for i in range(1, len(r.pts), 2)]
             assert len(pts) > 3, (offroad, stop)
@@ -1524,6 +1525,18 @@ def test_the_map_shows_undercitys_roads_on_its_map(nav_env):
     G.shownLevel = 0  # Tirisfal's map
     G.FinishRoad(line(1560.0, 228.0))
     assert [t.continent for t in saved] == [UC, 0, 0]
+
+
+def test_undercitys_map_stays_up_anywhere_over_the_city_while_down_in_it(nav_env):
+    # (reported, a recording) zooming in on the city's map moved the view off the player, and the
+    # outside map (the Ruins' ground) flipped in and out: down there, the city's map anywhere over it
+    lua, ns, UC = undercity_env(nav_env)
+    G = ns.GPS
+    lua.execute("GetTime = function() return 10 end")
+    assert G.DownInCityAt(0, 1700.0, 60.0) == UC  # the Magic Quarter, the player elsewhere down there
+    assert G.DownInCityAt(0, -9000.0, 400.0) is None  # Elwynn
+    lua.execute("AGPS_MAP = 1420 GetTime = function() return 100 end")  # up in Tirisfal
+    assert G.DownInCityAt(0, 1700.0, 60.0) is None
 
 
 def test_undercity_lift_tops_are_up_top(nav_env):

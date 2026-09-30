@@ -270,8 +270,9 @@ def ruins(cd: ClientData, p, names, floors, walls, world, log=print, lifts=()) -
     ruin = [[world(v) for v in tri] for gi, name, z, tri in floors if name != "Sewers" and -25 < z < 60]
     xs = np.array([q[0] for t in ruin for q in t])
     ys = np.array([q[1] for t in ruin for q in t])
-    x0, x1 = np.percentile(xs, 0.5) - 20, np.percentile(xs, 99.5) + 20
-    y0, y1 = np.percentile(ys, 0.5) - 20, np.percentile(ys, 99.5) + 20
+    # (room round it for the blocked ground at its foot: see `banks`)
+    x0, x1 = np.percentile(xs, 0.5) - 40, np.percentile(xs, 99.5) + 40
+    y0, y1 = np.percentile(ys, 0.5) - 40, np.percentile(ys, 99.5) + 40
     cell = CELL
     H, W = int((x1 - x0) / cell) + 1, int((y1 - y0) / cell) + 1
     ground, gok = _ground(cd, x0, x1, y0, y1, cell)
@@ -381,6 +382,7 @@ def ruins(cd: ClientData, p, names, floors, walls, world, log=print, lifts=()) -
         with np.errstate(invalid="ignore"):
             walk &= ~(nb >= top + LEDGE * math.hypot(dr_, dc))  # (a ledge's foot)
     # the ways walked in game (RUINS_WAYS): open along them (doorways' thresholds and frames)
+    ways = np.zeros((H, W), bool)
     for way in RUINS_WAYS:
         for (ax, ay), (bx, by) in zip(way, way[1:]):
             n = max(1, int(math.hypot(bx - ax, by - ay) / (cell / 2)))
@@ -388,7 +390,7 @@ def ruins(cd: ClientData, p, names, floors, walls, world, log=print, lifts=()) -
                 wr, wc = int((x1 - (ax + (bx - ax) * k / n)) / cell), int((y1 - (ay + (by - ay) * k / n)) / cell)
                 for r2 in range(max(wr - 1, 0), min(wr + 2, H)):
                     for c2 in range(max(wc - 1, 0), min(wc + 2, W)):
-                        walk[r2, c2] = True
+                        walk[r2, c2] = ways[r2, c2] = True
     # the lifts' tops: their floor open (the cars and their doors)
     for lx, ly in lifts:
         lr, lc = int((x1 - lx) / cell), int((y1 - ly) / cell)
@@ -405,6 +407,25 @@ def ruins(cd: ClientData, p, names, floors, walls, world, log=print, lifts=()) -
             fdr.polygon([(cellrc(*world(v))[1], cellrc(*world(v))[0]) for v in tri], fill=255)
     mine = ndimage.binary_closing(np.array(fp) > 0, iterations=6)
     mine = ndimage.binary_fill_holes(mine)
+    # its outer walls, standing on the ground just outside the floors: its cells too, closed
+    # (on the continent's grid a leg from a road end beside one is let through: its end slack),
+    # but for the ways walked in game (the gate)
+    outer = wall3.any(axis=0) & ~walk & ~mine & ndimage.binary_dilation(mine, iterations=10)
+    mine |= outer
+    # and the continent's blocked ground round it (the mound's steep banks): the Ruins' closed
+    # cells, so no leg out of a road end beside them is let through on the end slack. (Outside its
+    # floors the continent's slopes decide, not the steps up to a ledge's height allowed on them.)
+    from .roads.terrain import continent_grid
+    cg = continent_grid(cd, 0, log=lambda *a: None)
+    ck = TILE / cg["cellYd"]
+    RR, CC = np.meshgrid(np.arange(H), np.arange(W), indexing="ij")
+    X, Y = x1 - (RR + 0.5) * cell, y1 - (CC + 0.5) * cell
+    gr = np.clip((((32 - X / TILE) - cg["tileY0"]) * ck).astype(int), 0, cg["cells"].shape[0] - 1)
+    gc = np.clip((((32 - Y / TILE) - cg["tileX0"]) * ck).astype(int), 0, cg["cells"].shape[1] - 1)
+    banks = (cg["cells"][gr, gc] == 2) & ~ways & ~mine & ndimage.binary_dilation(mine, iterations=12)
+    mine |= banks
+    walk &= ~banks
+    log(f"  Ruins: {int(outer.sum())} cells of outer wall, {int(banks.sum())} of blocked ground round it")
     cells = np.where(~mine, 1, np.where(walk, 0, 2)).astype(np.uint8)
     log(f"  Ruins: {filled} floorless seams filled")
     log(f"  Ruins: {nf} floor faces, grid {W}x{H} of {cell} yd, {mine.mean() * 100:.0f}% the ruins', "

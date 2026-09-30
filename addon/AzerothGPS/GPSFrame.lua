@@ -1162,6 +1162,14 @@ function G.CityArtLevel(wmo, mapID)
   return nil
 end
 G.shownLevel = nil -- (the last redraw's, with its continent: G.shownCont)
+-- The underground city level the player is down in, when (x, y) is over it (its grid); else nil.
+function G.DownInCityAt(cont, x, y)
+  local lvl = ns.Nav and ns.Nav.PlayerLevel and ns.Nav.PlayerLevel(cont)
+  if not (lvl and lvl ~= cont and ns.CityLevels and ns.CityLevels[lvl]) then return nil end
+  local P = ns.Passability
+  if P and P.InGrid and not P.InGrid(lvl, x, y) then return nil end
+  return lvl
+end
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
 local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
 local LeaveOpened -- (below: right-click out of such a map)
@@ -1755,7 +1763,11 @@ function G.Update()
   -- (the player's own inside map only while the view is on them: not a city opened from its
   -- icon, nor looking somewhere else)
   local onMe = not free or (not free.interior and (free.x - px) ^ 2 + (free.y - py) ^ 2 <= (zoom * 1.5) ^ 2)
-  if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and onMe and zoom <= G.INTERIOR_MAX_ZOOM then
+  -- (down in an underground city: its map anywhere over the city, not only round the player:
+  -- zooming in on the cursor moved the view off them, and the outside map flipped in)
+  local downCity = here and not onMe and G.DownInCityAt(cont, cx, cy)
+  if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and (onMe or downCity)
+      and zoom <= G.INTERIOR_MAX_ZOOM then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)

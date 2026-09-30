@@ -991,7 +991,10 @@ function P.FindPath(cont, x1, y1, x2, y2)
       -- it; a cell's middle on its floor would open a hillside's blocked cell)
       local cx, cy = CellCentre(g, c, r)
       local ov, o = OverlayRaw(cont, cx, cy, true)
-      if ov and not o.cave then v = ov end
+      if ov and not o.cave then
+        if ov == 2 then return nil end -- (a city's ruins: its walls and banks are real, no end slack; as SegmentCost)
+        v = ov
+      end
     end
     if v == 2 then
       if (c - c1) ^ 2 + (r - r1) ^ 2 > slack1 and (c - c2) ^ 2 + (r - r2) ^ 2 > slack2 then return nil end
