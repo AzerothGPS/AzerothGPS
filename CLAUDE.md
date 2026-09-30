@@ -207,7 +207,16 @@ The addon is going public, so every change must keep it policy-safe:
     the continent's, 2 closed) from the floors reached on foot from the ground at its gates,
     the top one per cell (bridges, ramps and tower tops over the streets); stairs and spiral
     ramps between levels are found in 3D (`walknet.build(road_pieces=True)`), and its roads are
-    one `ns.RoadOverlays[cont]` entry joined onto the land's road at the gates. Floors under
+    one `ns.RoadOverlays[cont]` entry joined onto the land's road at the gates. Those roads are its
+    **streets** (`capitals.streets`): of the floors' roads (every square's middle, a jumble), the
+    edges along the NPCs' walks (`patrol_points`, the path files `agps npc-paths` reads;
+    `STREET_*`), the shortest ways between every two of its gates, places (CityPlaces, the check's,
+    the named areas) and lifts, and the city edges the floors under others join; the rest dropped.
+    The terrain's water over the city (`terrain_liquids`, MH2O) counts like the models' (no floor
+    under it). The land's roads are cut where they run over a model-built capital's own cells
+    (`roads.build.cut_capitals`, in `finish_continent`: Stormwind, Ironforge, Orgrimmar; not the
+    cities on their own ground; roads drawn in game stay), so rebuild the roads after `capitals
+    --write`, then the buildings (`agps buildings --write`). Floors under
     the grid's (a street under a bridge, the Cleft of Shadow under the Drag, a hall's ground
     floor) are levels of their own, laid over it like a cave's (`_under<n>` grids, `cave =
     true`, `split` = a height between the two: `Router.CaveDown` takes the player as down

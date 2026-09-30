@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -40,6 +41,275 @@ PRUNE = 12.0  # yards: dead-end road stubs shorter than this go
 FILL = 0  # cells: closed spots inside a floor up to this big are no fork in its road (none: in a
 # city a small closed spot may be a ledge's foot under a bridge, not a pillar)
 MIN_PIECE = 40.0  # yards: road pieces not joined to the gates' this long or shorter are left out
+# The streets: the city's floors give roads everywhere a character can walk (every square and hall
+# sprouts branches and loops); the NPCs that walk the city (guards' patrols, couriers: the path files
+# `agps npc-paths` reads) walk its streets. A road edge along a patrol is a street; the rest are kept
+# only as the shortest ways from the streets to the gates, lifts and places (`streets`).
+STREET_NEAR_YD = 6.0  # a road point this near a patrol is on a street
+STREET_SHARE = 0.6  # ... an edge with this share of its points so is a street
+STREET_MIN_YD = 25.0  # street pieces shorter than this (a patrol's turn in a doorway) don't count
+PLACE_REACH_YD = 60.0  # a place's way starts at the city's road this near it
+PATH_SOURCES = ("cmangos-classic-db", "azerothcore")
+
+
+def terrain_liquids(cd: ClientData, cont: int, box) -> list:
+    """The terrain's water (the ADTs' MH2O) over world box (x0, y0, x1, y1), as walknet.build's
+    liquids: (xy polygon of each quad, surface height). A city model's floor under it (Stormwind's
+    canal beds) is no way to walk, as under the model's own water."""
+    import struct
+
+    from .extract import adt
+
+    x0, y0, x1, y1 = box
+    T, Q = adt.TILE_YD, adt.TILE_YD / 128
+    m = next(r for r in cd.table("Map") if r["ID"] == cont)
+    wdt = adt.parse_wdt(cd.casc.read(m["WdtFileDataID"]))
+    out = []
+    for tx in range(int(32 - y1 / T), int(32 - y0 / T) + 1):
+        for ty in range(int(32 - x1 / T), int(32 - x0 / T) + 1):
+            t = wdt.tiles.get((tx, ty))
+            if not t or not t.root:
+                continue
+            root = cd.casc.read(t.root)
+            for magic, a, _b in adt.iter_chunks(root):
+                if magic != "MH2O":
+                    continue
+                for ci in range(256):
+                    off_inst, n_layers, _ = struct.unpack_from("<III", root, a + ci * 12)
+                    if not n_layers or not off_inst:
+                        continue
+                    cy, cx = divmod(ci, 16)
+                    for li in range(n_layers):
+                        p = a + off_inst + li * 24
+                        _t, _f, _mn, mx, qx0, qy0, w, h, off_mask, _ov = struct.unpack_from("<HHffBBBBII", root, p)
+                        cells = np.zeros((8, 8), bool)
+                        if off_mask:
+                            nbits = w * h
+                            raw = root[a + off_mask: a + off_mask + (nbits + 7) // 8]
+                            bits = np.unpackbits(np.frombuffer(raw, np.uint8), bitorder="little")[:nbits]
+                            cells[qy0:qy0 + h, qx0:qx0 + w] = bits.reshape(h, w).astype(bool)
+                        else:
+                            cells[qy0:qy0 + h, qx0:qx0 + w] = True
+                        for yy, xx in zip(*np.nonzero(cells)):
+                            i, j = cy * 8 + yy, cx * 8 + xx
+                            X0, Y0 = (32 - ty) * T - i * Q, (32 - tx) * T - j * Q
+                            X1, Y1 = X0 - Q, Y0 - Q
+                            if X1 <= x1 and X0 >= x0 and Y1 <= y1 and Y0 >= y0:
+                                out.append(([(X0, Y0), (X1, Y0), (X1, Y1), (X0, Y1)], float(mx)))
+    return out
+
+
+def patrol_points(cont: int, inside, data_dir=None) -> np.ndarray:
+    """The NPCs' walks inside the city (inside(x, y)), a point every yard: (n, 2) world."""
+    import json
+
+    from .paths import data_dir as _data_dir
+
+    base = Path(data_dir or _data_dir()) / "thirdparty"
+    pts = []
+    for src in PATH_SOURCES:
+        f = base / src / f"paths_{cont}.geojson"
+        if not f.exists():
+            continue
+        for feat in json.loads(f.read_text(encoding="utf-8"))["features"]:
+            c = feat["geometry"]["coordinates"]
+            for a, b in zip(c, c[1:]):
+                d = math.dist(a[:2], b[:2])
+                if d == 0 or d > 60 or not (inside(a[0], a[1]) or inside(b[0], b[1])):
+                    continue  # (a jump, or outside the city)
+                for k in range(int(d) + 1):
+                    t = k / max(1, int(d))
+                    pts.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+    return np.array(pts, float).reshape(-1, 2)
+
+
+def _near_polyline(P, x, y) -> float:
+    """Distance from (x, y) to the polyline P (n, 2)."""
+    best = math.inf
+    for (ax, ay), (bx, by) in zip(P[:-1], P[1:]):
+        vx, vy = bx - ax, by - ay
+        L2 = vx * vx + vy * vy
+        t = max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / L2)) if L2 > 0 else 0.0
+        best = min(best, math.hypot(ax + vx * t - x, ay + vy * t - y))
+    return best
+
+
+def streets(g, patrols: np.ndarray, terminals: list, log=print, label="", keep=()) -> dict:
+    """Prune the city's road graph `g` (in place) to its streets and the ways to `terminals`
+    (node ids: the gates' roads, the nodes by the places): the edges along a patrol (STREET_*), then,
+    from the biggest street piece outward, the shortest way over the rest of the roads to each other
+    street piece and each terminal, until all are joined. Returns counts."""
+    import heapq
+
+    from scipy.spatial import cKDTree
+
+    edges = dict(g.edges)
+    if not edges:
+        return {}
+    street = set()
+    if len(patrols):
+        tree = cKDTree(patrols)
+        for eid, e in edges.items():
+            P = np.asarray(e.pts, float)
+            d, _ = tree.query(P)
+            if np.mean(d <= STREET_NEAR_YD) >= STREET_SHARE:
+                street.add(eid)
+    street |= set(keep) & set(edges)  # (edges something else joins onto: the floors under others)
+    adj = defaultdict(list)
+    for eid, e in edges.items():
+        adj[e.a].append((e.b, eid, e.length))
+        adj[e.b].append((e.a, eid, e.length))
+    # the street pieces (connected by street edges), the short ones left out
+    parent = {}
+
+    def find(a):
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for eid in street:
+        e = edges[eid]
+        parent[find(e.a)] = find(e.b)
+    pieces = defaultdict(lambda: [set(), set(), 0.0])  # root -> (nodes, edges, yards)
+    for eid in street:
+        e = edges[eid]
+        pc = pieces[find(e.a)]
+        pc[0].update((e.a, e.b))
+        pc[1].add(eid)
+        pc[2] += e.length
+    groups = [(nodes, es) for nodes, es, yd in pieces.values() if yd >= STREET_MIN_YD]
+    groups += [({t}, set()) for t in terminals if t in g.nodes]
+    if not groups:
+        return {}
+    groups.sort(key=lambda gr: -sum(edges[e].length for e in gr[1]))
+    # (each piece of the road graph on its own: Thunder Bluff's mesas are joined by their lifts over
+    # the land, not over the city's roads)
+    for eid, e in edges.items():
+        parent[find(e.a)] = find(e.b)
+    by_comp = defaultdict(list)
+    for gr in groups:
+        by_comp[find(next(iter(gr[0])))].append(gr)
+    keep_nodes, keep_edges = set(), set()
+    joined, unjoined = 0, 0
+    for comp_groups in by_comp.values():
+        keep_nodes |= comp_groups[0][0]
+        keep_edges |= comp_groups[0][1]
+        todo = comp_groups[1:]
+        joined += _join(todo, keep_nodes, keep_edges, adj)
+        unjoined += len([gr for gr in todo if not gr[0] <= keep_nodes])
+    # the shortest way between every two terminals (a gate and a place, two places) over the whole
+    # road graph: a route between them isn't sent round by the joining above
+    ends = [t for t in dict.fromkeys(terminals) if t in g.nodes]
+    for t in ends:
+        dist, came = {t: 0.0}, {}
+        heap = [(0.0, t)]
+        while heap:
+            d, n = heapq.heappop(heap)
+            if d > dist.get(n, math.inf):
+                continue
+            for m, eid, L in adj[n]:
+                nd = d + L
+                if nd < dist.get(m, math.inf):
+                    dist[m], came[m] = nd, (n, eid)
+                    heapq.heappush(heap, (nd, m))
+        for o in ends:
+            n = o
+            while n in came:
+                p, eid = came[n]
+                keep_edges.add(eid)
+                n = p
+    return _prune(g, edges, street, keep_edges, terminals, joined, unjoined, log, label)
+
+
+def _join(todo, keep_nodes, keep_edges, adj) -> int:
+    """Join each group in `todo` (node set, edge set) to what's kept, nearest first, by the shortest
+    way over the roads (adj); keep_nodes and keep_edges grow. How many were joined."""
+    import heapq
+
+    joined = 0
+    while todo:
+        todo = [gr for gr in todo if not gr[0] <= keep_nodes]  # (joined on the way to another)
+        if not todo:
+            break
+        # the nearest group not yet joined, over the whole road graph from what's kept
+        dist, came = {n: 0.0 for n in keep_nodes}, {}
+        heap = [(0.0, n) for n in keep_nodes]
+        heapq.heapify(heap)
+        owner = {}
+        for gi, (nodes, _es) in enumerate(todo):
+            for n in nodes:
+                owner.setdefault(n, gi)
+        hit = None
+        while heap:
+            d, n = heapq.heappop(heap)
+            if d > dist.get(n, math.inf):
+                continue
+            if n in owner and n not in keep_nodes:
+                hit = n
+                break
+            for m, eid, L in adj[n]:
+                nd = d + L
+                if nd < dist.get(m, math.inf):
+                    dist[m], came[m] = nd, (n, eid)
+                    heapq.heappush(heap, (nd, m))
+        if hit is None:
+            break  # (the rest can't be reached over the roads: left as they were cut)
+        n = hit
+        while n in came:
+            p, eid = came[n]
+            keep_edges.add(eid)
+            keep_nodes.update((p, n))
+            n = p
+        gi = owner[hit]
+        keep_nodes |= todo[gi][0]
+        keep_edges |= todo[gi][1]
+        todo.pop(gi)
+        joined += 1
+    return joined
+
+
+def _prune(g, edges, street, keep_edges, terminals, joined, unjoined, log, label) -> dict:
+    """Drop the roads not kept (and, of two between the same points, the longer; and stubs to
+    nowhere); log and return the counts."""
+    # (two ways between the same two points, round a statue: the shorter)
+    by_pair = {}
+    for eid in list(keep_edges):
+        e = edges[eid]
+        k = (min(e.a, e.b), max(e.a, e.b))
+        if k in by_pair and edges[by_pair[k]].length <= e.length:
+            keep_edges.discard(eid)
+        else:
+            if k in by_pair:
+                keep_edges.discard(by_pair[k])
+            by_pair[k] = eid
+    dropped = 0.0
+    for eid, e in edges.items():
+        if eid not in keep_edges:
+            dropped += e.length
+            g.remove_edge(eid)
+    # (stubs to nowhere: dead ends shorter than PRUNE that aren't a gate's or a place's way)
+    ends = set(terminals)
+    while True:
+        deg = defaultdict(int)
+        for e in g.edges.values():
+            deg[e.a] += 1
+            deg[e.b] += 1
+        stubs = [eid for eid, e in g.edges.items() if e.length < PRUNE
+                 and ((deg[e.a] == 1 and e.a not in ends) or (deg[e.b] == 1 and e.b not in ends))
+                 and not (deg[e.a] == 1 and deg[e.b] == 1)]
+        if not stubs:
+            break
+        for eid in stubs:
+            dropped += g.edges[eid].length
+            g.remove_edge(eid)
+    g.drop_isolated_nodes()
+    out = {"street_yd": round(sum(edges[e].length for e in street)), "kept_yd": round(g.total_length()),
+           "dropped_yd": round(dropped), "joined": joined, "unjoined": unjoined}
+    log(f"  {label}: streets {out['street_yd']} yd of patrols' roads; kept {out['kept_yd']} yd, dropped "
+        f"{out['dropped_yd']} yd; {joined} pieces and places joined, {unjoined} not reached")
+    return out
 
 
 @dataclass
@@ -120,6 +390,12 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     if not fl:
         return None
     gates = np.array(cap.gates, float)
+    # (the terrain's water over the city too: Stormwind's canals are the land's, their beds the model's)
+    xs = [q[0] for f in fl for q in f[0]]
+    ys = [q[1] for f in fl for q in f[0]]
+    tl = terrain_liquids(cd, cap.cont, (min(xs), min(ys), max(xs), max(ys)))
+    lq = lq + tl
+    log(f"  {cap.name}: {len(tl)} quads of the terrain's water over the city")
 
     def ground_at_gates(X, Y):
         """The continent's ground, walkable only near the gates (the city is walked into there,
@@ -207,6 +483,64 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         r, c = u["world_to_px"](x, y)
         return 0 <= r < H and 0 <= c < W and bool(fp[r, c])
 
+    # the streets: the roads along the NPCs' walks, and the ways from them to the gates, the lifts
+    # and the places (the rest of the floors' roads, every square's branches and loops, dropped)
+    if g.nodes:
+        from scipy.spatial import cKDTree
+
+        ids = list(g.nodes)
+        ntree = cKDTree(np.array([g.nodes[n] for n in ids], float))
+        spots = [(x, y) for _n, x, y in map_places(cap, u)] + [(lx, ly) for lx, ly, _lz in cap.lifts]
+        # (the gates' roads near the city's gates: a city on its own ground has a way out of every
+        # patch of it, not all gates)
+        terminals = [n for n in mouths if n in g.nodes
+                     and min(math.dist(g.nodes[n], gt) for gt in cap.gates) <= 2 * GATE_REACH]
+        # (each place's and lift's nearest road: the edge itself kept, its ends terminals; the nearest
+        # point is often along an edge, not at a node)
+        keep = set()
+        # (the roads joined to the gates' first: a piece of road on its own beside a place (its way out
+        # a patch of ground far off) would take the place's way, and the gates' roads by it be dropped)
+        parent = {}
+
+        def find(a):
+            parent.setdefault(a, a)
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+
+        for e in g.edges.values():
+            parent[find(e.a)] = find(e.b)
+        gated = {find(t) for t in terminals}
+        eids = list(g.edges)
+        epts = [(k, q) for k, eid in enumerate(eids) for q in _densify(g.edges[eid].pts, 2.0)]
+        etree = cKDTree(np.array([q for _k, q in epts], float))
+        mpts = [(k, q) for k, q in epts if find(g.edges[eids[k]].a) in gated]
+        mtree = cKDTree(np.array([q for _k, q in mpts], float)) if mpts else None
+        for x, y in spots:
+            d, i = mtree.query((x, y)) if mtree is not None else (math.inf, 0)
+            pick = mpts[int(i)][0] if d <= PLACE_REACH_YD else None
+            if pick is None:
+                d, i = etree.query((x, y))
+                pick = epts[int(i)][0] if d <= PLACE_REACH_YD else None
+            if pick is not None:
+                e = g.edges[eids[pick]]
+                keep.add(eids[pick])
+                terminals += [e.a, e.b]
+            else:
+                d, i = ntree.query((x, y))
+                if d <= PLACE_REACH_YD:
+                    terminals.append(ids[int(i)])
+        # the floors under others first: their roads join the city's, whose edges there are kept
+        u["under"] = build_under(fl, wl, lq, u, ground_at_gates, log)
+        for jx, jy in (u["under"] or {}).get("join_xy", []):
+            for eid, e in g.edges.items():
+                P = np.asarray(e.pts, float)
+                if np.min(np.hypot(P[:, 0] - jx, P[:, 1] - jy)) <= 1.0 or _near_polyline(P, jx, jy) <= 0.5:
+                    keep.add(eid)
+                    terminals += [e.a, e.b]
+        u["streets"] = streets(g, patrol_points(cap.cont, inside), terminals, log, cap.name, keep=keep)
+
     joins = []
     for patch, lst in sorted(by_patch.items()):
         ways = []
@@ -225,6 +559,18 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     # nearest its foot (at the foot's height: not one up on the city's ground over it)
     for lx, ly, lz in cap.lifts:
         near = sorted((math.hypot(q[0] - lx, q[1] - ly), n) for n, q in g.nodes.items())
+        if not near or near[0][0] > LIFT_REACH:
+            # (the streets kept an edge past the shaft, not a node by it: a node on that edge there)
+            best = None
+            for eid, e in g.edges.items():
+                for i in range(len(e.pts) - 1):
+                    d = math.hypot(e.pts[i + 1][0] - lx, e.pts[i + 1][1] - ly)
+                    if i + 1 < len(e.pts) - 1 and d <= LIFT_REACH and (best is None or d < best[0]):
+                        best = (d, eid, i)
+            if best:
+                e = g.edges[best[1]]
+                n = g.split_edge(best[1], best[2], e.pts[best[2] + 1])
+                near = [(best[0], n)]
         land = []
         if finder is not None:
             cand = [q for q in finder.road.values() if math.hypot(q[0] - lx, q[1] - ly) <= LIFT_REACH]
@@ -240,7 +586,6 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     u.update({"joins": joins, "mouths": [n for n in mouths if n in g.nodes]})
     log(f"  {cap.name}: {len(g.nodes)} nodes, {g.total_length():.0f} yd of road, {len(u['mouths'])} gate roads, "
         f"{len(joins)} joined, grid {W}x{H}")
-    u["under"] = build_under(fl, wl, lq, u, ground_at_gates, log)
     return u
 
 
@@ -377,7 +722,7 @@ def build_under(fl, wl, lq, u, ground_fn, log=print) -> dict | None:
 
     # (not onto a drop off a ledge, nor a stair: it may run under the floor the grid shows)
     no_join = set(main_drops) | {i for i, e in enumerate(u["graph"].edges.values()) if e.source == "stair"}
-    joins, bridge = [], []
+    joins, bridge, join_xy = [], [], []
     for m in sorted(cuts):
         x, y = g.nodes[m]
         hm = lo["height_at"](x, y)
@@ -399,6 +744,7 @@ def build_under(fl, wl, lq, u, ground_fn, log=print) -> dict | None:
             j = g.add_node((best[1], best[2]))
             g.add_edge(m, j, [(x, y), (best[1], best[2])], source="entrance")
             joins.append(j)
+            join_xy.append((best[1], best[2]))
     # (pieces with no way out: left out)
     comp = {}
     for i, edges_ in enumerate(g.components()):
@@ -427,7 +773,8 @@ def build_under(fl, wl, lq, u, ground_fn, log=print) -> dict | None:
         grids.append({"cells": np.where(cells, 3, CONT).astype(np.uint8), "split": split})
     log(f"  {u['name']}: {len(keep)} floors under others ({int(region.sum())} cells), {len(g.nodes)} road nodes, "
         f"{g.total_length():.0f} yd of road under, {len(joins)} joined of {len(cuts)} ways out")
-    return {"graph": g, "joins": joins, "bridge": bridge, "grids": grids, "region": region, "zone": zone, "low": lo}
+    return {"graph": g, "joins": joins, "bridge": bridge, "grids": grids, "region": region, "zone": zone, "low": lo,
+            "join_xy": join_xy}
 
 
 def build_all(cd: ClientData, data_dir, log=print, only=None) -> list[dict]:
@@ -678,7 +1025,8 @@ def map_places(cap: Capital, u: dict | None = None) -> list:
     b = re.search(r"\[%d\] = \{[^\n]*\n\s*bounds = \{([^}]*)\}" % cap.ui_map, maps)
     if m and b:
         minX, minY, maxX, maxY = (float(v) for v in b.group(1).split(","))
-        for u_, v_, name in re.findall(r"\{ ([\d.]+), ([\d.]+), \"([^\"]+)\" \}", m.group(1)):
+        # (each with its NPC's height as a 4th value now: cityplaces.py)
+        for u_, v_, name in re.findall(r"\{ ([\d.]+), ([\d.]+), \"([^\"]+)\"(?:, -?[\d.]+)? \}", m.group(1)):
             out.append((name, maxX - float(v_) / 100 * (maxX - minX), maxY - float(u_) / 100 * (maxY - minY)))
     return out
 

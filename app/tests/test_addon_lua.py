@@ -2157,6 +2157,32 @@ def capitals_env(env):
     return capitals_world(*env)
 
 
+def test_stormwind_s_roads_are_its_streets(capitals_env):
+    # (reported: Stormwind's roads jumbled everywhere and into the water) the land's roads (traced from
+    # the ground's textures and NPCs' paths) don't run over a model-built capital's own cells any more
+    # (roads drawn in game excepted), and the city's own roads are its streets, not every floor's middle
+    lua, ns = capitals_env
+    P = ns.Passability
+    roads = ns.Roads[0]
+    inside = 0
+    for i in range(1, len(roads.e) + 1):
+        e = roads.e[i]
+        if e[4] == 2:  # (drawn in game)
+            continue
+        for k in range(5, len(e) + 1, 2):
+            if -9100 < e[k] < -8300 and 350 < e[k + 1] < 1200 and P.Overlay(0, e[k], e[k + 1]) in (0, 2):
+                inside += 1
+    assert inside == 0
+    ov = next(o for o in ns.RoadOverlays[0].values() if o.capital)  # (the continent's capitals' roads)
+    total = 0.0
+    for i in range(1, len(ov.e) + 1):
+        e = ov.e[i]
+        x, y = ov.n[2 * e[1] - 1], ov.n[2 * e[1]]
+        if -9200 < x < -8200 and 200 < y < 1300:  # (Stormwind's)
+            total += e[3]
+    assert 5000 < total < 22000  # (every floor's middle: 36,000 yd)
+
+
 def city_places(ns, ui_map):
     """A capital's places (Data/CityPlaces.lua, map %) in world yards: [(name, x, y)]."""
     c, b = ns.CityPlaces[ui_map], ns.Maps[ui_map].bounds
@@ -2230,7 +2256,9 @@ def test_orgrimmar_cleft_of_shadow_is_down_under_the_drag(capitals_env):
     assert R.CaveDown(1, *under) and R.CaveDown(1, *under, None, -16.0) and not R.CaveDown(1, *under, None, 37.0)
     r = R.Route(1, *ORGRIMMAR_OUTSIDE, *wl, lua.table(offroad=False))
     share, closed, last = check_capital_route(ns, 1, r)
-    assert share > 0.8 and last < 10
+    # (the capitals' roads are their streets now, not every floor's centerline: a last walk over the open
+    # floor a few yards longer, never through closed cells)
+    assert share > 0.8 and last < 15
 
 
 IRONFORGE_OUTSIDE = (-5100.0, -741.0)  # (on Dun Morogh's road below the gates)
@@ -2244,7 +2272,7 @@ def test_route_into_ironforge_follows_its_halls(capitals_env, name, spot):
     lua, ns = capitals_env
     r = ns.Router.Route(0, *IRONFORGE_OUTSIDE, *spot, lua.table(offroad=False))
     share, closed, last = check_capital_route(ns, 0, r)
-    assert share > 0.85 and closed < 5 and last < 40, (name, share, closed, last)
+    assert share > 0.85 and closed < 5 and last < 60, (name, share, closed, last)  # (the streets: see above)
     assert r.length < 2.5 * math.dist(IRONFORGE_OUTSIDE, spot), (name, r.length)
     pts, _ = route_pts(r)
     assert min(math.dist(p, (-5030.0, -835.0)) for p in pts) < 20  # (in by the gates)
@@ -2278,7 +2306,7 @@ def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
     bank = next((x, y) for n, x, y in city_places(ns, 1456) if n == "Thunder Bluff Bank")
     r = ns.Router.Route(1, *THUNDER_BLUFF_BELOW, *bank, lua.table(offroad=False))
     share, closed, last = check_capital_route(ns, 1, r)
-    assert share > 0.85 and closed < 5 and last < 15
+    assert share > 0.85 and closed < 5 and last < 25  # (the streets: see above)
     pts, _ = route_pts(r)
     assert min(math.dist(p, q) for p in pts for q in ((-1286.2, 189.7), (-1308.4, 185.3))) < 12  # (the lift)
 

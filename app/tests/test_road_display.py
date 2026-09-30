@@ -22,12 +22,12 @@ def spread(t):
 def test_zoomed_out_every_side_of_the_view_keeps_its_roads(game):
     lua, ns = game
     G = ns.GPS
-    # the Barrens at 2,500 yd: more than 3,000 lines' worth of road
+    # the Barrens at 2,500 yd: more than 2,000 lines' worth of road (well over the cap)
     G.MAX_SEGMENTS = 10 ** 9
     whole = G.LayoutRoads(-450.0, -2650.0, 1, 0, 2500.0, 130.0)
     G.MAX_SEGMENTS = 1500
     segs = G.LayoutRoads(-450.0, -2650.0, 1, 0, 2500.0, 130.0)
-    assert len(whole) > 3000 and len(segs) <= 1500
+    assert len(whole) > 2000 and len(segs) <= 1500
     assert spread(segs) == pytest.approx(spread(whole), abs=6)  # (as far out as with no cap)
 
 

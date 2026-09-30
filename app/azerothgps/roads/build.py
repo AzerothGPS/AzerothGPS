@@ -99,10 +99,97 @@ def finish_continent(g: RoadGraph, continent: int, out: Path, extra: dict, log=p
 
     pa = apply_paths(g, RESOURCES / "overrides" / f"paths_{continent}.geojson")
     ov = apply_overrides(g, RESOURCES / "overrides" / f"roads_{continent}.geojson")
+    cut = cut_capitals(g, continent)
     log(f"  [{continent}] graph: {len(g.nodes)} nodes, {len(g.edges)} edges, "
-        f"{g.total_length() / 1000:.1f}k yd; paths {pa}; overrides {ov}")
+        f"{g.total_length() / 1000:.1f}k yd; paths {pa}; overrides {ov}; cut in the capitals {cut:.0f} yd")
     (out / f"roads_{continent}.json").write_text(json.dumps(g.to_json(extra)), encoding="utf-8")
     return g
+
+
+def capital_cells(continent: int) -> list:
+    """The capitals' own cells on a continent, from Data/Capitals.lua (their grids over the
+    continent's; Undercity is a level of its own, not here; nor the cities on their own ground): [(tx0, ty0, cell, rows)], rows decoded,
+    a cell the city's own where its value is 0, 2 or 3 (1: the continent's there)."""
+    import re
+
+    from ..capitals import CAPITALS, key_of
+    from ..paths import ADDON_DIR
+    from .terrain import decode_row
+
+    path = ADDON_DIR / "Data" / "Capitals.lua"
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    out = []
+    for cap in CAPITALS:
+        # (a city on its own ground, Thunder Bluff's mesas, Darnassus: the land's paths there are
+        # its paths, and its lifts join the land's roads at their feet)
+        if cap.cont != continent or cap.ground_above is not None:
+            continue
+        m = re.search(r'^ns\.Terrain\["%s"\] = \{ tx0 = ([\d.-]+), ty0 = ([\d.-]+), cell = ([\d.]+), w = \d+, h = \d+, '
+                      r'short = (\d+), long = (\d+),[^\n]*\n  rows = "([^"]*)"' % key_of(cap), text, re.M)
+        if not m:
+            continue
+        short, long_ = int(m.group(4)), int(m.group(5))
+        rows = [decode_row(r, short, long_) for r in m.group(6).split("/")]
+        out.append((float(m.group(1)), float(m.group(2)), float(m.group(3)), rows))
+    return out
+
+
+def cut_capitals(g: RoadGraph, continent: int) -> float:
+    """The land's roads (traced from the ground's textures, and NPCs' paths) cut where they run over
+    a capital's own cells: the capital's own roads (Data/Capitals.lua, its streets) are the way there,
+    and the two drawn over each other were a jumble (Stormwind's, some over its harbor's water). Roads
+    drawn in game (overrides) stay. The yards cut."""
+    grids = capital_cells(continent)
+    if not grids:
+        return 0.0
+    T = adt.TILE_YD
+
+    def own(x, y) -> bool:
+        for tx0, ty0, cell, rows in grids:
+            k = T / cell
+            c = int(np.floor(((32 - y / T) - tx0) * k))
+            r = int(np.floor(((32 - x / T) - ty0) * k))
+            if 0 <= r < len(rows) and 0 <= c < len(rows[r]) and rows[r][c] in (0, 2, 3):
+                return True
+        return False
+
+    cut = 0.0
+    for eid, e in list(g.edges.items()):
+        if e.source == "override":
+            continue
+        P = np.asarray(e.pts, float)
+        dense = []
+        for a, b in zip(P[:-1], P[1:]):
+            n = max(1, int(np.ceil(np.hypot(*(b - a)) / 2.0)))
+            dense += [tuple(a + (b - a) * t) for t in np.linspace(0, 1, n, endpoint=False)]
+        dense.append(tuple(P[-1]))
+        inside = [own(x, y) for x, y in dense]
+        if not any(inside):
+            continue
+        # the stretches outside, each a road of its own; an end on the city's edge is a dead end
+        g.remove_edge(eid)
+        runs, cur = [], []
+        for p, ins in zip(dense, inside):
+            if ins:
+                if len(cur) >= 2:
+                    runs.append(cur)
+                cur = []
+            else:
+                cur.append(p)
+        if len(cur) >= 2:
+            runs.append(cur)
+        kept = 0.0
+        for run in runs:
+            a = e.a if run[0] == dense[0] else g.add_node(run[0])
+            b = e.b if run[-1] == dense[-1] else g.add_node(run[-1])
+            if a != b:
+                g.add_edge(a, b, np.array(run), source=e.source)
+                kept += sum(np.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(run, run[1:]))
+        cut += e.length - kept
+    g.drop_isolated_nodes()
+    return cut
 
 
 def reapply_overrides(data_dir: Path, continents, log=print) -> list[int]:

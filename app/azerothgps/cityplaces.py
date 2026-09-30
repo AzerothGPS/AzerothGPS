@@ -202,12 +202,49 @@ def from_spawns(ui: int, city: str, maps: dict, spawns) -> list[tuple[float, flo
 MADE = ((1453, "Stormwind"), (1455, "Ironforge"), (1457, "Darnassus"))
 
 
+SNAP_YD = 40.0  # a place off the city's walkable cells (an NPC in a small room it doesn't reach) moves this far at most
+
+
+def snap(ui: int, maps: dict, row):
+    """A made place (u, v, name, z) moved onto the capital's walkable cells (Data/Capitals.lua's grid:
+    0 open, 3 a floor under walkable ground) when its NPC stands off them, to the nearest within
+    SNAP_YD: the room's doorway, where a route can end. As it was when on them, or none is near."""
+    from .roads.build import capital_cells
+
+    u, v, name, z = row
+    cont, b = maps[ui]
+    x, y = b[2] - v / 100 * (b[2] - b[0]), b[3] - u / 100 * (b[3] - b[1])
+    T = 1600 / 3
+    for tx0, ty0, cell, rows in capital_cells(cont):
+        k = T / cell
+        c0 = int(math.floor(((32 - y / T) - tx0) * k))
+        r0 = int(math.floor(((32 - x / T) - ty0) * k))
+        if not (0 <= r0 < len(rows) and 0 <= c0 < len(rows[r0])):
+            continue
+        if rows[r0][c0] in (0, 3):
+            return row
+        reach = int(SNAP_YD / cell)
+        best = None
+        for r in range(max(0, r0 - reach), min(len(rows), r0 + reach + 1)):
+            for c in range(max(0, c0 - reach), min(len(rows[r]), c0 + reach + 1)):
+                if rows[r][c] in (0, 3):
+                    d = math.hypot(r - r0, c - c0)
+                    if d <= reach and (best is None or d < best[0]):
+                        best = (d, r, c)
+        if best:
+            _, r, c = best
+            X = (32 - ty0 - (r + 0.5) / k) * T
+            Y = (32 - tx0 - (c + 0.5) / k) * T
+            return (round((b[3] - Y) / (b[3] - b[1]) * 100, 1), round((b[2] - X) / (b[2] - b[0]) * 100, 1), name, z)
+    return row
+
+
 def with_made(text: str, maps: dict, spawns) -> tuple[str, list[str]]:
     """CityPlaces.lua's text with the MADE capitals' places (from_spawns) put in, replacing any
     there already; and what was written."""
     done = []
     for ui, city in MADE:
-        rows = from_spawns(ui, city, maps, spawns)
+        rows = [snap(ui, maps, r) for r in from_spawns(ui, city, maps, spawns)]
         if not rows:
             continue
         block = f'  [{ui}] = {{ city = "{city}",\n' + "".join(
