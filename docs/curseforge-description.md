@@ -25,6 +25,7 @@ Quest areas show on the map like on the minimap. One click routes you through yo
 - **Size and opacity:** resize the map and set how see-through it is.
 - **While moving and in combat:** it can fade while you move, turn click-through, or dim or hide in combat.
 - **Show/hide key:** your choice of key.
+- **Light on slower PCs:** Options → Performance sets how often the map redraws and the route is worked out again, with one click for low-end settings and a live readout of how much of the time AzerothGPS is using.
 
 ## Gathering for every character
 
@@ -34,7 +35,7 @@ Herbs and ore you gather, hover on the minimap, or right-click without the profe
 
 ## Fix the map, improve it for everyone
 
-Draw a trail the routes miss, or a wall they walk through, and routes use it right away. Then send it in: fixes that check out ship in the next version for everyone.
+Draw a trail the routes miss, or a wall they walk through, and routes use it right away. Then send it in (`/reload`, then **Copy Map Data...**): fixes that check out ship in the next version for everyone.
 
 ![Road tools in Duskwood: circling a false road to erase it, then drawing the real one](https://i.imgur.com/WjwnjW1.gif)
 
@@ -44,10 +45,9 @@ Draw a trail the routes miss, or a wall they walk through, and routes use it rig
 - **Cities and caves:** every capital's streets, Undercity's floors and lifts, and 351 caves and mines.
 - **Dungeons and raids:** their maps floor by floor, bosses in order, a boss route.
 - **Staying safe:** routes go around the other faction's towns and zones too high for your level.
-- **Your party on the map:** party and raid members as class icons (they don't need the addon).
+- **Your party on the map:** party and raid members as round class icons in their class's color (they don't need the addon).
 - **Turn-by-turn directions**, with ETAs at your walking, mount or travel-form speed.
 - **TomTom `/way`** import and route sharing.
-- **Light on slower PCs:** a Performance page with a one-click low-end preset.
 - **Display only:** it never moves your character, clicks for you or automates anything.
 
 ## Getting started
@@ -63,6 +63,6 @@ Everything else, every feature, option and command, is in the **[AzerothGPS wiki
 
 - **Discord:** questions, ideas and news on the **[AzerothGPS Discord](https://discord.gg/gktYHzs2c)**.
 - **Bugs and bad routes:** open an issue on [GitHub](https://github.com/AzerothGPS/AzerothGPS/issues) or post on the Discord, with the zone and your start and destination coordinates (shown at the bottom of the map).
-- **Map fixes:** draw them with the road or wall tools, then **Copy Map Data...** (Options → Help improve) and paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or on the Discord.
+- **Map fixes:** draw them with the road or wall tools, type `/reload` (it saves every edit), then **Copy Map Data...** (Options → Help improve) and paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or on the Discord.
 
 _AzerothGPS is a fan-made addon and is not affiliated with or endorsed by Blizzard Entertainment. World of Warcraft and Azeroth are trademarks of Blizzard Entertainment, Inc._
