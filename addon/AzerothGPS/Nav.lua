@@ -346,6 +346,35 @@ N.KIND_TRANSPORT, N.KIND_PLANNED = 2, 3 -- route segment kinds beyond Router's r
 N.WALK_FACTOR = 1.35 -- straight-line yards -> expected route yards, for planning only
 N.DOCK_YD = 40 -- "at the dock" radius
 
+-- Planning a walk from (x1, y1) to (x2, y2) on `cont`: its straight yards, plus what the router
+-- charges for the yards in zones too high for the player (Router.LEVEL_FACTOR each: the way round
+-- them, or through at a cost), not in the zones it starts and ends in, as the router does. Else a
+-- flight over them lost to a walk that looked short in a straight line and went the long way.
+-- (Sampled every PLAN_ZONE_STEP yards; the legs between docks and flight masters remembered.)
+N.PLAN_ZONE_STEP = 64
+local planYards = { red = nil } -- [key] = yards, for the zones too high now (`red`)
+function N.PlanYards(cont, x1, y1, x2, y2, keep)
+  local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+  local R = ns.Router
+  local red = R and R.RedZones and R.RedZones()
+  if not red or not (ns.Zones and ns.Zones[Geo.Base(cont)]) then return d end
+  if planYards.red ~= red then planYards = { red = red } end
+  local key = keep and string.format("%d:%.0f:%.0f:%.0f:%.0f", cont, x1, y1, x2, y2)
+  if key and planYards[key] then return planYards[key] end
+  local c = Geo.Base(cont)
+  local z1, z2 = R.ZoneAt(c, x1, y1), R.ZoneAt(c, x2, y2)
+  local n = math.max(1, math.ceil(d / N.PLAN_ZONE_STEP))
+  local extra = 0
+  for k = 0, n - 1 do
+    local t = (k + 0.5) / n
+    local z = R.ZoneAt(c, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+    if red[z] and z ~= z1 and z ~= z2 then extra = extra + d / n end
+  end
+  local yd = d + extra * (R.LEVEL_FACTOR - 1)
+  if key then planYards[key] = yd end
+  return yd
+end
+
 ---------------------------------------------------------------------------
 -- Flight paths (Data/Flights.lua) between the flight masters this character knows
 ---------------------------------------------------------------------------
@@ -548,8 +577,8 @@ function N.Plan(cont, px, py, speed, d, teleports)
     for v, b in ipairs(nodes) do
       if not done[v] then
         local cost, ride
-        if a[1] == b[1] then
-          cost = math.sqrt((a[2] - b[2]) ^ 2 + (a[3] - b[3]) ^ 2) * N.WALK_FACTOR / speed
+        if a[1] == b[1] then -- (zones too high for the player on the way: as the router weighs them)
+          cost = N.PlanYards(a[1], a[2], a[3], b[2], b[3], u ~= 1 and v ~= 2) * N.WALK_FACTOR / speed
         end
         if a.t and b.t == a.t and a.side ~= b.side then
           local secs = ns.Transports[a.t][7]

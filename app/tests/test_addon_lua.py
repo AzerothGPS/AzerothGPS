@@ -2704,6 +2704,24 @@ def test_route_takes_a_known_flight(nav_env):
     assert secs < 400  # vs ~15 minutes on foot
 
 
+def test_a_flight_beats_a_walk_through_zones_too_high(nav_env):
+    # (reported) level 13 from Tarren Mill into Western Plaguelands: the straight line looked a short
+    # walk (over Alterac Mountains, 30-40), so no flight; the walk then went the long way round.
+    # Planning weighs those yards as the router does (not the zones a walk starts and ends in).
+    lua, ns = flights_env(nav_env, [11, 13])  # Undercity, Tarren Mill
+    load(lua, ns, "Data/Zones.lua", "GPSFrame.lua")
+    ns.settings = lua.eval("{ gps = {} }")
+    stop = lua.eval("{ x = 1993.0, y = -967.0, cont = 0 }")
+
+    def flies():
+        legs, _ = ns.Nav.Plan(0, -20.0, -900.0, 7.0, stop)
+        return any(legs[i].ride for i in range(1, len(legs) + 1))
+    lua.execute("UnitLevel = function() return 60 end")
+    assert not flies()  # (Alterac's fine at 60: the walk)
+    lua.execute("UnitLevel = function() return 13 end")
+    assert flies()
+
+
 def test_connecting_flight_and_option_off(nav_env):
     # Sepulcher to Light's Hope has no direct flight: one flight, connecting at Undercity
     lua, ns = flights_env(nav_env, [10, 11, 68])
