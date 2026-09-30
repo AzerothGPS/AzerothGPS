@@ -685,10 +685,11 @@ function N.DescribePlan()
   local st = ns.settings and ns.settings.gps or {}
   local r = N.route
   return string.format("from (%d, %.0f, %.0f) to (%s, %.0f, %.0f) level=%s walk=%.1f avoidHigh=%s useFlights=%s "
-    .. "flight masters known=%s | too high: %s | plan %.0fs: %s | walk straight there %.0fs | route %s yd, rides %s s",
+    .. "flight masters known=%s | too high: %s | plan %.0fs: %s | walk straight there %.0fs | route %s yd, rides %s s | %s",
     cont, px, py, tostring(d.cont), d.x, d.y, tostring(lvl), walk, tostring(st.avoidHighZones ~= false),
     tostring(st.useFlights ~= false), tostring(known), table.concat(names, ", "), secs or -1, table.concat(steps, " > "),
-    direct or -1, r and string.format("%.0f", r.totalYards or 0) or "none", r and string.format("%.0f", r.totalRide or 0) or "-")
+    direct or -1, r and string.format("%.0f", r.totalYards or 0) or "none", r and string.format("%.0f", r.totalRide or 0) or "-",
+    N.lastRideCheck or "no ride check")
 end
 
 -- One stretch of the route, from (sx, sy) on `cont` to stop `d`: every walking leg routed
@@ -755,18 +756,25 @@ local function RideInstead(cont, sx, sy, d, walk, tps, lr, opts)
   if won == nil then
     local Rt = ns.Router
     local exempt = Rt and Rt.ZoneAt and { [Rt.ZoneAt(Geo.Base(cont), sx, sy)] = true, [Rt.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
-    local secs = 0
+    local secs, pending = 0, lr.pending
     for _, leg in ipairs(legs) do
       if leg.ride then
         secs = secs + (leg.ride[7] or 0)
       else
         local r = ns.Router.Route(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2, opts.fixed)
         secs = secs + Weighed(leg.cont, r.pts, walk, exempt)
+        pending = pending or r.pending
       end
     end
-    won = secs < Weighed(cont, lr.pts, walk, exempt)
-    rideCheck[key] = won
+    local walkSecs = Weighed(cont, lr.pts, walk, exempt)
+    won = secs < walkSecs
+    N.lastRideCheck = string.format("walk routed %.0fs (%.0f yd) vs with rides %.0fs: %s%s", walkSecs, lr.length, secs,
+      won and "rides" or "walk", pending and " (provisional, not remembered)" or "")
+    -- (a route still provisional, a terrain search running: a straight line meanwhile, the walk
+    -- looks short; used for now, not remembered: the finished search's recalculation decides)
+    if not pending then rideCheck[key] = won end
   end
+  if rideCheck[key] ~= nil then N.lastRideCheck = (N.lastRideCheck or "") .. " [remembered]" end
   return won and legs or nil
 end
 

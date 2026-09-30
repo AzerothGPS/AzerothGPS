@@ -2963,6 +2963,40 @@ def test_a_flight_is_weighed_against_the_walk_as_routed(nav_env):
     assert r.totalYards < 7000  # (on foot the whole way: 7.6k)
 
 
+def test_a_walk_still_being_searched_doesnt_decide_against_the_flight_for_good(nav_env):
+    # (reported) the flight came once, then after a stop elsewhere and back it didn't: a walk
+    # still being searched is provisional (about straight, short) and beat the flight, and that
+    # was remembered; used for now, it's decided again when the search is done
+    lua, ns = flights_env(nav_env, [10, 11])
+    load(lua, ns, "Data/Zones.lua", "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "GPSFrame.lua")
+    R, N = ns.Router, ns.Nav
+    R.Reset()
+    R.SYNC_WALKS = True
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("UnitLevel = function() return 14 end")
+    lua.globals().AGPS_R = R
+    lua.execute("""
+      AGPS_PENDING = true
+      local route = AGPS_R.Route
+      AGPS_R.Route = function(cont, sx, sy, tx, ty, opts)
+        if AGPS_PENDING and sx == 2254 and tx == -1441 then -- (the walk the whole way, still searched)
+          local d = math.sqrt((tx - sx) ^ 2 + (ty - sy) ^ 2)
+          return { pts = { sx, sy, tx, ty }, kinds = { 1 }, length = d, road = 0, pending = true }
+        end
+        return route(cont, sx, sy, tx, ty, opts)
+      end
+    """)
+    N.SetDestination(-1441.0, -2332.0, 0, "Arathi")
+
+    def flies():
+        r = N.Route(2254.0, 293.0, 0)
+        return any(r.legs[i].ride for i in range(1, len(r.legs) + 1))
+    assert not flies()  # (meanwhile: the straight line looks shorter)
+    lua.execute("AGPS_PENDING = false")
+    N.Invalidate(True)
+    assert flies()  # the search done: the flight
+
+
 def test_debug_tells_how_the_trip_was_planned(nav_env):
     # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
     # high, the flight masters known, the plan and the walk straight there
