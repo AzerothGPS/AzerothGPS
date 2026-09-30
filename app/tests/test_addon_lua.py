@@ -3468,6 +3468,26 @@ def test_route_starts_with_the_hearthstone_when_faster(nav_env):
     assert not (r.legs[1].ride and r.legs[1].ride.use)
 
 
+def test_the_hearthstone_only_when_it_saves_more_than_800_yards(nav_env):
+    # (asked) home is Brill: a stop at the inn 500 yd off isn't worth the hearthstone's cooldown;
+    # from farther (it saves more than 800 yd of walking), it is
+    lua, ns = nav_env
+    lua.execute("""
+      AGPS_TP = { Available = function(cont, px, py)
+        return { { cont, px, py, 0, 2270.0, 245.0, 25, "your Hearthstone", "", "Brill", "your Hearthstone", use = true, item = 6948 } }
+      end }
+    """)
+    ns.Teleports = lua.eval("AGPS_TP")
+    N = ns.Nav
+
+    def hearths(py):
+        N.SetDestination(2270.0, 245.0, 0, "Brill inn")
+        r = N.Route(2270.0, py, 0)
+        return bool(r.legs[1].ride and r.legs[1].ride.use)
+    assert not hearths(245.0 - 500)
+    assert hearths(245.0 - 1200)
+
+
 def test_hearthstone_on_the_stretch_where_it_saves_most(nav_env):
     # A trip ending near home: hearth from the last stop but one, not walk back. And the
     # hearthstone is used once per trip, even when it would help on two stretches.

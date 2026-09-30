@@ -1072,6 +1072,9 @@ end
 -- per route (and when the teleports ready change); the player's stretch every
 -- recalculation. Sets later.tp[i] (the teleport stretch i may use; the stretch is redone
 -- when that changes) and returns the teleports for the player's stretch.
+-- (only when it saves more than TELEPORT_MIN_YD of walking: a hearthstone's hour-long cooldown
+-- isn't worth a few hundred yards)
+N.TELEPORT_MIN_YD = 800
 local function AssignTeleports(cont, px, py, d, walk)
   local T = ns.Teleports
   if not T or N.loop or N.corpse then return nil end
@@ -1089,10 +1092,11 @@ local function AssignTeleports(cont, px, py, d, walk)
   end
   local best = {} -- [name] = { stretch, seconds saved }
   local n1, g1 = TeleportGain(cont, px, py, d, walk, tps)
-  if n1 and g1 > 0 then best[n1] = { 1, g1 } end
+  local minGain = N.TELEPORT_MIN_YD / walk
+  if n1 and g1 > minGain then best[n1] = { 1, g1 } end
   for i = 2, N.PlannedStops() do
     local g = later.gains[i]
-    if g and g[2] > 0 and (not best[g[1]] or g[2] > best[g[1]][2]) then best[g[1]] = { i, g[2] } end
+    if g and g[2] > minGain and (not best[g[1]] or g[2] > best[g[1]][2]) then best[g[1]] = { i, g[2] } end
   end
   later.tp = later.tp or {}
   for i = 2, N.PlannedStops() do
