@@ -182,3 +182,60 @@ def test_heading_up_puts_the_player_low_on_the_map(game):
     finally:
         st.rotate = False
         lua.execute("GetPlayerFacing = function() return 0 end")
+
+
+def test_running_a_route_with_a_flight_stays_within_the_frame(game):
+    # (reported: lag spikes rerouting along a route with a flight in it) the walk-vs-ride check in
+    # the background, its slices short; in the frame, once the flight is the route, only the walk
+    # from the player (crossing into another square: the last answer, not the whole walk routed)
+    lua, ns = game
+    R, N, G = ns.Router, ns.Nav, ns.GPS
+    cdb = ns.CharDB()
+    cdb.taxiNodes = lua.eval("{ [1415] = { nodes = { { nodeID = 10, known = true }, { nodeID = 11, known = true } } } }")
+    cdb.faction = "Horde"
+    N.FlightsChanged()
+    lua.execute("""
+      AGPS_LONG = 0
+      local route = AGPS_NS.Router.Route
+      AGPS_NS.Router.Route = function(cont, sx, sy, tx, ty, opts)
+        local r = route(cont, sx, sy, tx, ty, opts)
+        if not coroutine.running() and r and r.length > 3000 then AGPS_LONG = AGPS_LONG + 1 end
+        return r
+      end
+      AGPS_POS[1], AGPS_POS[2] = 2254.0, 293.0
+    """)
+    clock = lua.eval("function() return os.clock() * 1000 end")
+
+    def flies():
+        return N.route and any(N.route.legs[i].ride for i in range(1, len(N.route.legs) + 1))
+    try:
+        R.Reset()
+        R.WARM, R.SYNC_WALKS = True, False
+        N.SetStops(lua.eval("{ { x = -1441, y = -2332, cont = 0 } }"), False, "red")
+        t = 600.0
+        for _ in range(600):  # (the roads built, the first route, the comparison: the flight)
+            t += 0.05
+            lua.execute(f"AGPS_T = {t}")
+            G.Update()
+            if R.HasWork():
+                R.Pump(clock() + 5, clock)
+            if flies() and not R.HasWork():
+                break
+        assert flies()
+        lua.execute("AGPS_LONG = 0")
+        x, y, worst = 2254.0, 293.0, 0.0
+        for step in range(400):  # (about 20 s running toward the lift, weaving)
+            t += 0.05
+            x, y = x - 0.33, y + (0.25 if step % 60 < 30 else -0.25)
+            lua.execute(f"AGPS_T = {t}; AGPS_POS[1], AGPS_POS[2] = {x}, {y}")
+            G.Update()
+            if R.HasWork():
+                a = clock()
+                R.Pump(clock() + 1, clock)
+                worst = max(worst, clock() - a)
+        assert lua.eval("AGPS_LONG") == 0, "the whole walk was routed in the frame while running"
+        assert worst < 40, f"a background slice ran {worst:.0f} ms"
+        assert flies()
+    finally:
+        R.WARM, R.SYNC_WALKS = False, True
+        lua.execute("AGPS_POS[1], AGPS_POS[2] = 2254.0, 293.0")

@@ -851,9 +851,12 @@ local function RideInstead(cont, sx, sy, d, walk, tps, opts, sz)
     ns.Router.Background("ride:" .. key, function()
       return CompareRide(cont, sx, sy, d, walk, tps, opts, sz)
     end, function(res)
-      if not (res and res.final) then return end -- (asked again on the next recalculation)
+      if not res then return end
+      -- (the answer for now, provisional or not; remembered for this square only once final:
+      -- else asked again on the next recalculation)
       local before = rideLast[stopKey] or false
-      rideCheck[key], rideLast[stopKey] = res.won, res.won
+      rideLast[stopKey] = res.won
+      if res.final then rideCheck[key] = res.won end
       if res.won ~= before then N.Invalidate(false) end -- (the other way: the route worked out again)
     end)
     won = rideCheck[key]
