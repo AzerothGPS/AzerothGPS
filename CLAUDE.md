@@ -76,6 +76,11 @@ The addon is going public, so every change must keep it policy-safe:
     right-clicked without the profession, imported; unconfirmed until gathered), and city
     locations guards point out (`C_GossipInfo` points of interest, saved account-wide).
   - `Import.lua`: TomTom `/way` import, export and in-game route sharing.
+    Developer hooks for the private dev addon (`AzerothGPS_Dev`, repo AzerothGPS/AzerothGPS-Dev,
+    checked out next to this one, installed with `agps install-addon --dev`, never shipped):
+    `AzerothGPS_Extend(fn)` (Core.lua: fn(ns) after login), `Import.io.send` (the only way out),
+    `Import.OnAddonMessage` (messages in), `Import.Offer` (the popup). Keep them small; if the
+    dev addon needs more, add a hook here with a test rather than copying code there.
   - `Taxi.lua`: known flight masters, recorded flight times, the flight being taken. Zeppelins'
     and boats' timetables: Data/Transports.lua has each one's `cycle` (the server's, from the
     CMaNGOS dump's `transports` periods, else the path's estimate), `ride1`/`ride2`, `wait1`/`wait2`;

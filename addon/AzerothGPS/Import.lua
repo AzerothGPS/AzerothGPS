@@ -237,15 +237,25 @@ function I.Receive(text, sender, now)
   return r.stops
 end
 
+-- The one way out to other players: `I.io.send(prefix, msg, channel, target)`, the game's addon
+-- message. (A developer hook: the private dev addon, AzerothGPS_Dev, swaps it to test sharing
+-- without anything going over the network; see AzerothGPS_Extend in Core.lua.)
+I.io = {}
+function I.io.send(prefix, msg, channel, target)
+  local send = C_ChatInfo and C_ChatInfo.SendAddonMessage or SendAddonMessage
+  return send(prefix, msg, channel, target)
+end
+
 -- Send the route: channel "WHISPER" (to `target`), "PARTY" or "RAID". Returns the number
 -- of stops sent, or nil and why not.
 function I.Send(channel, target)
   local stops = ns.Nav.stops
   if #stops == 0 then return nil, "No route to send." end
-  local send = C_ChatInfo and C_ChatInfo.SendAddonMessage or SendAddonMessage
-  if not send then return nil, "Sending isn't available in this client." end
+  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage or SendAddonMessage) then
+    return nil, "Sending isn't available in this client."
+  end
   local msgs = I.ShareMessages(stops, string.format("%x", math.random(0, 0xFFFFFF)))
-  for _, m in ipairs(msgs) do send(I.PREFIX, m, channel, target) end
+  for _, m in ipairs(msgs) do I.io.send(I.PREFIX, m, channel, target) end
   return #msgs
 end
 
@@ -253,8 +263,9 @@ function I.AcceptShared()
   return not ns.settings or ns.settings.gps.acceptShared ~= false
 end
 
--- A route someone sent: ask before using it.
-local function Offer(sender, stops)
+-- A route someone sent: ask before using it. (I.Offer: the dev addon's checks swap it to see
+-- what would be offered without the popup.)
+function I.Offer(sender, stops)
   local who = Ambiguate and Ambiguate(sender, "none") or sender
   local names = {}
   for i, d in ipairs(stops) do names[i] = string.format("%d. %s", i, d.name or ("stop " .. i)) end
@@ -279,12 +290,14 @@ end
 
 local SHARE_CHANNELS = { WHISPER = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
 
-local function OnAddonMessage(_, _, prefix, text, channel, sender)
+-- An addon message received (CHAT_MSG_ADDON): a stop of a route someone shares; offered once all
+-- its stops are in. (I.OnAddonMessage: the dev addon feeds it fake players' messages.)
+function I.OnAddonMessage(prefix, text, channel, sender)
   if prefix ~= I.PREFIX or not SHARE_CHANNELS[channel] or not I.AcceptShared() then return end
   local me = UnitName("player")
   if sender == me or (Ambiguate and Ambiguate(sender, "none") == me) then return end
   local stops = I.Receive(text, sender, GetTime())
-  if stops then Offer(sender, stops) end
+  if stops then I.Offer(sender, stops) end
 end
 
 ---------------------------------------------------------------------------
@@ -635,6 +648,6 @@ function I.Init()
     register(I.PREFIX)
     local ev = CreateFrame("Frame")
     ev:RegisterEvent("CHAT_MSG_ADDON")
-    ev:SetScript("OnEvent", OnAddonMessage)
+    ev:SetScript("OnEvent", function(_, _, prefix, text, channel, sender) I.OnAddonMessage(prefix, text, channel, sender) end)
   end
 end

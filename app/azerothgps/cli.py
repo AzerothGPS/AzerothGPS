@@ -275,6 +275,17 @@ def cmd_install_addon(args) -> int:
         shutil.rmtree(old)  # replaced by AzerothGPS
         print(f"removed old {old}")
     print(f"copied addon to {dst} -- /reload in game to pick up changes")
+    if getattr(args, "dev", False):
+        # the private dev tools (AzerothGPS-Dev, checked out next to this repo): never shipped
+        src = ADDON_DIR.parents[2] / "AzerothGPS-Dev" / "addon" / "AzerothGPS_Dev"
+        if not src.is_dir():
+            print(f"no dev addon at {src} (clone the private AzerothGPS-Dev repo next to this one)")
+            return 1
+        ddst = dst.parent / "AzerothGPS_Dev"
+        if ddst.is_dir():
+            shutil.rmtree(ddst)
+        shutil.copytree(src, ddst)
+        print(f"copied dev tools to {ddst} (new files: restart the game the first time)")
     return 0
 
 
@@ -490,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("install-addon", help="copy the addon into the WoW AddOns folder")
     sp.add_argument("--wow-path", default=str(DEFAULT_WOW))
     sp.add_argument("--flavor", default=DEFAULT_FLAVOR)
+    sp.add_argument("--dev", action="store_true", help="also the private dev tools (../AzerothGPS-Dev)")
     sp.set_defaults(fn=cmd_install_addon)
 
     sp = sub.add_parser("probes", help="show /agps debug results from SavedVariables")

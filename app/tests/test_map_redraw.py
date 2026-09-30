@@ -116,3 +116,33 @@ def test_a_detour_is_removed_for_this_route_by_its_pin(game):
     lua.execute("AGPS_T = 303")
     G.Update()
     assert N.LearnOnRoute(N.route) and N.LearnOnRoute(N.route).node == 13
+
+
+def test_the_dev_hooks_for_sharing(game):
+    # (the private dev addon, AzerothGPS_Dev: AzerothGPS_Extend runs its setup with ns; the one way
+    # out, Import.io.send; messages in, Import.OnAddonMessage; the popup, Import.Offer)
+    lua, ns = game
+    lua.globals().AzerothGPS_Extend(lua.eval("function(n) AGPS_EXTENDED = n end"))
+    assert lua.eval("rawequal")(lua.eval("AGPS_EXTENDED"), ns)  # (after login: at once)
+    I = ns.Import
+    sent, offered = [], []
+    real_send, real_offer = I.io.send, I.Offer
+    try:
+        I.io.send = lambda prefix, msg, channel, target: sent.append((prefix, msg, channel, target))
+        I.Offer = lambda sender, stops: offered.append((sender, [stops[i].name for i in range(1, len(stops) + 1)]))
+        ns.Nav.SetStops(lua.eval("{ { x = 2250, y = 250, cont = 0, name = 'Brill' }, { x = 1600, y = 240, cont = 0, name = 'Ruins' } }"), False, "red")
+        assert I.Send("WHISPER", "Friend-Realm") == 2 and len(sent) == 2 and sent[0][0] == "AzerothGPS"
+        for _, msg, _, _ in sent:  # (back in as another player's)
+            I.OnAddonMessage("AzerothGPS", msg, "WHISPER", "Friend-Realm")
+        assert offered == [("Friend-Realm", ["Brill", "Ruins"])]
+    finally:
+        I.io.send, I.Offer = real_send, real_offer
+
+
+def test_no_dev_tool_ships_with_the_addon():
+    # (the dev tools live in the private AzerothGPS-Dev repo, installed with install-addon --dev)
+    files = [p.name.lower() for p in ADDON.rglob("*")]
+    assert not any("dev" in f and f.endswith((".lua", ".toc", ".xml")) and f != "devnull" for f in files), \
+        [f for f in files if "dev" in f]
+    toc = (ADDON / "AzerothGPS.toc").read_text(encoding="utf-8").lower()
+    assert "azerothgps_dev" not in toc

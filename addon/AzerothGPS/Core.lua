@@ -403,6 +403,20 @@ function ns.RunProbe(reason)
   for _, l in ipairs(lines) do Print("  " .. l) end
 end
 
+-- Developer hook: `AzerothGPS_Extend(fn)` runs fn(ns), the addon's own tables, for the private dev
+-- addon (AzerothGPS_Dev, in the private AzerothGPS-Dev repo: never shipped). It plugs in at
+-- PLAYER_LOGIN, after every part has started. Nothing in AzerothGPS calls it.
+local extenders = {}
+function AzerothGPS_Extend(fn)
+  if type(fn) ~= "function" then return end
+  if ns.started then
+    local ok, err = pcall(fn, ns)
+    if not ok and ns.Print then ns.Print("an extension failed: " .. tostring(err)) end
+  else
+    extenders[#extenders + 1] = fn
+  end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
@@ -478,6 +492,9 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     Start("drawn roads", ns.Record and ns.Record.Prune)
     Start("options", ns.Options and ns.Options.Init)
     if InCombatLockdown() then CombatChanged(true) end -- logged in (or reloaded) mid-fight
+    ns.started = true
+    for _, fn in ipairs(extenders) do Start("extension", function() fn(ns) end) end
+    extenders = {}
     Print("loaded. /agps for options, /agps help for commands.")
   elseif event == "PLAYER_REGEN_DISABLED" then
     CombatChanged(true)
