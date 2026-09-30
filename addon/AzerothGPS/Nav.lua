@@ -35,7 +35,7 @@ N.dest = nil -- the next stop (N.stops[1])
 N.route = nil -- Router result from the player's position at routeX/routeY
 N.arrivedAt = nil
 N.MAX_STOPS = 100 -- a trip's stops (imported lists, /way, placed)
-N.PLAN_AHEAD = 8 -- stops routed and drawn ahead; the next comes in as each is reached
+N.PLAN_AHEAD = 8 -- stops routed and drawn ahead at most (option stopsAhead, default 3); the next comes in as each is reached
 N.MAX_LOOP_STOPS = 60 -- a farming loop (nodes circled on the map)
 N.LOOP_AHEAD = 4 -- a loop routes this many stops ahead (it goes round and round)
 N.loop = false -- the stops are a loop: reaching one moves it to the end
@@ -305,7 +305,9 @@ end
 -- (an imported guide) is routed PLAN_AHEAD stops at a time; reaching one brings in the next.
 function N.PlannedStops()
   if N.loop then return math.min(#N.stops, 1 + N.LOOP_AHEAD) end
-  return math.min(#N.stops, N.PLAN_AHEAD)
+  local st = ns.settings and ns.settings.gps
+  local ahead = math.max(1, math.min(N.PLAN_AHEAD, math.floor(tonumber(st and st.stopsAhead) or 3)))
+  return math.min(#N.stops, ahead)
 end
 
 -- A stop's icon: its own (a city location's, say), else its marker.

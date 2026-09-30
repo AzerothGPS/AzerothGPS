@@ -758,6 +758,11 @@ local function BuildWindow()
       GPS().avoidHostile = v
       ns.Nav.OptionsChanged()
     end)
+  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, function(v)
+    GPS().stopsAhead = v
+    ns.Nav.Invalidate(true)
+    if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+  end)
   check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
     function() return GPS().fastestOrder end, function(v)
       GPS().fastestOrder = v

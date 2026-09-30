@@ -46,6 +46,7 @@ ns.DEFAULTS = {
     useTeleports = true, -- ... or a class teleport (mage teleports, Teleport: Moonglade)
     useFlights = true, -- take flights between the flight masters this character knows
     fastestOrder = true, -- routes with several stops: visit them in the fastest order
+    stopsAhead = 3, -- stops routed and drawn on the map at a time (1 to Nav.PLAN_AHEAD); the next come in as they're reached
     avoidHostile = true, -- routes keep away from the other faction's guards (their towns)
     cityKeepOrder = true, -- ... except stops down in a city: in the order placed
     acceptWay = true, -- TomTom /way commands (typed or pasted in chat) add route stops

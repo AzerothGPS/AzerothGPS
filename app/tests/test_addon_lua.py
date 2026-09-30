@@ -1215,6 +1215,7 @@ def test_long_imported_list_in_fastest_order_routed_a_few_ahead(nav_env):
     import time
     lua, ns = nav_env
     N = ns.Nav
+    ns.settings = lua.eval("{ gps = { stopsAhead = 8 } }")  # (the option at its most; 3 by default)
     lua.execute("AGPS_PLAYER = { -500.0, -4500.0, 1 }")
     ns.Geo.PlayerWorld = lua.eval("function() return AGPS_PLAYER[1], AGPS_PLAYER[2], AGPS_PLAYER[3] end")
     rnd = random.Random(3)
@@ -4598,3 +4599,22 @@ def test_a_gentle_bend_is_straight_on(turns):
     p = path_of(lua, ns, [(0, 0), (0, -300), (300, -300), (600, -300)], [1, 1, 1])
     got, _ = maneuvers(lua, ns, p)
     assert got[0][2] == "Turn left"
+
+
+def test_stops_routed_and_drawn_ahead_is_an_option(nav_env):
+    # (asked) how many stops are routed and drawn at a time: a slider, 1 to 8, 3 by default (less
+    # to work out and draw; the next come in as they're reached)
+    lua, ns = nav_env
+    N = ns.Nav
+    N.stops = lua.eval("{ {x=1,y=1,cont=0}, {x=2,y=2,cont=0}, {x=3,y=3,cont=0}, {x=4,y=4,cont=0}, {x=5,y=5,cont=0} }")
+    ns.settings = lua.eval("{ gps = {} }")
+    assert N.PlannedStops() == 3  # (the default)
+    ns.settings.gps.stopsAhead = 8
+    assert N.PlannedStops() == 5
+    ns.settings.gps.stopsAhead = 1
+    assert N.PlannedStops() == 1
+    ns.settings.gps.stopsAhead = 20
+    assert N.PlannedStops() == 5  # (at most PLAN_AHEAD, 8)
+    addon = Path(__file__).parents[2] / "addon" / "AzerothGPS"
+    assert "stopsAhead = 3" in (addon / "Core.lua").read_text(encoding="utf-8")
+    assert 'slider("Stops routed and drawn ahead", 1, 8, 1' in (addon / "Options.lua").read_text(encoding="utf-8")
