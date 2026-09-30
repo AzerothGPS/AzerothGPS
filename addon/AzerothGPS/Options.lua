@@ -771,7 +771,7 @@ local function BuildWindow()
       GPS().fastestOrder = v
       if v and #ns.Nav.stops > 1 and not ns.Nav.KeepCityOrder() then ns.Nav.OrderStops() end
     end)
-  place(Checkbox(page, "Except in cities", "Stops down in a city (Undercity) are visited in the order you placed them, not reordered: how you want to go around a city is up to you. (A quest route is always put in the fastest order.)",
+  place(Checkbox(page, "Except in cities", "Stops down in a city (Undercity) are visited in the order you placed them among themselves: how you want to go around a city is up to you. Stops outside the city still go in the fastest order. (A quest route is always put in the fastest order.)",
     function() return GPS().cityKeepOrder ~= false end, function(v) GPS().cityKeepOrder = v end), 26, 20)
   check("X on the route panel cancels the route", "The X at the top right of the map's route panel (the steps) cancels the whole route. Off: it only closes the panel until the route changes, and the route goes on.",
     function() return GPS().navCloseClears end, function(v) GPS().navCloseClears = v end)

@@ -95,14 +95,23 @@ end
 -- the fastest order from the player's position when `fastest` is set.
 -- Stops down in a city stay in the order they were placed (option, on by default): the
 -- way through a city from one to the next is what the player means.
-function N.KeepCityOrder()
+-- Whether stop `d` keeps the place it was given (option cityKeepOrder): down in a city, placed
+-- by hand (the quest route button's stops are always put in the fastest order, in cities too).
+function N.CityKept(d)
   local gps = ns.settings and ns.settings.gps
   if not gps or gps.cityKeepOrder == false or not ns.CityLevels then return false end
-  -- (the quest route button's stops are always put in the fastest order, in cities too)
-  for _, s in ipairs(N.stops) do
-    if s.cont and ns.CityLevels[s.cont] and not s.questRoute then return true end
+  return d.cont and ns.CityLevels[d.cont] and not d.questRoute and true or false
+end
+
+-- The stops aren't reordered at all: every one down in a city, in the order placed. With some
+-- outside the city, the fastest order, the city's still in their order among themselves
+-- (N.OrderStops): how you go round a city is up to you, not where the rest of the trip goes.
+function N.KeepCityOrder()
+  if #N.stops == 0 then return false end
+  for _, d in ipairs(N.stops) do
+    if not N.CityKept(d) then return false end
   end
-  return false
+  return true
 end
 
 -- In a dungeon or raid with the dungeon route on (option `dungeonRoute`) and its boss route
@@ -1310,6 +1319,22 @@ function N.OrderStops(px, py, cont, onlyIfFaster)
     for _, j in ipairs(order) do t, prev = t + cost[prev][j], j end
     return t
   end
+  -- (stops down in a city keep their order among themselves: N.KeepCityOrder)
+  local kept, keptList = {}, {}
+  for j = 2, n + 1 do
+    if N.CityKept(pts[j]) then
+      kept[j] = true
+      keptList[#keptList + 1] = j
+    end
+  end
+  local function inTurn(j, used) -- (a kept stop only after the kept ones placed before it)
+    if not kept[j] then return true end
+    for _, e in ipairs(keptList) do
+      if e == j then return true end
+      if not used[e] then return false end
+    end
+    return true
+  end
   local best, bestT
   if n <= 7 then
     local order, used = {}, {}
@@ -1320,7 +1345,7 @@ function N.OrderStops(px, py, cont, onlyIfFaster)
         return
       end
       for j = 2, n + 1 do
-        if not used[j] then
+        if not used[j] and inTurn(j, used) then
           used[j], order[k] = true, j
           perm(k + 1)
           used[j] = false
@@ -1358,6 +1383,14 @@ function N.OrderStops(px, py, cont, onlyIfFaster)
             improved = true
           end
         end
+      end
+    end
+    -- (the stops down in a city back in their order, in the places they got)
+    local k = 0
+    for i, j in ipairs(best) do
+      if kept[j] then
+        k = k + 1
+        best[i] = keptList[k]
       end
     end
     bestT = total(best)

@@ -3415,6 +3415,26 @@ def test_quest_route_stops_in_a_city_still_go_in_the_fastest_order(nav_env):
     assert not N.KeepCityOrder()  # the quest route: fastest
 
 
+def test_the_city_order_is_kept_only_among_the_citys_own_stops(nav_env):
+    # (reported) a stop outside the city with stops down in it: the whole route kept the order
+    # placed. Now: the fastest order, the city's stops still in theirs among themselves.
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Data/Cities.lua")
+    ns.settings = lua.eval("{ gps = { fastestOrder = true, cityKeepOrder = true } }")
+    N = ns.Nav
+    N.PlayerLevel = lua.eval("function(c) return c end")
+    far, a, b = (2250.0, 280.0), (1480.0, 280.0), (1590.0, 204.0)  # Brill; two spots down in Undercity
+    N.stops = lua.eval(f"{{ {{ x = {far[0]}, y = {far[1]}, cont = 0, name = 'brill' }}, "
+                       f"{{ x = {b[0]}, y = {b[1]}, cont = 10001, name = 'b' }}, {{ x = {a[0]}, y = {a[1]}, cont = 10001, name = 'a' }} }}")
+    assert not N.KeepCityOrder()
+    N.OrderStops(1570.0, 230.0, 10001)
+    names = [N.stops[i].name for i in range(1, len(N.stops) + 1)]
+    assert names.index("b") < names.index("a")  # (b placed before a: still so)
+    assert names[-1] == "brill"  # (Brill's the far one: last)
+    N.stops = lua.eval(f"{{ {{ x = {b[0]}, y = {b[1]}, cont = 10001 }}, {{ x = {a[0]}, y = {a[1]}, cont = 10001 }} }}")
+    assert N.KeepCityOrder()  # (all down in the city: your order)
+
+
 def test_undercity_flight_master_is_down_in_the_city(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Data/Pois.lua")
