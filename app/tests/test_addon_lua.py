@@ -3114,6 +3114,20 @@ def test_a_connecting_flight_is_drawn_through_its_stops(nav_env):
         assert (a, b) == ("Undercity, Tirisfal", "Hammerfall, Arathi") and len(pts) == via, (known, pts)
 
 
+def test_a_bit_of_blocked_ground_on_both_ways_doesnt_send_the_route_back_by_air(nav_env):
+    # (reported) from a stop by Hammerfall to the Wetlands: walk to Hammerfall's flight master (not
+    # learned), fly back to the Sepulcher and walk all the way down again. Both walks crossed the
+    # same stretch the terrain calls blocked (Thandol Span), each ruled "no walk", and the tie went
+    # to the ride. Blocked yards are weighed (the router's cost), not ruled out.
+    lua, ns = _flight_env(nav_env, [10, 11])
+    N = ns.Nav
+    ns.CharDB().faction = "Horde"
+    N.SetStops(lua.eval("{ { x = -1090, y = -3203, cont = 0 }, { x = -3780, y = -2750, cont = 0 } }"), False, "red")
+    r = N.Route(2254.0, 293.0, 0)
+    st2 = r.stretches[2]
+    assert st2 and not any(st2.legs[i].ride for i in range(1, len(st2.legs) + 1))
+
+
 def test_debug_tells_how_the_trip_was_planned(nav_env):
     # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
     # high, the flight masters known, the plan and the walk straight there

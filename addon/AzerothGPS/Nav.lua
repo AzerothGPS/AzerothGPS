@@ -760,9 +760,11 @@ local rideLast = {} -- [stop] = the last answer for it (from wherever: used whil
 -- Seconds for a walk along `pts` as planning weighs it: the zones too high for the player (but
 -- `exempt`) counted extra (PlanYards), and water at swimming's cost (Passability's: across the sea
 -- to an island isn't a walk to take over the boat).
-local function Weighed(cont, pts, walk, exempt)
+local function Weighed(cont, pts, walk, exempt, blocked)
   local P = ns.Passability
-  local yards = 0
+  -- (yards straight over ground the terrain blocks, `blocked`: at the router's own cost for them,
+  -- not ruled out: a bridge the terrain doesn't know, Thandol Span, was one on both ways)
+  local yards = (blocked or 0) * ((ns.Router and ns.Router.BLOCKED_PENALTY or 12) - 1)
   for i = 1, #pts - 3, 2 do
     local x1, y1, x2, y2 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
     yards = yards + N.PlanYards(cont, x1, y1, x2, y2, false, exempt)
@@ -773,11 +775,10 @@ local function Weighed(cont, pts, walk, exempt)
 end
 N.WeighedWalk = Weighed -- (the trip sweep's checks weigh as this does)
 
--- A routed walk that isn't one: no way there found on foot (a line across), or more than
--- RIDE_BLOCKED_YD straight over ground the terrain blocks (the sea to an island, a mountain range).
-N.RIDE_BLOCKED_YD = 60
+-- A routed walk that isn't one: no way there found on foot (a line across). (Yards over blocked
+-- ground are weighed, Weighed's `blocked`: the sea to an island costs a lot, a bridge a little.)
 local function Unwalkable(r)
-  return r.unconnected or (r.blocked or 0) > N.RIDE_BLOCKED_YD
+  return r.unconnected
 end
 N.Unwalkable = Unwalkable
 -- Walks between fixed points (a lift to a flight master, a landing to the stop: not from the
@@ -840,11 +841,11 @@ local function CompareRide(cont, sx, sy, d, walk, tps, opts, sz)
     if leg.ride then
       secs = secs + (leg.ride[7] or 0)
     elseif routes[li] then
-      secs = secs + (Unwalkable(routes[li]) and math.huge or Weighed(leg.cont, routes[li].pts, walk, exempt))
+      secs = secs + (Unwalkable(routes[li]) and math.huge or Weighed(leg.cont, routes[li].pts, walk, exempt, routes[li].blocked))
       pending = pending or routes[li].pending
     end
   end
-  local walkSecs = Unwalkable(lr) and math.huge or Weighed(cont, lr.pts, walk, exempt)
+  local walkSecs = Unwalkable(lr) and math.huge or Weighed(cont, lr.pts, walk, exempt, lr.blocked)
   local won = secs < walkSecs or (secs == math.huge and walkSecs == math.huge) -- (neither: the plan's ride)
   N.lastRideCheck = string.format("walk routed %.0fs (%.0f yd) vs with rides %.0fs: %s%s", walkSecs, lr.length, secs,
     won and "rides" or "walk", pending and " (provisional, not remembered)" or "")

@@ -76,7 +76,7 @@ def _weighed(lua, ns, r, cont, a, b):
         if all(kinds[i] != N.KIND_TRANSPORT for i in range(1, len(kinds) + 1)):
             if N.Unwalkable(part):  # (no way on foot found: a line across the sea or the mountains)
                 return math.inf
-            secs += N.WeighedWalk(part.cont, pts, WALK, exempt)
+            secs += N.WeighedWalk(part.cont, pts, WALK, exempt, part.blocked)
     return secs + (r.totalRide or 0)
 
 
@@ -114,9 +114,17 @@ def sweep(trips: int = 20, minutes: float | None = None, seed: int | None = None
             a, b = rnd.choice(places), rnd.choice(places)
             if TRIP_MIN_YD <= math.hypot(a[0] - b[0], a[1] - b[1]) <= TRIP_MAX_YD:
                 break
+        # (half the trips with a second stop: the stretch between stops is planned on its own)
+        c2 = None
+        if rnd.random() < 0.5:
+            for _ in range(200):
+                c = rnd.choice(places)
+                if TRIP_MIN_YD <= math.hypot(c[0] - b[0], c[1] - b[1]) <= TRIP_MAX_YD:
+                    c2 = c
+                    break
         masters = _masters(ns, cont, faction[0])
         known = [m for m in masters if rnd.random() < rnd.uniform(0.2, 0.9)] or masters[:1]
-        trip = {"cont": cont, "faction": faction, "level": level, "from": a, "to": b, "known": known, "issues": []}
+        trip = {"cont": cont, "faction": faction, "level": level, "from": a, "to": b, "then": c2, "known": known, "issues": []}
         issues = trip["issues"]
         # the character
         lua.execute(f"AGPS_LEVEL = {level}; UnitFactionGroup = function() return '{faction}' end")
@@ -128,7 +136,8 @@ def sweep(trips: int = 20, minutes: float | None = None, seed: int | None = None
         # the route, as in the game: searches (and the roads, the first time) in the background
         lua.execute(f"AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = {a[0]}, {a[1]}, {cont}")
         R.WARM, R.SYNC_WALKS = True, False
-        N.SetStops(lua.eval(f"{{ {{ x = {b[0]}, y = {b[1]}, cont = {cont}, name = 'stop' }} }}"), False, "red")
+        more = f", {{ x = {c2[0]}, y = {c2[1]}, cont = {cont}, name = 'stop 2' }}" if c2 else ""
+        N.SetStops(lua.eval(f"{{ {{ x = {b[0]}, y = {b[1]}, cont = {cont}, name = 'stop' }}{more} }}"), False, "red")
         t = float(lua.eval("AGPS_T")) + 10
         first, worst_frame, worst_slice = None, 0.0, 0.0
         try:
@@ -197,7 +206,19 @@ def sweep(trips: int = 20, minutes: float | None = None, seed: int | None = None
                             rides=_rides(chosen), plain_chosen_s=round(_secs(chosen)))
                 if _rides(chosen) and not _rides(walk) and ws < math.inf and cs > ws * RIDE_SHARE + RIDE_SLACK:
                     issues.append({"kind": "slowride", "chosen_s": round(cs), "walk_s": round(ws)})
-                if not _rides(chosen):
+                # (the stretch between the stops, planned on its own: the same check)
+                if c2 and chosen.stretches[2] and walk and walk.stretches[2]:
+                    def st_secs(st, frm, to):
+                        return _weighed(lua, ns, lua.table(parts=st.parts, totalRide=st.ride), cont, frm, to)
+                    c2s, w2s = st_secs(chosen.stretches[2], b, c2), st_secs(walk.stretches[2], b, c2)
+                    rides2 = any(chosen.stretches[2].legs[i].ride for i in range(1, len(chosen.stretches[2].legs) + 1))
+                    if rides2 and w2s < math.inf and c2s > w2s * RIDE_SHARE + RIDE_SLACK:
+                        issues.append({"kind": "slowride", "stretch": 2, "chosen_s": round(c2s), "walk_s": round(w2s)})
+                st1 = chosen.stretches[1]
+                rides1 = st1 and any(st1.legs[i].ride for i in range(1, len(st1.legs) + 1))
+                to1 = (float(N.stops[1].x), float(N.stops[1].y))
+                cs1 = _weighed(lua, ns, lua.table(parts=st1.parts, totalRide=st1.ride), cont, a, to1) if st1 else math.inf
+                if st1 and not rides1 and cs1 < math.inf:  # (the stretch to the next stop, as the addon plans it)
                     legs, _ = N.Plan(cont, a[0], a[1], WALK, N.stops[1], None, 1e9)
                     if legs and any(legs[i].ride for i in range(1, len(legs) + 1)):
                         secs = 0.0
@@ -210,9 +231,9 @@ def sweep(trips: int = 20, minutes: float | None = None, seed: int | None = None
                                 secs += _weighed(lua, ns, lua.table(parts=lua.table(lua.table(
                                     cont=leg.cont, pts=rr.pts, kinds=rr.kinds, blocked=rr.blocked, unconnected=rr.unconnected)),
                                     totalRide=0), leg.cont, a, b) if rr else math.inf
-                        trip["ride_s"] = round(secs)
-                        if secs * RIDE_SHARE + RIDE_SLACK < cs:
-                            issues.append({"kind": "missedride", "chosen_s": round(cs), "ride_s": round(secs)})
+                        trip["ride_s"] = None if secs == math.inf else round(secs)
+                        if secs * RIDE_SHARE + RIDE_SLACK < cs1:
+                            issues.append({"kind": "missedride", "chosen_s": round(cs1), "ride_s": round(secs)})
                 # the detours
                 known_set = set(known)
                 for h in (N.LearnOnRoute(N.route) or lua.table()).values():
