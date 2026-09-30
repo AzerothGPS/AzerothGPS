@@ -1619,8 +1619,9 @@ def test_undercitys_roads_are_on_floors_over_floors(nav_env):
     lift = (1545.3, 239.5, -104.0 + zoff)
     # (the places: Cooking, Guild Master, a Warlock trainer, First Aid; and at most how long, from the
     # south lift: the old top-floor network's were 240, 216, 611 and 463 yd; on foot over the floors,
-    # the Warlock's is 437, First Aid's 324: not the 112 of a way dropping through the floors)
-    for x, y, z, most in ((1590.5, 277.0, -55.3, 160), (1591.2, 204.5, -55.3, 150), (1780.3, 44.0, -61.4, 650),
+    # the Warlock's is 437, First Aid's 324: not the 112 of a way dropping through the floors; the
+    # Guild Master's 114 went down steps of 3-4 yd off a ledge, walked it's up the Trade Quarter's steps)
+    for x, y, z, most in ((1590.5, 277.0, -55.3, 160), (1591.2, 204.5, -55.3, 200), (1780.3, 44.0, -61.4, 650),
                           (1525.0, 171.4, -62.1, 460)):
         r = R.Route(UC, lift[0], lift[1], x, y, lua.table(offroad=False, z=lift[2], tz=z))
         n = len(r.pts) // 2
@@ -1669,6 +1670,23 @@ def test_no_undercity_road_climbs_steeper_than_a_stair(nav_env):
         if dz > 1.2 * length + 3:
             steep.append((i, round(length, 1), round(dz, 1)))
     assert len(steep) <= 0.005 * len(e), steep[:10]  # (a few quirks of the floors: 80 when the stairs' cells were in the wrong order)
+
+
+def test_undercity_roads_dont_climb_onto_a_canals_rim(nav_env):
+    # (reported) by the Trade Quarter's edge, the Enchanting trainer 95 yd away "straight" down: the
+    # road stepped up onto the canal's rim (4 yd up, one diagonal step of the floors) and across.
+    # The way is round by the passages (about 200 yd and more).
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    zoff = ns.CityLevels[UC].zoff
+    start, trainer = (1545.7, 292.8), (1487.5, 274.5)
+    r = R.Route(UC, *start, *trainer, lua.table(offroad=False, z=-124.5 + zoff, tz=-62.1))
+    pts, _ = route_pts(r)
+    assert r.length > 150, round(r.length)
+    assert min(math.hypot(x - 1536, y - 300) for x, y in pts) > 4  # (not over the rim)
+    e, g = R.Edges(UC)
+    rim = [i for i in range(1, len(e) + 1) if abs(g.z[e[i][1]] - g.z[e[i][2]]) > 3.2 * max(e[i][3], 1)]
+    assert len(rim) <= 0.002 * len(e), rim[:10]
 
 
 def test_a_route_to_another_continent_is_overviewed_on_the_world_map(nav_env):

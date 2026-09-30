@@ -47,6 +47,8 @@ CANAL_BED = -127.5  # local z: canal floors below this are water
 HIGH = -95.0  # local z: floors above this are arch tops and roofs (not the sewers)
 STREET = -125.0  # local z of the streets
 LEDGE = 3.0  # yards: a drop this big between neighboring cells is a ledge
+ROAD_JUMP, ROAD_JUMP_PER_YD = 1.5, 1.0  # yards: Undercity's roads cut where their height jumps more than this (a stair's less)
+UC_STEP_CAP = 2.0  # yards: Undercity's steps on foot between neighboring cells, a diagonal's too (walknet.STEP_CAP)
 RUINS_WAYS = [  # the Ruins of Lordaeron: the way in from the north gate, and the lifts
     # (from the road outside, down the gate's steps: their treads' edges would close the way)
     [(1882, 236), (1841, 236), (1790, 236), (1761, 238), (1718, 234), (1665, 238), (1630, 232), (1612, 236), (1596, 240)],
@@ -229,14 +231,21 @@ def undercity(cd: ClientData, log=print) -> dict:
         from . import layers
         sfloors, swalls, _ = _floors(cd, p.wmo, names, solid=True)
         skeep, swl = down_there(sfloors, swalls)
-        u2 = walknet.build(skeep, swl, lq, label="Undercity (floors over floors)", z0=Z_LOW, nb=NB_BANDS, log=lambda *a: None)
-        # (joins across gaps: only a lift's platform to the floor out of its shaft; the floors'
-        # gaps at doorways are filled, and a longer straight join is a way through the air)
-        # (and each of its places joined by a road over its floor: CityPlaces' heights, its NPCs')
-        from .cityplaces import places
-        spots = [(x, y, z - p.z) for _n, x, y, z in places(UNDERCITY_MAP)]
-        layered = layers.build(u2, [(x, y, LIFT_Z) for x, y in lifts], log=log, walls=swl, gap_max=LIFT_GAP,
-                               spurs=spots, completing=True)
+        # (steps on foot of at most UC_STEP_CAP, a diagonal's too: the canals' rims, 4 yd up, were
+        # one diagonal step, and roads went up on them and across the canal)
+        cap, walknet.STEP_CAP = walknet.STEP_CAP, UC_STEP_CAP
+        try:
+            u2 = walknet.build(skeep, swl, lq, label="Undercity (floors over floors)", z0=Z_LOW, nb=NB_BANDS,
+                               log=lambda *a: None)
+            # (joins across gaps: only a lift's platform to the floor out of its shaft; the floors'
+            # gaps at doorways are filled, and a longer straight join is a way through the air)
+            # (and each of its places joined by a road over its floor: CityPlaces' heights, its NPCs')
+            from .cityplaces import places
+            spots = [(x, y, z - p.z) for _n, x, y, z in places(UNDERCITY_MAP)]
+            layered = layers.build(u2, [(x, y, LIFT_Z) for x, y in lifts], log=log, walls=swl, gap_max=LIFT_GAP,
+                                   spurs=spots, completing=True)
+        finally:
+            walknet.STEP_CAP = cap
         layered["u"] = u2
         lg = layered["graph"]
         log(f"  Undercity: floors over floors: {len(layered['masks'])} layers, roads {len(lg.nodes)} nodes, "
@@ -670,6 +679,17 @@ def _layered_roads(u: dict, lay: dict) -> list[str]:
         for p_, q in zip(dense, dense[1:]):
             cum.append(cum[-1] + math.hypot(q[0] - p_[0], q[1] - p_[1]))
         ids = {0: a, len(dense) - 1: b}
+        # (a jump between neighboring points, steeper than a stair: not walked, a wall's or a canal's
+        # rim up from the floor beside it read as the same floor; the road is cut there)
+        jumps = set()
+        for m in range(len(dense) - 1):
+            if abs(hs[m + 1] - hs[m]) > ROAD_JUMP + ROAD_JUMP_PER_YD * (cum[m + 1] - cum[m]):
+                jumps.add(m)
+                for k in (m, m + 1):
+                    if k not in ids:
+                        nodes.append(dense[k])
+                        zs.append(hs[k])
+                        ids[k] = len(nodes) - 1
 
         def split(i, j):
             if j - i < 2:
@@ -686,9 +706,14 @@ def _layered_roads(u: dict, lay: dict) -> list[str]:
                 ids[at] = len(nodes) - 1
                 split(i, at)
                 split(at, j)
-        split(0, len(dense) - 1)
+        ends = sorted(ids)
+        for i, j in zip(ends, ends[1:]):
+            if not (j == i + 1 and i in jumps):
+                split(i, j)
         cuts = sorted(ids)
         for i, j in zip(cuts, cuts[1:]):
+            if j == i + 1 and i in jumps:
+                continue
             way = [dense[i]] + [dense[m] for m in range(i + 1, j) if kept[m]] + [dense[j]]
             runs.append((ids[i], ids[j], way))
     out = ["  n = {" + ",".join(f"{x:.1f},{y:.1f}" for x, y in nodes) + "},",

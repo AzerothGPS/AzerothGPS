@@ -27,6 +27,14 @@ from PIL import Image, ImageDraw
 TILE = 1600 / 3
 CELL = 2.0  # yards per grid cell
 LEDGE = 3.0  # yards: a drop this big between neighboring cells is a ledge
+# A step up or down between neighboring cells on foot: at most LEDGE per cell's width (more on a
+# diagonal), and at most STEP_CAP. Undercity sets it (cities.py): a canal's rim 4 yd up was one
+# diagonal step (3 x 1.41), and its roads went up on it and across.
+STEP_CAP = math.inf
+
+
+def step_lim(dr: int, dc: int) -> float:
+    return min(LEDGE * math.hypot(dr, dc), STEP_CAP)
 HEAD = 3.0  # yards: a face rising this far above a floor is a wall
 BODY = 2.0  # yards: the space a character standing on a floor takes up (a cave's rock through it closes the floor)
 BUMP = 1.0  # yards: rock rising less than this is a step, not a wall
@@ -379,7 +387,7 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
                 r2, c2 = r + dr_, c + dc
                 if not (0 <= r2 < H and 0 <= c2 < W):
                     continue
-                lim = LEDGE * math.hypot(dr_, dc)
+                lim = step_lim(dr_, dc)
                 for b2 in range(max(0, b - R_), min(NB, b + R_ + 1)):
                     if abs(b2 - b) <= lim and free[b2, r2, c2] and not reached[b2, r2, c2]:
                         reached[b2, r2, c2] = True
@@ -503,7 +511,7 @@ def build(floors, walls, liquids, *, label: str, z0: float | None = None, nb: in
             r1, c1 = r0 + dr_, c0 + dc
             if not (0 <= r1 < H and 0 <= c1 < W):
                 continue
-            reach = LEDGE * math.hypot(dr_, dc)
+            reach = step_lim(dr_, dc)
             for b1 in range(max(0, b0 - R), min(NB, b0 + R + 1)):
                 if not bands[b1, r1, c1] or wall3[b1, r1, c1] or abs(b1 - b0) > reach:
                     continue

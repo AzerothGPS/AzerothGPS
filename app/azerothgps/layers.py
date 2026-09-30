@@ -121,7 +121,7 @@ def split(f: np.ndarray, seeds=(), log=print):
                 r2, c2 = r + dr, c + dc
                 if not (0 <= r2 < H and 0 <= c2 < W):
                     continue
-                lim = LEDGE * math.hypot(dr, dc)
+                lim = walknet.step_lim(dr, dc)
                 for b2 in range(max(0, b - R), min(NB, b + R + 1)):
                     if abs(b2 - b) > lim or not f[b2, r2, c2]:
                         continue
@@ -618,7 +618,7 @@ def complete(g, node_z: dict, node_layer: dict, edge_z: dict, f: np.ndarray, u: 
                 r2, c2 = r + dr, c + dc
                 if not (0 <= r2 < H and 0 <= c2 < W):
                     continue
-                lim = LEDGE * math.hypot(dr, dc)
+                lim = walknet.step_lim(dr, dc)
                 for b2 in range(max(0, b_ - R_), min(NB, b_ + R_ + 1)):
                     if abs(b2 - b_) <= lim and f[b2, r2, c2] and clear_step(f, b_, r, c, b2, r2, c2):
                         w = (b2, r2, c2)
@@ -699,7 +699,7 @@ def _voxel_path(f: np.ndarray, va, vb, reach: int = 30) -> list | None:
             r2, c2 = r + dr, c + dc
             if not (r0 <= r2 < r1 and c0 <= c2 < c1):
                 continue
-            lim = LEDGE * math.hypot(dr, dc)
+            lim = walknet.step_lim(dr, dc)
             for b2 in range(max(0, b - R), min(NB, b + R + 1)):
                 if abs(b2 - b) <= lim and f[b2, r2, c2] and clear_step(f, b, r, c, b2, r2, c2):
                     w = (b2, r2, c2)
