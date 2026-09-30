@@ -205,3 +205,36 @@ def test_running_a_route_with_a_flight_stays_within_the_frame(game):
     finally:
         R.WARM, R.SYNC_WALKS = False, True
         lua.execute("AGPS_POS[1], AGPS_POS[2] = 2254.0, 293.0")
+
+
+def test_riding_a_zeppelin_doesnt_work_the_route_out_again(game):
+    # (reported: a CPU spike with a route set, riding a zeppelin) carried along standing still, the
+    # route isn't worked out again (as on a flight); walking again, it is
+    lua, ns = game
+    T, N, R = ns.Taxi, ns.Nav, ns.Router
+    N.SetStops(lua.eval("{ { x = 1600, y = 240, cont = 0, name = 'Ruins' } }"), False, "red")
+    lua.execute("""
+      AGPS_ROUTES = 0
+      local route = AGPS_NS.Router.Route
+      AGPS_NS.Router.Route = function(...) AGPS_ROUTES = AGPS_ROUTES + 1 return route(...) end
+    """)
+    x, y = 2254.0, 293.0
+    t0 = float(lua.eval("AGPS_T")) + 10  # (the game's clock: on from where the other tests left it)
+    lua.execute(f"AGPS_T = {t0}")
+    assert N.Route(x, y, 0)
+    for k in range(4):  # (standing on the deck, carried 10 yd a check)
+        x -= 10
+        T.TransportTick(100 + k * 0.5, 1000 + k, x, y, 0, 0)
+    assert T.Riding()
+    lua.execute("AGPS_ROUTES = 0")
+    for k in range(6):  # (far off the route: at a ride's speed every check was)
+        x, y = x - 60, y + 90
+        lua.execute(f"AGPS_T = {t0 + 5 + k * 5}")
+        T.TransportTick(102 + k * 0.5, 1004 + k, x, y, 0, 0)
+        assert N.Route(x, y, 0)
+    assert lua.eval("AGPS_ROUTES") == 0
+    T.TransportTick(106, 1010, x - 1, y, 0, 7)  # (walking off it)
+    assert not T.Riding()
+    lua.execute(f"AGPS_T = {t0 + 100}")
+    N.Route(x, y, 0)
+    assert lua.eval("AGPS_ROUTES") > 0

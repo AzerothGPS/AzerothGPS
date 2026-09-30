@@ -172,12 +172,21 @@ local near -- { i, side, x, y, since }
 local last -- { x, y, cont }
 local carried -- (server time the carrying began)
 local streak, streakAt = 0, nil -- (checks in a row carried: one alone may be the last step walked)
+-- Riding a boat, a zeppelin or the tram right now, anywhere on the way (not only by a dock): not
+-- walking, and carried CARRY_YD and more between checks, two in a row (T.Riding). The route isn't
+-- worked out again meanwhile (Nav.Route), as on a flight: at a ride's speed every check was off it.
+local rideStreak = 0
+function T.Riding() return rideStreak >= 2 end
 function T.TransportTick(now, serverNow, px, py, cont, speed)
   if not px then
     last = nil
+    rideStreak = 0
     return
   end
   local walking = speed == nil or speed > 0.1
+  local carriedNow = not walking and last and last.cont == cont
+    and math.sqrt((px - last.x) ^ 2 + (py - last.y) ^ 2) >= T.CARRY_YD
+  rideStreak = carriedNow and rideStreak + 1 or 0
   local i, side = T.DockAt(cont, px, py)
   if i then
     near = { i = i, side = side, since = near and near.i == i and near.side == side and near.since or now, cont = cont }

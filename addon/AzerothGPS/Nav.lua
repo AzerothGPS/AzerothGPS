@@ -1501,6 +1501,8 @@ function N.Route(px, py, cont)
   end
   -- in the Deeprun Tram (its own map): the route kept as it is until out at the other end
   if cont == N.TRAM_MAP then return r end
+  -- on a boat or a zeppelin (Taxi.Riding): the route as it is, not worked out again until off it
+  if ns.Taxi and ns.Taxi.Riding and ns.Taxi.Riding() then return r or kept end
   if r and r.flying then r, kept = nil, nil end -- just landed: work the route out afresh
   -- the continent's road data is still being built in the background (a moment)
   -- (and the levels the stops are on: a city's, down a lift)
