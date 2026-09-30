@@ -410,6 +410,10 @@ def build(u: dict, seeds_xyz=(), prune: float = 12.0, fill: int = 12, log=print,
             # a stair's steps between floors, its heights where they are)
             sa, sb = _voxel_at(f, u, g.nodes[na], node_z[na]), _voxel_at(f, u, g.nodes[nb], node_z[nb])
             way = _voxel_path(f, sa, sb) if sa and sb and sa != sb else []
+            if way is None:  # (no way on foot between them, over the floors: not a stair, a floor over another)
+                why["no way on foot"] += 1
+                taken.pop()
+                continue
             if way:
                 cells = [(r, c) for _b, r, c in [sa] + way + [sb]]
                 zs_ = [Z0 + b_ + 0.5 for b_, _r, _c in [sa] + way + [sb]]
@@ -439,15 +443,26 @@ def build(u: dict, seeds_xyz=(), prune: float = 12.0, fill: int = 12, log=print,
             unjoined.append((x, y, z, "no floor there"))
             continue
         _d, L, r, c, b = best
-        dd, n, path = to_road(L, r, c)
+        # (the nearest road node reached from it on foot over the floors, step by step: a layer's
+        # heights can be off at its edge, and its nearest road be on a walkway over the place)
+        sv = (int(b), r, c)
+        n, way = None, None
+        near = sorted((math.hypot(g.nodes[m][0] - x, g.nodes[m][1] - y), m) for m in g.nodes if m in node_z)
+        for dn, m in near[:SPUR_TRIES]:
+            if dn > LINK_REACH:
+                break
+            mv = _voxel_at(f, u, g.nodes[m], node_z[m])
+            w = _voxel_path(f, mv, sv, int(LINK_REACH / CELL) + 2) if mv else None
+            if w is not None and (len(w) + 1) * CELL <= SPUR_DETOUR * dn + 2 * LINK_REACH / 4:
+                n, way = m, [mv] + w + [sv]
+                break
         if n is None:
-            unjoined.append((x, y, z, "no road on its floor within reach"))
+            unjoined.append((x, y, z, "no road reached on foot within reach"))
             continue
         spot = g.add_node((x, y))
         node_layer[spot], node_z[spot] = L, Z0 + b + 0.5
-        cells_ = path  # (to_road's: the road ... the spot)
-        pts = [tuple(g.nodes[n])] + [px_to_world(rr, cc) for rr, cc in cells_] + [(x, y)]
-        zs = [node_z[n]] + [_z_cell(u, tops, masks, L, rr, cc) for rr, cc in cells_] + [node_z[spot]]
+        pts = [tuple(g.nodes[n])] + [px_to_world(rr, cc) for _b, rr, cc in way] + [(x, y)]
+        zs = [node_z[n]] + [Z0 + b_ + 0.5 for b_, _r, _c in way] + [node_z[spot]]
         eid = g.add_edge(n, spot, pts, source="stair")
         edge_z[eid] = zs
         nspur += 1
@@ -546,6 +561,8 @@ def point_heights(lay: dict, u: dict, eid, pts) -> list:
     return out
 
 
+SPUR_TRIES = 12  # the nearest road nodes tried for a place's road (spurs)
+SPUR_DETOUR = 2.0  # ...: on foot at most this many times as far as straight (and 20 yd)
 SHORT_REACH = 30.0  # yards: complete(): road nodes this near each other on foot are checked
 SHORT_RATIO, SHORT_SLACK = 1.5, 10.0  # ...: a road between them when the roads take longer than this
 
@@ -603,7 +620,7 @@ def complete(g, node_z: dict, node_layer: dict, edge_z: dict, f: np.ndarray, u: 
                     continue
                 lim = LEDGE * math.hypot(dr, dc)
                 for b2 in range(max(0, b_ - R_), min(NB, b_ + R_ + 1)):
-                    if abs(b2 - b_) <= lim and f[b2, r2, c2]:
+                    if abs(b2 - b_) <= lim and f[b2, r2, c2] and clear_step(f, b_, r, c, b2, r2, c2):
                         w = (b2, r2, c2)
                         nd = d + CELL * math.hypot(dr, dc)
                         if nd <= SHORT_REACH and nd < dist.get(w, math.inf):
@@ -628,6 +645,21 @@ def complete(g, node_z: dict, node_layer: dict, edge_z: dict, f: np.ndarray, u: 
     return added
 
 
+BODY_BANDS = 2  # yards of headroom a step up or down needs: no floor in between (a ceiling)
+
+
+def clear_step(f: np.ndarray, b: int, r: int, c: int, b2: int, r2: int, c2: int) -> bool:
+    """Whether a step from floor voxel (b, r, c) to (b2, r2, c2) passes no other floor: none in
+    either column between the two heights, nor a body's height over the higher (a walk can't
+    go through a floor: between floors stacked a few yards apart, zig-zagging down two columns)."""
+    lo, hi = min(b, b2), max(b, b2) + BODY_BANDS
+    for bb, rr, cc in ((b, r, c), (b2, r2, c2)):
+        col = f[lo:hi + 1, rr, cc]
+        if col.sum() > (1 if lo <= bb <= hi else 0):
+            return False
+    return True
+
+
 def _voxel_at(f: np.ndarray, u: dict, xy, z) -> tuple | None:
     """The floor voxel (band, row, col) at world (x, y) nearest height z (within a ledge), or None."""
     NB, H, W = f.shape
@@ -642,9 +674,9 @@ def _voxel_at(f: np.ndarray, u: dict, xy, z) -> tuple | None:
     return (int(b), r, c) if abs(u["Z0"] + b + 0.5 - z) <= LEDGE else None
 
 
-def _voxel_path(f: np.ndarray, va, vb, reach: int = 30) -> list:
+def _voxel_path(f: np.ndarray, va, vb, reach: int = 30) -> list | None:
     """The floor voxels (band, row, col) walked from va to vb (steps up to a ledge; within
-    `reach` cells of them), both ends left out; [] when there's no way."""
+    `reach` cells of them), both ends left out ([] side by side); None when there's no way."""
     NB, H, W = f.shape
     R = int(math.ceil(LEDGE * math.sqrt(2)))
     r0, r1 = max(0, min(va[1], vb[1]) - reach), min(H, max(va[1], vb[1]) + reach + 1)
@@ -669,13 +701,13 @@ def _voxel_path(f: np.ndarray, va, vb, reach: int = 30) -> list:
                 continue
             lim = LEDGE * math.hypot(dr, dc)
             for b2 in range(max(0, b - R), min(NB, b + R + 1)):
-                if abs(b2 - b) <= lim and f[b2, r2, c2]:
+                if abs(b2 - b) <= lim and f[b2, r2, c2] and clear_step(f, b, r, c, b2, r2, c2):
                     w = (b2, r2, c2)
                     nd = d + CELL * math.hypot(dr, dc) + abs(b2 - b) * 0.5
                     if nd < dist.get(w, math.inf):
                         dist[w], prev[w] = nd, v
                         heapq.heappush(todo, (nd, w))
-    return []
+    return None
 
 
 def _px(u, q):

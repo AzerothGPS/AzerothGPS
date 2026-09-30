@@ -1603,14 +1603,31 @@ def test_undercitys_roads_are_on_floors_over_floors(nav_env):
     lift = (1545.3, 239.5, -104.0 + zoff)
     # (the places: Cooking, Guild Master, a Warlock trainer, First Aid; and at most how long, from the
     # south lift: the old top-floor network's were 240, 216, 611 and 463 yd; on foot over the floors,
-    # the Warlock's is 437)
-    for x, y, z, most in ((1590.5, 277.0, -55.3, 160), (1591.2, 204.5, -55.3, 150), (1780.3, 44.0, -61.4, 600),
-                          (1525.0, 171.4, -62.1, 160)):
+    # the Warlock's is 437, First Aid's 324: not the 112 of a way dropping through the floors)
+    for x, y, z, most in ((1590.5, 277.0, -55.3, 160), (1591.2, 204.5, -55.3, 150), (1780.3, 44.0, -61.4, 650),
+                          (1525.0, 171.4, -62.1, 460)):
         r = R.Route(UC, lift[0], lift[1], x, y, lua.table(offroad=False, z=lift[2], tz=z))
         n = len(r.pts) // 2
         last_road = next(r.zs[i] for i in range(n - 1, 0, -1) if r.zs[i])
         assert abs(last_road - z) <= 4, (x, y, z, last_road)  # (on the place's floor, not the one over it: 12 yd up)
         assert r.length < most, (x, y, r.length)
+
+
+def test_undercity_routes_dont_drop_through_the_floors(nav_env):
+    # (reported) from the walkway by the Apothecarium to the Enchanting trainer below: 55 yd, down
+    # through the floor; on foot it's round by the passage (222 yd over the floors). Floors stacked
+    # a few yards apart had let a way zig-zag down through them (clear_step now).
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    zoff = ns.CityLevels[UC].zoff
+    r = R.Route(UC, 1528.45, 268.79, 1487.48, 274.54, lua.table(offroad=False, z=-108.0 + zoff, tz=-62.1))
+    assert r.length > 150
+    n = len(r.pts) // 2
+    for i in range(1, n):
+        a, b = r.zs[i], r.zs[i + 1]
+        if a and b:
+            d = ((r.pts[2 * i + 1] - r.pts[2 * i - 1]) ** 2 + (r.pts[2 * i + 2] - r.pts[2 * i]) ** 2) ** 0.5
+            assert abs(a - b) <= max(6, 2 * d), (i, a - zoff, b - zoff, d)
 
 
 def test_no_undercity_road_climbs_steeper_than_a_stair(nav_env):
@@ -1624,7 +1641,7 @@ def test_no_undercity_road_climbs_steeper_than_a_stair(nav_env):
         dz = abs(g.z[a] - g.z[b])
         if dz > 1.2 * length + 3:
             steep.append((i, round(length, 1), round(dz, 1)))
-    assert len(steep) <= 0.02 * len(e), steep[:10]  # (a few quirks of the floors: 80 when the stairs' cells were in the wrong order)
+    assert len(steep) <= 0.005 * len(e), steep[:10]  # (a few quirks of the floors: 80 when the stairs' cells were in the wrong order)
 
 
 def test_a_route_to_another_continent_is_overviewed_on_the_world_map(nav_env):
