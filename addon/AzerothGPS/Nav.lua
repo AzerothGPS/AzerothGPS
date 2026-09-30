@@ -1972,7 +1972,10 @@ local function CheckArrival(px, py, cont)
       return false
     end
     if #N.stops <= 1 then
-      N.arrivedAt = N.arrivedAt or GetTime()
+      -- (the last one: the route goes at once; "Arrived" stays up a few seconds, N.Tick. Kept
+      -- as the stop until then, running on out of its circle brought the route to it back.)
+      N.Clear()
+      N.arrivedAt = GetTime()
       return true
     end
     table.remove(N.stops, 1)
@@ -1988,6 +1991,7 @@ function N.Status(px, py, cont)
   N.DeathCheck()
   if not N.dest then
     N.QuestCheck(px, py, cont) -- (no route: the quest areas you're in, for the arrow window)
+    if N.arrivedAt then return "|cff40ff40Arrived|r" end -- (the last stop just reached)
     return nil
   end
   N.QuestCheck(px, py, cont)
@@ -2064,9 +2068,11 @@ function N.Status(px, py, cont)
   return head .. "\n" .. line
 end
 
--- Called every redraw: clears the destination a few seconds after arriving.
+-- Called every redraw: "Arrived" goes a few seconds after reaching the last stop (the route
+-- went at once).
+N.ARRIVED_SHOWN = 5
 function N.Tick()
-  if N.arrivedAt and GetTime() - N.arrivedAt > 5 then N.Clear() end
+  if N.arrivedAt and GetTime() - N.arrivedAt > N.ARRIVED_SHOWN then N.arrivedAt = nil end
 end
 
 -- Heights in an underground city: its floors' height at (x, y) on `level` (the model's

@@ -1012,6 +1012,23 @@ def test_reaching_a_stop_moves_on_to_the_next(nav_env):
     assert "Arrived" in ns.Nav.Status(-440.0, -4700.0, 1)
 
 
+def test_the_last_stop_goes_at_once_when_reached(nav_env):
+    # (reported) arrived, still running: out of the stop's circle the route to it came back,
+    # until the stop went a few seconds later. Reached: gone at once, "Arrived" shown a while.
+    lua, ns = nav_env
+    N = ns.Nav
+    lua.execute("AGPS_T = 100 GetTime = function() return AGPS_T end")
+    N.SetStops(stops(lua, (-440.0, -4700.0)))
+    assert "Arrived" in N.Status(-440.0, -4700.0, 1)
+    assert len(N.stops) == 0 and N.dest is None and N.route is None
+    lua.execute("AGPS_T = 102")
+    assert "Arrived" in N.Status(-470.0, -4700.0, 1)  # (30 yd on: still just "Arrived")
+    assert N.dest is None and N.Route(-470.0, -4700.0, 1) is None
+    lua.execute("AGPS_T = 106")
+    N.Tick()
+    assert N.Status(-500.0, -4700.0, 1) is None  # (then nothing)
+
+
 def test_fastest_order(nav_env):
     lua, ns = nav_env
     lua.execute("Geo_Player = nil")
