@@ -743,8 +743,51 @@ local function Weighed(cont, pts, walk, exempt)
   end
   return yards / walk
 end
-local function RideInstead(cont, sx, sy, d, walk, tps, lr, opts)
-  if not (lr and lr.pts and lr.length and lr.length >= N.RIDE_CHECK_MIN_YD) then return nil end
+-- Walks between fixed points (a lift to a flight master, a landing to the stop: not from the
+-- player) routed once and kept: rerouting as the player moves redoes only the walk from them
+-- (a long walk after a flight, routed again on every recalculation, was a lag spike each time).
+-- Forgotten with the route's other cached parts (Invalidate), and never a provisional one.
+N.LEG_MEMO_MAX = 64
+local legMemo, legMemoN = {}, 0
+local function LegRoute(cont, x1, y1, x2, y2, o, fixed)
+  if not fixed then return ns.Router.Route(cont, x1, y1, x2, y2, o) end
+  local key = string.format("%d:%.1f:%.1f:%.1f:%.1f:%s:%s:%s", cont, x1, y1, x2, y2, tostring(o.z), tostring(o.tz),
+    tostring(o.offroad))
+  local r = legMemo[key]
+  if r then return r end
+  r = ns.Router.Route(cont, x1, y1, x2, y2, o)
+  if not r.pending then
+    if legMemoN >= N.LEG_MEMO_MAX then legMemo, legMemoN = {}, 0 end
+    legMemo[key], legMemoN = r, legMemoN + 1
+  end
+  return r
+end
+
+-- Each walking leg of `legs` routed (a list by leg index), with the heights they start and end
+-- at (a ride's ends: into a dungeon, down a lift; the stop's).
+local function EndZ(t, e) return e == 1 and t.z1 or e == 2 and t.iz or nil end
+local function WalkRoutes(legs, sx, sy, d, opts, sz)
+  local out, legZ = {}, sz
+  for li, leg in ipairs(legs) do
+    if leg.ride then
+      legZ = EndZ(leg.ride, leg.from == 1 and 2 or 1)
+    else
+      local toStop = leg.x2 == d.x and leg.y2 == d.y
+      local nxt = legs[li + 1]
+      local endZ = toStop and N.StopZ(d) or (nxt and nxt.ride and EndZ(nxt.ride, nxt.from)) or nil
+      local fromPlayer = opts.transient and leg.x1 == sx and leg.y1 == sy
+      out[li] = LegRoute(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2, LegOpts(fromPlayer and opts or opts.fixed, legZ, endZ),
+        not fromPlayer)
+      legZ = toStop and endZ or nil
+    end
+  end
+  return out
+end
+
+-- The walk the whole way (`direct`: routes it) or the best way with a ride: legs and their
+-- routes. The comparison is remembered once done on finished routes (not provisional ones);
+-- remembered "rides", the whole walk isn't routed again.
+local function RideInstead(cont, sx, sy, d, walk, tps, opts, sz, direct)
   local legs = N.Plan(cont, sx, sy, walk, d, tps, math.huge)
   local rides = false
   for _, leg in ipairs(legs or {}) do rides = rides or leg.ride ~= nil end
@@ -753,29 +796,34 @@ local function RideInstead(cont, sx, sy, d, walk, tps, lr, opts)
   local key = string.format("%d:%d:%d:%s:%.0f:%.0f:%s", cont, math.floor(sx / N.RIDE_CHECK_YD), math.floor(sy / N.RIDE_CHECK_YD),
     tostring(d.cont), d.x, d.y, tostring(lvl))
   local won = rideCheck[key]
-  if won == nil then
-    local Rt = ns.Router
-    local exempt = Rt and Rt.ZoneAt and { [Rt.ZoneAt(Geo.Base(cont), sx, sy)] = true, [Rt.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
-    local secs, pending = 0, lr.pending
-    for _, leg in ipairs(legs) do
-      if leg.ride then
-        secs = secs + (leg.ride[7] or 0)
-      else
-        local r = ns.Router.Route(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2, opts.fixed)
-        secs = secs + Weighed(leg.cont, r.pts, walk, exempt)
-        pending = pending or r.pending
-      end
-    end
-    local walkSecs = Weighed(cont, lr.pts, walk, exempt)
-    won = secs < walkSecs
-    N.lastRideCheck = string.format("walk routed %.0fs (%.0f yd) vs with rides %.0fs: %s%s", walkSecs, lr.length, secs,
-      won and "rides" or "walk", pending and " (provisional, not remembered)" or "")
-    -- (a route still provisional, a terrain search running: a straight line meanwhile, the walk
-    -- looks short; used for now, not remembered: the finished search's recalculation decides)
-    if not pending then rideCheck[key] = won end
+  if won == false then return nil end
+  local routes = WalkRoutes(legs, sx, sy, d, opts, sz)
+  if won then
+    N.lastRideCheck = (N.lastRideCheck or "") .. " [remembered]"
+    return legs, routes
   end
-  if rideCheck[key] ~= nil then N.lastRideCheck = (N.lastRideCheck or "") .. " [remembered]" end
-  return won and legs or nil
+  local lr = direct()
+  if not (lr and lr.pts and lr.length and lr.length >= N.RIDE_CHECK_MIN_YD) then return nil end
+  local Rt = ns.Router
+  local exempt = Rt and Rt.ZoneAt and { [Rt.ZoneAt(Geo.Base(cont), sx, sy)] = true, [Rt.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
+  local secs, pending = 0, lr.pending
+  for li, leg in ipairs(legs) do
+    if leg.ride then
+      secs = secs + (leg.ride[7] or 0)
+    else
+      secs = secs + Weighed(leg.cont, routes[li].pts, walk, exempt)
+      pending = pending or routes[li].pending
+    end
+  end
+  local walkSecs = Weighed(cont, lr.pts, walk, exempt)
+  won = secs < walkSecs
+  N.lastRideCheck = string.format("walk routed %.0fs (%.0f yd) vs with rides %.0fs: %s%s", walkSecs, lr.length, secs,
+    won and "rides" or "walk", pending and " (provisional, not remembered)" or "")
+  -- (a route still provisional, a terrain search running: a straight line meanwhile, the walk
+  -- looks short; used for now, not remembered: the finished search's recalculation decides)
+  if not pending then rideCheck[key] = won end
+  if won then return legs, routes end
+  return nil
 end
 
 local function Stretch(cont, sx, sy, d, walk, opts, sz)
@@ -783,18 +831,24 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
   local tps = opts.teleports -- the teleports this stretch may start with (AssignTeleports)
   local legs = N.Plan(cont, sx, sy, walk, d, tps)
   if not legs then return nil end
-  local routed -- (a walk the whole way, routed already: see RideInstead)
-  if #legs == 1 and legs[1].walk and legs[1].cont == cont and d.cont == cont then
-    routed = ns.Router.Route(cont, sx, sy, d.x, d.y, LegOpts(opts.transient and opts or opts.fixed, sz, N.StopZ(d)))
-    local ride = RideInstead(cont, sx, sy, d, walk, tps, routed, opts)
-    if ride then legs, routed = ride, nil end
+  local routes
+  if #legs == 1 and legs[1].walk and legs[1].cont == cont and d.cont == cont
+      and math.sqrt((d.x - sx) ^ 2 + (d.y - sy) ^ 2) >= N.RIDE_CHECK_MIN_YD / N.WALK_FACTOR then
+    local routed
+    local function direct()
+      routed = routed or WalkRoutes(legs, sx, sy, d, opts, sz)[1]
+      return routed
+    end
+    local ride, rideRoutes = RideInstead(cont, sx, sy, d, walk, tps, opts, sz, direct)
+    if ride then
+      legs, routes = ride, rideRoutes
+    elseif routed then
+      routes = { routed }
+    end
   end
+  routes = routes or WalkRoutes(legs, sx, sy, d, opts, sz)
   local st = { parts = {}, legs = legs, first = 0, walk = 0, ride = 0, road = 0 }
   local rode = false
-  local legZ = sz -- (the height the next walking leg starts at, when known)
-  -- (a ride's ends' heights, when known: a portal's end in its dungeon (iz, end 2), a lift's
-  -- down in its city (z1, end 1); the roads there are on floors over floors)
-  local function EndZ(t, e) return e == 1 and t.z1 or e == 2 and t.iz or nil end
   for li, leg in ipairs(legs) do
     if leg.ride then
       local t = leg.ride
@@ -814,14 +868,8 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       end
       st.ride = st.ride + t[7]
       rode = true
-      legZ = EndZ(t, leg.from == 1 and 2 or 1) -- (where it puts you: into a dungeon, down a lift)
     else
-      local toStop = leg.x2 == d.x and leg.y2 == d.y
-      local nxt = legs[li + 1]
-      local endZ = toStop and N.StopZ(d) or (nxt and nxt.ride and EndZ(nxt.ride, nxt.from)) or nil
-      local lr = routed or ns.Router.Route(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2,
-        LegOpts((opts.transient and leg.x1 == sx and leg.y1 == sy) and opts or opts.fixed, legZ, endZ))
-      legZ = toStop and endZ or nil
+      local lr = routes[li]
       st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs }
       st.walk, st.road = st.walk + lr.length, st.road + lr.road
       if lr.pending then st.pending = true end
@@ -1300,6 +1348,13 @@ function N.Route(px, py, cont)
     for _, s in ipairs(N.stops) do
       if s.cont and s.cont ~= cont then busy = ns.Router.WarmUp(s.cont, s.x, s.y) or busy end
     end
+    -- (and the underground cities on this continent: a route through one's flight master or
+    -- lift, Undercity's, built its roads in the frame, a third of a second and more)
+    for lvl, l in pairs(ns.CityLevels or {}) do
+      if not l.instance and lvl ~= cont and Geo.Base(lvl) == Geo.Base(cont) then
+        busy = ns.Router.WarmUp(lvl, px, py) or busy
+      end
+    end
     if busy then
       N.warming = true
       return nil
@@ -1426,6 +1481,7 @@ function N.Invalidate(all, fresh)
   if all ~= false then later.done = {} end -- redone a few a frame; shown until replaced
   if fresh then pairCosts, pairCount = {}, 0 end
   if fresh then kept, rideCheck = nil, {} end
+  if all ~= false then legMemo, legMemoN = {}, 0 end
 end
 
 -- Reorder the stops into the fastest order from (px, py) (default: the player's

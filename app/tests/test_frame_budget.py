@@ -16,6 +16,12 @@ FRAME_MS = 40  # the longest a single slice of background work may run (the spik
 def game():
     lua, ns = _runtime()
     lua.execute("GetTime = function() return os.clock() end")
+    # (Undercity's level too: routes through its flight master built its roads in the frame)
+    from azerothgps.routecheck import ADDON_DIR
+    loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
+    for name in ("Data/Transports.lua", "Data/Cities.lua"):
+        loader((ADDON_DIR / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
+    assert ns.Roads[10001]
     return lua, ns
 
 
@@ -27,7 +33,9 @@ def _drawn(lua, cont, x, y, n=8):
     return lua.eval("{ " + ", ".join(rows) + " }")
 
 
-@pytest.mark.parametrize("cont, x, y", [(0, -9460.0, 60.0), (1, -450.0, -2650.0), (2991, 3000.0, 1000.0)])
+# (and Undercity, 10001: its roads were built in the frame on a route through its flight master)
+@pytest.mark.parametrize("cont, x, y", [(0, -9460.0, 60.0), (1, -450.0, -2650.0), (2991, 3000.0, 1000.0),
+                                        (10001, 1600.0, 240.0)])
 def test_the_road_network_rebuilds_in_short_slices(game, cont, x, y):
     lua, ns = game
     R = ns.Router
@@ -44,6 +52,7 @@ def test_the_road_network_rebuilds_in_short_slices(game, cont, x, y):
             R.Pump(clock() + 1, clock)
             worst = max(worst, clock() - a)
         assert worst < FRAME_MS, f"a slice of the rebuild ran {worst:.0f} ms"
+        assert R.GraphReady(cont)  # (built: not a level with no roads here)
     finally:
         R.WARM, R.SYNC_WALKS = False, True
         ns.db.tracks = None
