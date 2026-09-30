@@ -1631,6 +1631,19 @@ def test_undercity_places_show_only_down_in_the_city(nav_env):
     assert "Undercity Bank" in names(UC)  # down in the city
 
 
+def test_a_city_place_s_stop_is_down_in_the_city_even_without_floor_data_under_it(nav_env):
+    lua, ns, UC = undercity_env(nav_env)
+    load(lua, ns, "Layers.lua", "Data/CityPlaces.lua")
+    L = ns.Layers
+    ns.db = lua.eval("{}")
+    ns.settings = lua.eval("{ gps = { layerCity = true, style = 'minimap' } }")
+    L.RevealCity()
+    priest = next(p for p in L.RevealedPlaces(0).values() if p[3] == "Undercity Priest Trainer")
+    marks = L.Marks(0, priest[1], priest[2], 400.0, lua.table(), UC)
+    mark = next(marks[i] for i in range(1, len(marks) + 1) if marks[i][4] == "Undercity Priest Trainer")
+    assert mark[12] == UC  # (a stop made from it goes down the lift, though no floor is under its booth)
+
+
 def test_zone_hover_says_the_levels_colored_for_the_player(router):
     lua, ns = router
     G = ns.GPS

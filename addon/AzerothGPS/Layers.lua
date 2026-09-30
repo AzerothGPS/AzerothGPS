@@ -962,9 +962,11 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
   local st = ns.settings.gps
   local out = {}
   local function near(x, y) return math.abs(x - cx) <= reach and math.abs(y - cy) <= reach end
-  local function put(x, y, icon, name, note, size, r, g, b, questID, preview)
+  -- (`level`: the level a stop made from it is on: a city's places are down in it, wherever the
+  -- floor data under them has a gap: a trainer's booth)
+  local function put(x, y, icon, name, note, size, r, g, b, questID, preview, level)
     if #out < L.MAX_MARKS and near(x, y) then
-      out[#out + 1] = { x, y, icon, name, note, size, r, g, b, questID, preview }
+      out[#out + 1] = { x, y, icon, name, note, size, r, g, b, questID, preview, level }
     end
   end
   if st.layerQuests then
@@ -993,7 +995,8 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
     for lc, list in pairs(L.CityDB()) do
       if lc == cont or (lc == level and Geo.Base(lc) == cont) then
         for _, c in ipairs(list) do
-          put(c[1], c[2], c[4] or L.CITY_DEFAULT_ICON, c[3], "City location (a guard pointed it out)", 16)
+          put(c[1], c[2], c[4] or L.CITY_DEFAULT_ICON, c[3], "City location (a guard pointed it out)", 16,
+            nil, nil, nil, nil, nil, lc)
           saved[#saved + 1] = c
         end
       end
@@ -1006,7 +1009,7 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
         if c[3] == p[3] or (c[1] - p[1]) ^ 2 + (c[2] - p[2]) ^ 2 <= L.CITY_SAME_YD ^ 2 then dup = true break end
       end
       if not dup then
-        put(p[1], p[2], L.CityIcon(p[3]) or L.CITY_DEFAULT_ICON, p[3], "City location", 16, nil, nil, nil, nil, true)
+        put(p[1], p[2], L.CityIcon(p[3]) or L.CITY_DEFAULT_ICON, p[3], "City location", 16, nil, nil, nil, nil, true, p.cont)
       end
     end
   end

@@ -1983,7 +1983,7 @@ function G.Update()
       dx, dy = Geo.Rotate(dx * s, dy * s, rot)
       if math.abs(dx) <= half and math.abs(dy) <= half then
         pois[#pois + 1] = { 4, dx, dy, m[4], m[1], m[2], nil, nil, icon = m[3], note = m[5], size = m[6], questID = m[10],
-          r = m[7], g = m[8], b = m[9], preview = m[11] }
+          r = m[7], g = m[8], b = m[9], preview = m[11], level = m[12] }
       end
     end
   end
