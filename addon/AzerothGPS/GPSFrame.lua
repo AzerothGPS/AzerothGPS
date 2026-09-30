@@ -3018,6 +3018,14 @@ function G.TourAcrossContinents(cont)
   return false
 end
 
+-- How far the route tour zooms out for an overview `z` yards wide: on the terrain view no further
+-- than its tiles go (MINIMAP_MAX_ZOOM; past that the zone maps' art showed instead, the map
+-- switching halfway through the zoom); a map browsed or the map style, all of it.
+function G.TourZoom(z)
+  if not browse and not G.IsMapStyle(S().style) then return math.min(z, G.MINIMAP_MAX_ZOOM - 1) end
+  return z
+end
+
 local function TourStep(now)
   if not tour then return end
   local px, py, cont = Geo.PlayerWorld()
@@ -3037,6 +3045,7 @@ local function TourStep(now)
   end
   if tour.phase == "hold" and dt >= ROUTE_TOUR.hold then
     local x, y, z = Overview(px, py, cont)
+    z = G.TourZoom(z)
     tour = { phase = "out", t0 = now, from = { free.x, free.y, browseZoom or S().zoom }, to = { x, y, z } }
   elseif tour.phase == "out" or tour.phase == "back" then
     local dur = ROUTE_TOUR[tour.phase]

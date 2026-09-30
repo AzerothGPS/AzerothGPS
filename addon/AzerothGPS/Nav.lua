@@ -693,9 +693,12 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       elseif t.pts then -- a flight: through its connecting stops (one continent)
         local kinds = {}
         for k = 1, #t.pts / 2 - 1 do kinds[k] = N.KIND_TRANSPORT end
-        st.parts[#st.parts + 1] = { cont = c1, pts = t.pts, kinds = kinds }
+        -- (in the air over the continent: not on a city's level, from its flight master down in
+        -- it, Undercity's; the map doesn't draw what's down in a city while the player is up top)
+        st.parts[#st.parts + 1] = { cont = Geo.Base(c1), pts = t.pts, kinds = kinds }
       elseif bx then
-        st.parts[#st.parts + 1] = { cont = c1, pts = { x1, y1, bx, by }, kinds = { N.KIND_TRANSPORT } }
+        st.parts[#st.parts + 1] = { cont = Geo.Base(c1) == Geo.Base(c2) and c1 or Geo.Base(c1), pts = { x1, y1, bx, by },
+          kinds = { N.KIND_TRANSPORT } }
       end
       st.ride = st.ride + t[7]
       rode = true

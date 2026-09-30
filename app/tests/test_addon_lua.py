@@ -3597,6 +3597,35 @@ def test_flying_from_undercity_starts_at_its_flight_master_down_in_the_city(nav_
     assert kinds[:2] == ["walk", "ride flight"]  # straight to the flight master: no lift first
 
 
+def test_a_flight_from_undercity_is_drawn_over_the_land(nav_env):
+    # (reported: the flight's dotted line gone) its flight master is down in the city, so the
+    # flight's part was on the city's level, which the map doesn't draw while the player is up top
+    lua, ns = flights_env(nav_env, [11, 17])  # Undercity, Hammerfall
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua")
+    ns.Router.Reset()
+    ns.Router.SYNC_WALKS = True
+    N = ns.Nav
+    N.FlightsChanged()
+    N.SetDestination(-910.0, -3490.0, 0, "Hammerfall")
+    r = N.Route(2250.0, 280.0, 0)  # Brill: up on the land
+    flights = [r.parts[i] for i in range(1, len(r.parts) + 1)
+               if r.parts[i].kinds and len(r.parts[i].pts) >= 4 and r.parts[i].kinds[1] == N.KIND_TRANSPORT
+               and (r.parts[i].pts[1] - r.parts[i].pts[len(r.parts[i].pts) - 1]) ** 2 > 100]
+    assert flights and all(f.cont == 0 for f in flights)
+
+
+def test_the_route_tour_stays_on_the_terrain_view(env):
+    # (reported, a recording) a long route's overview zoomed out past the terrain's tiles, and the
+    # zone maps' art took over halfway through the zoom: the terrain view stops at its tiles
+    lua, ns = env
+    G = ns.GPS
+    G.Follow()
+    ns.settings = lua.eval("{ gps = { style = 'minimap', zoom = 300 } }")
+    assert G.TourZoom(9000.0) < G.MINIMAP_MAX_ZOOM and G.TourZoom(800.0) == 800.0
+    ns.settings.gps.style = "zone"  # (the map style: its maps, all of the route)
+    assert G.TourZoom(9000.0) == 9000.0
+
+
 def test_show_walls_outlines_the_mountains(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Data/Terrain.lua", "Passability.lua")
