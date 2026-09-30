@@ -40,6 +40,8 @@ The addon is going public, so every change must keep it policy-safe:
 - **Combat hides values (secret values):** e.g. `GetUnitSpeed`, and the quest-area hit tests
   (`C_Minimap.IsInsideQuestBlob` and friends). Quest-area tracing pauses in combat; check
   results with `ns.IsSecret` before testing them.
+- **Party members' positions are given** (probed grouped): `UnitPosition("party1")` returns their
+  world position, and the other player needs no addon (`GPS.party.io.members`, round class icons).
 - **Old button art is missing** (e.g. `UI-PlusButton-Up`): draw simple controls instead.
 
 ## Layout
