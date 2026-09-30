@@ -357,31 +357,37 @@ N.DOCK_YD = 40 -- "at the dock" radius
 
 -- Planning a walk from (x1, y1) to (x2, y2) on `cont`: its straight yards, plus what the router
 -- charges for the yards in zones too high for the player (Router.LEVEL_FACTOR each: the way round
--- them, or through at a cost), not in the zones it starts and ends in, as the router does. Else a
--- flight over them lost to a walk that looked short in a straight line and went the long way.
--- (Sampled every PLAN_ZONE_STEP yards; the legs between docks and flight masters remembered.)
+-- them, or through at a cost), but in the zones in `exempt` (the trip's own ends: where the player
+-- starts and the stop is; not a dock walked past, which would let the walk through the zone it's
+-- in). Else a flight over them lost to a walk that looked short in a straight line.
+-- (Sampled every PLAN_ZONE_STEP yards; the yards in each zone between docks and flight masters
+-- remembered, `keep`.)
 N.PLAN_ZONE_STEP = 64
-local planYards = { red = nil } -- [key] = yards, for the zones too high now (`red`)
-function N.PlanYards(cont, x1, y1, x2, y2, keep)
+local planYards = { red = nil } -- [key] = { [zone] = yards }, for the zones too high now (`red`)
+function N.PlanYards(cont, x1, y1, x2, y2, keep, exempt)
   local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
   local R = ns.Router
   local red = R and R.RedZones and R.RedZones()
   if not red or not (ns.Zones and ns.Zones[Geo.Base(cont)]) then return d end
   if planYards.red ~= red then planYards = { red = red } end
   local key = keep and string.format("%d:%.0f:%.0f:%.0f:%.0f", cont, x1, y1, x2, y2)
-  if key and planYards[key] then return planYards[key] end
-  local c = Geo.Base(cont)
-  local z1, z2 = R.ZoneAt(c, x1, y1), R.ZoneAt(c, x2, y2)
-  local n = math.max(1, math.ceil(d / N.PLAN_ZONE_STEP))
-  local extra = 0
-  for k = 0, n - 1 do
-    local t = (k + 0.5) / n
-    local z = R.ZoneAt(c, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
-    if red[z] and z ~= z1 and z ~= z2 then extra = extra + d / n end
+  local zy = key and planYards[key]
+  if not zy then
+    zy = {}
+    local c = Geo.Base(cont)
+    local n = math.max(1, math.ceil(d / N.PLAN_ZONE_STEP))
+    for k = 0, n - 1 do
+      local t = (k + 0.5) / n
+      local z = R.ZoneAt(c, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+      if red[z] then zy[z] = (zy[z] or 0) + d / n end
+    end
+    if key then planYards[key] = zy end
   end
-  local yd = d + extra * (R.LEVEL_FACTOR - 1)
-  if key then planYards[key] = yd end
-  return yd
+  local extra = 0
+  for z, yd in pairs(zy) do
+    if not (exempt and exempt[z]) then extra = extra + yd end
+  end
+  return d + extra * (R.LEVEL_FACTOR - 1)
 end
 
 ---------------------------------------------------------------------------
@@ -574,6 +580,9 @@ function N.Plan(cont, px, py, speed, d, teleports)
       nodes[#nodes + 1] = { m[1], m[2], m[3], fm = node }
     end
   end
+  -- (the trip's own ends: zones too high there are where the player is and the stop is)
+  local Rt = ns.Router
+  local exempt = Rt and Rt.ZoneAt and { [Rt.ZoneAt(Geo.Base(cont), px, py)] = true, [Rt.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
   local dist, prev, rode, done = { [1] = 0 }, {}, {}, {}
   while true do
     local u, best
@@ -587,7 +596,7 @@ function N.Plan(cont, px, py, speed, d, teleports)
       if not done[v] then
         local cost, ride
         if a[1] == b[1] then -- (zones too high for the player on the way: as the router weighs them)
-          cost = N.PlanYards(a[1], a[2], a[3], b[2], b[3], u ~= 1 and v ~= 2) * N.WALK_FACTOR / speed
+          cost = N.PlanYards(a[1], a[2], a[3], b[2], b[3], u ~= 1 and v ~= 2, exempt) * N.WALK_FACTOR / speed
         end
         if a.t and b.t == a.t and a.side ~= b.side then
           local secs = ns.Transports[a.t][7]
@@ -616,8 +625,13 @@ function N.Plan(cont, px, py, speed, d, teleports)
   for i = 2, #path do
     local a, b = nodes[path[i - 1]], nodes[path[i]]
     local r = rode[path[i]]
+    local last = legs[#legs]
     if r then
       legs[#legs + 1] = { ride = r[1], from = r[2] }
+    elseif last and last.walk and last.cont == a[1] then
+      -- (a dock or flight master only walked past: one walk, the router's own way; routed in
+      -- two, each would be free in the zone of the point between, one too high for the player)
+      last.x2, last.y2 = b[2], b[3]
     else
       legs[#legs + 1] = { walk = true, cont = a[1], x1 = a[2], y1 = a[3], x2 = b[2], y2 = b[3] }
     end

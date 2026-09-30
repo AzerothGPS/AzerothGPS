@@ -2814,6 +2814,34 @@ def test_a_flight_beats_a_walk_through_zones_too_high(nav_env):
     assert flies()
 
 
+def test_planning_doesnt_walk_through_a_zone_too_high_by_a_dock_in_it(nav_env):
+    # (reported: to Hillsbrad at level 13, offroad on or off, the same way) the plan split the walk
+    # at a transport's end in Alterac Mountains (too high), which made Alterac a walk's end and so
+    # not charged: 1.6k yd through it. Only the trip's own ends are exempt.
+    lua, ns = nav_env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "Data/Zones.lua", "GPSFrame.lua")
+    R, N = ns.Router, ns.Nav
+    R.Reset()
+    R.SYNC_WALKS = True
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("UnitLevel = function() return 13 end")
+    alterac = next(k for k in ns.Maps.keys() if ns.Maps[k].name == "Alterac Mountains" and ns.Maps[k].type == 3)
+    stop = lua.table(x=-700.0, y=-600.0, cont=0)  # Hillsbrad (too high too: the stop's own zone)
+    legs, _ = N.Plan(0, 1594.9, 290.8, 7.0, stop)
+    assert len(legs) == 1 and legs[1].walk  # (one walk: not two, split at a point in Alterac)
+    for off in (False, True):
+        ns.settings.gps.offroad = off
+        N.Clear()
+        N.SetDestination(-700.0, -600.0, 0, "stop")
+        r = N.Route(1594.9, 290.8, 0)
+        through = 0
+        for i in range(1, len(r.parts) + 1):
+            p = r.parts[i]
+            for k in range(1, len(p.pts) - 2, 2):
+                through += R.ZoneYards(0, p.pts[k], p.pts[k + 1], p.pts[k + 2], p.pts[k + 3])[alterac] or 0
+        assert through < 100, (off, through)
+
+
 def test_connecting_flight_and_option_off(nav_env):
     # Sepulcher to Light's Hope has no direct flight: one flight, connecting at Undercity
     lua, ns = flights_env(nav_env, [10, 11, 68])
