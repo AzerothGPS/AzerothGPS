@@ -2945,6 +2945,24 @@ def test_route_takes_a_known_flight(nav_env):
     assert secs < 400  # vs ~15 minutes on foot
 
 
+def test_a_flight_is_weighed_against_the_walk_as_routed(nav_env):
+    # (reported, /agps debug) level 14 from Brill into Arathi Highlands: the straight line over
+    # Lordamere Lake and Alterac planned a walk; routed, it went round by Silverpine (7.6k yd) right
+    # past the Sepulcher's flight master, and the flight there from Undercity wasn't taken
+    lua, ns = flights_env(nav_env, [10, 11])  # the Sepulcher, Undercity
+    load(lua, ns, "Data/Zones.lua", "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "GPSFrame.lua")
+    ns.Router.Reset()
+    ns.Router.SYNC_WALKS = True
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("UnitLevel = function() return 14 end")
+    N = ns.Nav
+    N.SetDestination(-1441.0, -2332.0, 0, "Arathi")
+    r = N.Route(2254.0, 293.0, 0)
+    flights = [r.legs[i].ride[10] for i in range(1, len(r.legs) + 1) if r.legs[i].ride]
+    assert "The Sepulcher, Silverpine Forest" in flights
+    assert r.totalYards < 7000  # (on foot the whole way: 7.6k)
+
+
 def test_debug_tells_how_the_trip_was_planned(nav_env):
     # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
     # high, the flight masters known, the plan and the walk straight there
