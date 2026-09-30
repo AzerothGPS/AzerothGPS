@@ -1705,42 +1705,6 @@ def test_undercity_lift_tops_are_up_top(nav_env):
     assert N.PlayerLevel(0) == UC
 
 
-def test_offroad_goes_off_in_undercity_and_back_after(nav_env):
-    lua, ns, UC = undercity_env(nav_env)
-    N = ns.Nav
-    lua.execute("""
-      AGPS_CHAR = {}
-      ns_CharDB = function() return AGPS_CHAR end
-      AGPS_SAID = {}
-      UIErrorsFrame = { AddMessage = function(_, t) AGPS_SAID[#AGPS_SAID + 1] = t end }
-    """)
-    ns.CharDB = lua.eval("ns_CharDB")
-    ns.settings = lua.eval("{ gps = { offroad = true } }")
-    gps, said = ns.settings.gps, lambda: len(lua.eval("AGPS_SAID"))
-    N.CityOffroad()  # down in the city: off, with a message
-    assert gps.offroad is False and said() == 1
-    N.CityOffroad()  # (a reload there: stays as it is, no new message)
-    assert gps.offroad is False and said() == 1
-    lua.execute("AGPS_MAP = 1420")  # left: back on
-    N.CityOffroad()
-    assert gps.offroad is True and said() == 2 and lua.eval("AGPS_CHAR.cityOffroad") is None
-    # set by the player while in the city: left alone after
-    lua.execute("AGPS_MAP = 1458")
-    N.CityOffroad()
-    assert gps.offroad is False
-    gps.offroad = True
-    N.CityOffroad()
-    gps.offroad = False
-    lua.execute("AGPS_MAP = 1420")
-    N.CityOffroad()
-    assert gps.offroad is False
-    # loading (no map yet): nothing changes
-    lua.execute("AGPS_MAP = nil")
-    gps.offroad = True
-    N.CityOffroad()
-    assert gps.offroad is True
-
-
 def test_undercity_walk_to_the_road_goes_round_walls(nav_env):
     # (reported) by a wall north of the Trade Quarter, heading for the bank: onto the road
     # beside the player, not through the one-cell wall to the road past it. (Floors over floors:
@@ -1886,16 +1850,6 @@ def test_ruins_of_lordaeron_walk_follows_its_roads(nav_env):
         m = max(1, int(d))
         bad += sum(1 for k in range(1, m) if not P.IsOpen(0, x1 + (x2 - x1) * k / m, y1 + (y2 - y1) * k / m))
     assert road > 0.8 * r.length and bad <= 3
-
-
-def test_offroad_goes_off_up_in_the_ruins_too(nav_env):
-    lua, ns, UC = undercity_env(nav_env)
-    N = ns.Nav
-    lua.execute("AGPS_CHAR = {} GetSubZoneText = function() return 'Ruins of Lordaeron' end")
-    ns.CharDB = lua.eval("function() return AGPS_CHAR end")
-    ns.settings = lua.eval("{ gps = { offroad = true } }")
-    N.CityOffroad()
-    assert ns.settings.gps.offroad is False
 
 
 def test_undercity_trainer_from_the_walkway_beside_it(nav_env):
@@ -2823,6 +2777,58 @@ def test_reroute_keeps_route_until_player_leaves_it(nav_env):
     assert not lua.eval("rawequal")(r3, r1)
 
 
+def test_off_the_walk_to_the_road_the_route_is_worked_out_again(nav_env):
+    # (asked) the player's movement suggests a new point on the road to join: walking to the
+    # road but off the way drawn there (10 yd and more), the route is worked out from them again
+    lua, ns = nav_env
+    lua.globals().AGPS_ROUTER = ns.Router
+    lua.execute("""
+      AGPS_T = 0
+      GetTime = function() return AGPS_T end
+      AGPS_ROUTER.Route = function(cont, sx, sy, tx, ty)
+        local d = math.sqrt((100 - sx) ^ 2 + sy ^ 2) + math.sqrt((tx - 100) ^ 2 + (ty - 0) ^ 2)
+        return { pts = { sx, sy, 100, 0, tx, ty }, kinds = { 1, 0 }, length = d, road = d - 100 }
+      end
+    """)
+    N = ns.Nav
+    N.SetDestination(100.0, 1000.0, 1, "There")
+    r1 = N.Route(0.0, 0.0, 1)
+    lua.execute("AGPS_T = 3")
+    assert lua.eval("rawequal")(N.Route(40.0, 5.0, 1), r1)  # near the way to the road: followed
+    lua.execute("AGPS_T = 6")
+    r2 = N.Route(60.0, 20.0, 1)  # off it (20 yd): from here again
+    assert not lua.eval("rawequal")(r2, r1) and (r2.pts[1], r2.pts[2]) == (60.0, 20.0)
+    lua.execute("AGPS_T = 9")
+    r3 = N.Route(115.0, 300.0, 1)  # along the road itself, a little off it: followed
+    assert lua.eval("rawequal")(r3, r2)
+
+
+def test_the_route_joins_the_road_where_its_heading(env):
+    # (asked) south of Brill, heading west: the route went out to the road's nearest point to
+    # the east and back round. Now it walks round the houses' fences and onto the road where
+    # it's heading (without the offroad option, which is gone)
+    lua, ns, at = tirisfal_env(env)
+    P = ns.Passability
+    s, t = at(60.5, 54.7), at(50.0, 50.0)
+    r = ns.Router.Route(0, *s, *t, lua.table(offroad=False))
+    pts, kinds = route_pts(r)
+    k = list(kinds).index(0)  # (the first road point)
+    assert pts[k][1] > at(59.5, 0)[1]  # joined west of Brill's fences, not east of the start
+    assert r.length < 580  # (was 606)
+    for i in range(k):  # the walk to the road: over open ground
+        assert P.SegmentCost(0, *pts[i], *pts[i + 1]) is not None
+
+
+def test_the_offroad_option_is_gone(env):
+    # (asked) no offroad toggle: routes always keep to the roads, joining them where they're heading
+    addon = Path(__file__).parents[2] / "addon" / "AzerothGPS"
+    for f in ("Core.lua", "Config.lua", "Options.lua", "GPSFrame.lua"):
+        text = (addon / f).read_text(encoding="utf-8")
+        assert "Off-road" not in text and "Off-Road" not in text and "/agps offroad" not in text, f
+    core = (addon / "Core.lua").read_text(encoding="utf-8")
+    assert "if gps then gps.offroad = nil end" in core  # (a saved setting cleared)
+
+
 def test_collapsed_steps_show_only_the_trip_times(env):
     lua, ns = env
     C = ns.GPS.CollapsedStatus
@@ -2847,27 +2853,6 @@ def flights_env(nav_env, known):
         lua.eval(f"{{ taxiNodes = {{ [1415] = {{ nodes = {{ {nodes} }} }} }}, flights = {{}} }}"))
     ns.Nav.FlightsChanged()
     return lua, ns
-
-
-def test_offroad_is_off_by_default_and_said_to_be_experimental(nav_env):
-    # (asked) off-road shortcuts off by default, turned off once for players who had the old
-    # default, and a warning when turned on (once a session)
-    lua, ns = nav_env
-    N = ns.Nav
-
-    core = (Path(__file__).parents[2] / "addon" / "AzerothGPS" / "Core.lua").read_text(encoding="utf-8")
-    assert "offroad = false," in core
-    db = lua.eval("{ settings = { gps = { offroad = true } } }")
-    N.MigrateOffroad(db)
-    assert db.settings.gps.offroad is False and db.offroadNote and db.offroadOff108
-    db.settings.gps.offroad = True  # (turned back on by the player: left on after)
-    db.offroadNote = None
-    N.MigrateOffroad(db)
-    assert db.settings.gps.offroad is True and not db.offroadNote
-    said = []
-    ns.Print = lambda msg: said.append(msg)
-    assert N.OffroadTurnedOn() and not N.OffroadTurnedOn()
-    assert len(said) == 1 and "experimental" in said[0]
 
 
 def test_route_takes_a_known_flight(nav_env):

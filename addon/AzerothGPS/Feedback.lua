@@ -72,7 +72,7 @@ function F.Arrived(d)
   Push(Store().trips, {
     continent = t.cont, from = { t.pts[1], t.pts[2] }, to = { Round(d.x), Round(d.y), d.cont },
     estimate = math.floor(t.estimate + 0.5), actual = math.floor(actual + 0.5), mounted = t.mounted,
-    offroad = t.offroad, pts = t.pts, time = time(), build = Build(), addon = ns.VERSION,
+    pts = t.pts, time = time(), build = Build(), addon = ns.VERSION,
   }, F.MAX_TRIPS)
 end
 
@@ -95,7 +95,7 @@ local function Tick()
     local _, walk, mount, mounted = N.Speeds()
     local speed = mounted and mount or walk
     trip = { dest = d, t0 = GetTime(), cont = cont, estimate = r.walkYards / speed + (r.rideSeconds or 0),
-      mounted = mounted, offroad = S().offroad, pts = { Round(px), Round(py) } }
+      mounted = mounted, pts = { Round(px), Round(py) } }
     return
   end
   if cont ~= trip.cont then

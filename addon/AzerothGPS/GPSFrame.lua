@@ -4392,8 +4392,6 @@ function G.Init()
     { id = "questRoute", button = qr, label = "Quest Route" },
     { id = "hearth", key = "useHearthstone", icon = "Interface\\Icons\\INV_Misc_Rune_01", label = "Use Hearthstone",
       tip = "A route may start with your Hearthstone when it's ready and faster.", route = true, defaultOn = true },
-    { id = "offroad", key = "offroad", icon = "Interface\\Icons\\INV_Boots_05", label = "Off-Road Shortcuts",
-      tip = "Experimental: routes cut across open ground where that's faster, and may cross ground you can't walk. Off: they follow the roads.", route = true },
     { id = "quests", key = "layerQuests", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective, label = "Quests",
       tip = "Your quests' objectives and turn-ins on the map." },
     { id = "questAreas", key = "layerQuestAreas", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective,
@@ -4450,7 +4448,7 @@ function G.Init()
   -- Where each goes: always shown or in the menu, going up or right from the map button,
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
-  G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight", offroad = "hidden",
+  G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight",
     city = "hidden", dungeonsG = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
@@ -4558,10 +4556,6 @@ function G.Init()
         end
         if t.needs and not S()[t.needs] then return end
         S()[t.key] = not G.QuickOn(t)
-        if t.key == "offroad" then
-          ns.Nav.OffroadSetByPlayer()
-          if S().offroad then ns.Nav.OffroadTurnedOn() end -- (experimental: said once a session)
-        end
         if t.route then
           if ns.Teleports then ns.Teleports.Changed() end
           ns.Nav.Invalidate(true, true)

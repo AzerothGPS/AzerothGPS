@@ -76,6 +76,8 @@ R.NODE_LINK_MS = 12 -- ... worked out for this long per route calculation, the r
 R.OFFROAD_WALK_AROUND = 3000 -- yards: offroad trips up to this long may walk around obstacles
 R.OFFROAD_ALONG_STEP = 50 -- offroad mode: points this far apart along nearby roads, to join or leave them
 R.OFFROAD_ALONG_MAX = 700 -- ... within this many yards of the start or the destination
+R.JOIN_ALONG_MAX = 200 -- road mode: the same, onto (or off) the roads within this many yards, over open ground
+R.JOIN_WALK_TRIES = 3 -- ... and the few best of them blocked in a straight line: walked around what's in the way
 R.WALK_AROUND_CANDIDATES = 3 -- only the nearest few get-on/get-off legs search the terrain grid
 -- Road mode: walking straight there (around obstacles) instead, off the roads the whole way,
 -- counts this much per yard; so the roads are kept unless they're about twice as long, or
@@ -2410,6 +2412,79 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
     end
   end
+  -- Joining (and leaving) a road partway along it, not only where it's closest or at a
+  -- junction: points every OFFROAD_ALONG_STEP yards on the nearby roads, straight over
+  -- open ground. So the route cuts across to where the road is heading.
+  -- (`fromNearest`: the points counted from the edge's nearest point, not its start: the same
+  -- wherever the road data splits the edge, a cave's way in or a drawn road joining it)
+  local function alongPoints(list, x, y, reach, fromNearest)
+    local out = {}
+    local r2 = reach * reach
+    for i, c in ipairs(list) do
+      if i > R.ENTRY_CANDIDATES then break end
+      local e = g.e[c.edge]
+      local acc = 0
+      local step = R.OFFROAD_ALONG_STEP
+      local shift = fromNearest and c.along % step or 0
+      for k = 5, #e - 3, 2 do
+        local ax, ay, bx, by = e[k], e[k + 1], e[k + 2], e[k + 3]
+        local seg = Dist(ax, ay, bx, by)
+        local t = math.ceil((acc - shift) / step) * step + shift
+        while t <= acc + seg do
+          local f = seg > 0 and (t - acc) / seg or 0
+          local px, py = ax + (bx - ax) * f, ay + (by - ay) * f
+          if (px - x) ^ 2 + (py - y) ^ 2 <= r2 then
+            out[#out + 1] = { c.edge, t, px, py }
+          end
+          t = t + R.OFFROAD_ALONG_STEP
+        end
+        acc = acc + seg
+      end
+    end
+    return out
+  end
+  -- (road mode: onto the road where it's heading, not back to its nearest point and round:
+  -- within JOIN_ALONG_MAX, straight over open ground, or walked around what's in the way (a
+  -- town's fences) for the few that look best, on the way to the stop; not on floors over floors)
+  if not offroad and not layered and Pass then
+    local function joins(list, x, y, use)
+      local blocked = {}
+      -- (not in a capital or a city: its streets are the way, its grid coarser than they are;
+      -- nor in a cave or a city's ruins, whose grids can't tell a tunnel's walls)
+      if cityPenalty or R.CapitalAt(cont, x, y) or (Pass.Overlay and Pass.Overlay(cont, x, y)) then return blocked end
+      for _, p in ipairs(alongPoints(list, x, y, R.JOIN_ALONG_MAX, true)) do
+        if SegCost(cont, x, y, p[3], p[4]) then
+          p.walk = false
+          use(p)
+        else
+          p.est = Dist(sx, sy, p[3], p[4]) + Dist(p[3], p[4], tx, ty)
+          blocked[#blocked + 1] = p
+        end
+      end
+      return blocked
+    end
+    local function onto(p)
+      local cost, leg = Leg(sx, sy, p[3], p[4], false, p.walk)
+      local e = g.e[p[1]]
+      relax(START, e[1], cost + part(p[1], p[2]), Join(leg, { { kind = ROAD, edge = p[1], from = p[2], to = 0 } }))
+      relax(START, e[2], cost + part(p[1], math.max(0, e[3] - p[2])), Join(leg, { { kind = ROAD, edge = p[1], from = p[2], to = e[3] } }))
+    end
+    local function off(p)
+      local cost, leg = Leg(p[3], p[4], tx, ty, false, p.walk)
+      local e = g.e[p[1]]
+      goalVia(e[1], part(p[1], p[2]) + cost, Join({ { kind = ROAD, edge = p[1], from = 0, to = p[2] } }, leg))
+      goalVia(e[2], part(p[1], math.max(0, e[3] - p[2])) + cost, Join({ { kind = ROAD, edge = p[1], from = e[3], to = p[2] } }, leg))
+    end
+    for _, pair in ipairs({ { ss, sx, sy, onto }, { ts, tx, ty, off } }) do
+      local use = pair[4]
+      local blocked = joins(pair[1], pair[2], pair[3], use)
+      table.sort(blocked, function(a, b) return a.est < b.est end)
+      for i = 1, math.min(#blocked, R.JOIN_WALK_TRIES) do
+        blocked[i].walk = true
+        use(blocked[i])
+      end
+    end
+  end
   -- Offroad mode: straight links from the start to nearby road nodes, and from nearby
   -- road nodes to the destination, where the ground allows. (A walk around whatever is in
   -- the way, for a short trip: after the search, as in road mode.)
@@ -2427,34 +2502,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       local nx, ny = g.n[n * 2 - 1], g.n[n * 2]
       goalVia(n, Leg(nx, ny, tx, ty))
     end
-    -- Join (and leave) a road partway along it too, not only where it's closest or at a
-    -- junction: points every OFFROAD_ALONG_STEP yards on the nearby roads, straight over
-    -- open ground. So the route cuts across to where the road is heading.
-    local function alongPoints(list, x, y)
-      local out = {}
-      local r2 = R.OFFROAD_ALONG_MAX * R.OFFROAD_ALONG_MAX
-      for i, c in ipairs(list) do
-        if i > R.ENTRY_CANDIDATES then break end
-        local e = g.e[c.edge]
-        local acc = 0
-        for k = 5, #e - 3, 2 do
-          local ax, ay, bx, by = e[k], e[k + 1], e[k + 2], e[k + 3]
-          local seg = Dist(ax, ay, bx, by)
-          local t = math.ceil(acc / R.OFFROAD_ALONG_STEP) * R.OFFROAD_ALONG_STEP
-          while t <= acc + seg do
-            local f = seg > 0 and (t - acc) / seg or 0
-            local px, py = ax + (bx - ax) * f, ay + (by - ay) * f
-            if (px - x) ^ 2 + (py - y) ^ 2 <= r2 then
-              out[#out + 1] = { c.edge, t, px, py }
-            end
-            t = t + R.OFFROAD_ALONG_STEP
-          end
-          acc = acc + seg
-        end
-      end
-      return out
-    end
-    for _, p in ipairs(alongPoints(ss, sx, sy)) do
+    for _, p in ipairs(alongPoints(ss, sx, sy, R.OFFROAD_ALONG_MAX)) do
       local cost, leg = Leg(sx, sy, p[3], p[4])
       if cost then
         local e = g.e[p[1]]
@@ -2462,7 +2510,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
         relax(START, e[2], cost + part(p[1], math.max(0, e[3] - p[2])), Join(leg, { { kind = ROAD, edge = p[1], from = p[2], to = e[3] } }))
       end
     end
-    for _, p in ipairs(alongPoints(ts, tx, ty)) do
+    for _, p in ipairs(alongPoints(ts, tx, ty, R.OFFROAD_ALONG_MAX)) do
       local cost, leg = Leg(p[3], p[4], tx, ty)
       if cost then
         local e = g.e[p[1]]

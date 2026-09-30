@@ -728,6 +728,7 @@ local kept -- the last route, kept through Invalidate to compare a recalculation
 -- Following the route like a car GPS: while the player stays near the first part (the
 -- walk from them), trim what's behind them and count the distances down, without
 -- recalculating anything. False when they're off the route (then it's recalculated).
+N.JOIN_REPICK_YD = 10 -- off the walk to the road by this much: it's worked out again
 local function Follow(r, px, py, ahead)
   local full = r.fullFirst
   if not full then return false end
@@ -746,6 +747,17 @@ local function Follow(r, px, py, ahead)
     if not best or d2 < best then best, bi, bt = d2, i, t end
   end
   if not best or best > OFF_ROUTE_YD * OFF_ROUTE_YD then return false end
+  -- still walking to the road and off that walk: worked out again from here, joining the road
+  -- where it's heading from where the player is now (a nearer point on it may be better)
+  if best > N.JOIN_REPICK_YD * N.JOIN_REPICK_YD then
+    local R = ns.Router
+    local toRoad, road = true, false
+    for i = 1, #kinds do
+      if i <= bi and kinds[i] ~= R.KIND_OFFROAD then toRoad = false break end
+      if i > bi and kinds[i] == R.KIND_ROAD then road = true break end
+    end
+    if toRoad and road then return false end
+  end
   local ax, ay, bx, by = pts[2 * bi - 1], pts[2 * bi], pts[2 * bi + 1], pts[2 * bi + 2]
   local qx, qy = ax + (bx - ax) * bt, ay + (by - ay) * bt
   local consumed = cum[bi] + (cum[bi + 1] - cum[bi]) * bt
@@ -1149,7 +1161,9 @@ function N.Route(px, py, cont)
   if N.QuestPaused() then return N.route end -- in the stop's quest area, spot reached: waits
   local now = GetTime()
   local r = N.route
-  local offroad = ns.settings and ns.settings.gps.offroad or false
+  -- (roads always: the route joins them where they're heading, from wherever the player is;
+  -- Router's JOIN_ALONG. The offroad option is gone from 1.0.8.)
+  local offroad = false
   -- on a flight: the flight, then on from where it lands; no rerouting until then
   local f = ns.Taxi and ns.Taxi.Current and ns.Taxi.Current()
   if f then
@@ -2248,90 +2262,6 @@ function N.SafeDrop()
   return N.FALL_FREE + math.max(0, h / m - N.FALL_KEEP) / N.FALL_PER_YD
 end
 
--- Offroad shortcuts go off down in an underground city (there's no way through its walls
--- but its streets), and in a capital with streets of its own (Data/Capitals.lua), and back on
--- after, unless the player set them while there. Kept per character, so a reload or logging
--- in there picks up where it was.
-local function OffroadChanged(text)
-  if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(text, 1, 0.82, 0) end
-  if ns.Print then ns.Print(text) end
-  if ns.Teleports and ns.Teleports.Changed then ns.Teleports.Changed() end
-  N.Invalidate(true, true)
-  if ns.GPS and ns.GPS.RefreshQuick then ns.GPS.RefreshQuick() end
-  if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
-end
-
--- Off-road shortcuts: off by default from 1.0.8 (experimental, still wrong in places). The old
--- default was on, so turned off once for everyone (the saved settings, `db`), with a note at
--- login saying how to turn them back on (db.offroadNote, Core.lua).
-function N.MigrateOffroad(db)
-  local gps = db.settings and db.settings.gps
-  if gps and not db.offroadOff108 and gps.offroad then
-    gps.offroad = false
-    db.offroadNote = true
-  end
-  db.offroadOff108 = true
-end
-
--- Off-road shortcuts turned on by the player: they're experimental, said once a session.
-N.OFFROAD_WARNING = "Off-road shortcuts are experimental: a route may cross ground you can't walk (a cliff, a wall, " ..
-  "deep water) or change as the terrain around it is searched. If one looks wrong, turn them off (Options > Routes, " ..
-  "or /agps offroad off)."
-local offroadWarned = false
-function N.OffroadTurnedOn()
-  if offroadWarned then return false end
-  offroadWarned = true
-  if ns.Print then ns.Print(N.OFFROAD_WARNING) end
-  return true
-end
-
--- The player set offroad themselves: while in a city, left as they set it after.
-function N.OffroadSetByPlayer()
-  local st = ns.CharDB and ns.CharDB().cityOffroad
-  if st then st.touched = true end
-end
-
-function N.CityOffroad()
-  local gps = ns.settings and ns.settings.gps
-  if not gps or not ns.CharDB or not ns.CityLevels then return end
-  local city = N.CityHere()
-  if city == false then return end -- (loading: wait until the game says where we are)
-  -- (up top in its ruins too: the game reports the city's map there)
-  local name = city and ns.CityLevels[city].name
-  local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
-  if not city and map then
-    for id, l in pairs(ns.CityLevels) do
-      if l.map == map then city, name = id, l.name end
-    end
-    -- (a capital at ground level, Data/Capitals.lua: its streets are the way through it too)
-    for _, list in pairs(ns.Capitals or {}) do
-      for _, c in ipairs(list) do
-        if c[3] == map then city, name = c[2], c[1] end
-      end
-    end
-  end
-  local cdb = ns.CharDB()
-  local st = cdb.cityOffroad
-  if city then
-    name = name or "the city"
-    if not st then
-      cdb.cityOffroad = { was = gps.offroad and true or false, name = name }
-      if gps.offroad then
-        gps.offroad = false
-        OffroadChanged("Offroad mode off in " .. name .. ": routes keep to its streets. It comes back on when you leave.")
-      end
-    elseif gps.offroad then
-      st.touched = true -- the player turned it back on here: theirs from now on
-    end
-  elseif st then
-    cdb.cityOffroad = nil
-    if st.was and not st.touched and not gps.offroad then
-      gps.offroad = true
-      OffroadChanged("Offroad mode back on (left " .. (st.name or "the city") .. ").")
-    end
-  end
-end
-
 do -- a service's window opening (see N.SERVICES)
   local ok, f = pcall(CreateFrame, "Frame")
   if ok and f then
@@ -2339,19 +2269,6 @@ do -- a service's window opening (see N.SERVICES)
     f:SetScript("OnEvent", function(_, e)
       local px, py, cont = Geo.PlayerWorld()
       if N.OnService(e, px, py, cont) and ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
-    end)
-  end
-end
-
-do -- (checked when the zone or subzone changes, and after loading in)
-  local ok, f = pcall(CreateFrame, "Frame")
-  if ok and f then
-    for _, e in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
-      pcall(f.RegisterEvent, f, e)
-    end
-    f:SetScript("OnEvent", function(_, e)
-      local wait = e == "PLAYER_ENTERING_WORLD" and 2 or 0.2
-      if C_Timer then C_Timer.After(wait, N.CityOffroad) else N.CityOffroad() end
     end)
   end
 end
