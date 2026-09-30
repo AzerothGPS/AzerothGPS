@@ -3058,7 +3058,8 @@ def test_a_flight_master_passed_on_the_way_is_recommended(nav_env):
     # panel's own lines)
     steps = [N.Steps()[i] for i in range(1, len(N.Steps()) + 1)]
     k = next(i for i, t in enumerate(steps) if "learn the flight path at Tarren Mill" in t)
-    assert steps[k].startswith("|cffc08040Detour") and steps[k - 1].startswith("Walk") and k == len(steps) - 1
+    # (before the walk passing it: step 5 of 6, not after the walk's end at the stop)
+    assert steps[k].startswith("|cffc08040Detour") and steps[k + 1].startswith("Walk") and k == len(steps) - 2
     assert "learn the flight path" not in N.Status(2254.0, 293.0, 0)
     assert (hint.x, hint.y) == (-0.1, -859.9) and hint.rx and hint.ry
     ns.CharDB().faction = "Alliance"  # (not their faction's: Southshore's instead, near that walk too)

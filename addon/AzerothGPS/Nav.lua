@@ -86,6 +86,9 @@ local function Save()
   local ok = {}
   for z in pairs(N.redOk or {}) do ok[#ok + 1] = z end
   cdb.redOk = (#list > 0 and #ok > 0) and ok or nil
+  local skip = {}
+  for node in pairs(N.skipLearn or {}) do skip[#skip + 1] = node end
+  cdb.skipLearn = (#list > 0 and #skip > 0) and skip or nil
 end
 N.SaveStops = Save
 
@@ -215,7 +218,7 @@ end
 
 function N.SetStops(stops, fastest, force)
   if Locked(force) then return false end
-  if force ~= "red" then N.redOk = {} end -- (a new route: its zones asked about again)
+  if force ~= "red" then N.redOk, N.skipLearn = {}, {} end -- (a new route: its zones asked about again, its detours back)
   -- ("red": asked and confirmed; true: the dungeon route, its own)
   if not force and AskRed(stops, function() N.SetStops(stops, fastest, "red") end) then return false, true end
   N.stops, N.loop = {}, false
@@ -334,7 +337,7 @@ function N.Version() return version end
 
 function N.Clear()
   N.stops, N.loop = {}, false
-  N.redOk = {}
+  N.redOk, N.skipLearn = {}, {}
   Changed()
 end
 
@@ -349,6 +352,8 @@ function N.Restore()
   N.loop = cdb.loop and #N.stops > 1 or false
   N.redOk = {}
   for _, z in ipairs(#N.stops > 0 and cdb.redOk or {}) do N.redOk[z] = true end
+  N.skipLearn = {}
+  for _, node in ipairs(#N.stops > 0 and cdb.skipLearn or {}) do N.skipLearn[node] = true end
   N.dest = N.stops[1]
   N.route, N.arrivedAt = nil, nil
   version = version + 1
@@ -1941,6 +1946,7 @@ function N.Steps()
             or t.learn and string.format("Learn the flight path, then take the flight to %s", t[10])
             or string.format("Take the %s to %s", t[8], from == 1 and t[10] or t[9])
         elseif (leg.yards or 0) - (k == 1 and done or 0) >= N.STEP_MIN_YD or k == #legs then
+          Detour(leg) -- (the detour first: it's on the way, before the walk's end)
           local nxt = legs[k + 1]
           local dist = N.FormatDistance(math.max(0, (leg.yards or 0) - (k == 1 and done or 0)))
           if nxt and nxt.ride then
@@ -1950,7 +1956,6 @@ function N.Steps()
             steps[#steps + 1] = string.format("Walk %s to %s", dist, StopLabel(i, d, count))
               .. (count > 1 and took or "")
           end
-          Detour(leg)
         end
       end
     end
@@ -2315,6 +2320,14 @@ end
 -- and not with flights turned off.
 N.LEARN_NEAR_YD = 450 -- (Tarren Mill from the walk into Arathi: 390 yd off it)
 local mastersList
+-- Flight masters whose detour the player removed (right-click on its pin: GPSFrame): not suggested
+-- again on this route, rerouting or after a /reload (saved with the stops); a new route clears it.
+N.skipLearn = {}
+function N.SkipLearn(node)
+  N.skipLearn[node] = true
+  if N.route then N.route.learnAt = nil end
+  N.SaveStops()
+end
 function N.LearnOnRoute(r)
   local st = ns.settings and ns.settings.gps
   if not (r and r.parts) or r.flying or (st and st.useFlights == false) or N.corpse then return nil end
@@ -2330,7 +2343,7 @@ function N.LearnOnRoute(r)
   local cands = {}
   for _, e in ipairs(mastersList) do
     local m = e[2]
-    if not known[e[1]] and m[5] and string.find(m[5], fac, 1, true) then cands[#cands + 1] = e end
+    if not known[e[1]] and not N.skipLearn[e[1]] and m[5] and string.find(m[5], fac, 1, true) then cands[#cands + 1] = e end
   end
   local best
   local near2 = N.LEARN_NEAR_YD * N.LEARN_NEAR_YD

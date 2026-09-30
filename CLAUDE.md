@@ -370,6 +370,10 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - `test_every_addon_file_compiles_under_the_games_lua_5_1`: the 60-upvalue limit.
   - `test_terrain_hpa.py`: stale prepared terrain blocks.
   - `test_road_display.py`: roads vanishing zoomed out, or while being rebuilt after an edit.
+  - `test_map_redraw.py`: the map's setup and redraw, run under Lua 5.1 with a stand-in for the
+    game's UI (`tests/wowmock.lua`: add what a new game call needs there). In the game a redraw
+    failing is caught and nothing after the failing line is drawn (no route, no panel).
+  - `test_lua_lint.py`'s `truncated_and_or`: `x, y = a and f()` (only f's first value).
 
   Check that a new test fails without the fix before trusting it.
 - **Game side:**

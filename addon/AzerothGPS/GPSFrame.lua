@@ -1658,7 +1658,8 @@ local function StopPin(i)
   b:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(self.title, 1, 1, 1)
-    GameTooltip:AddLine("Right-click: remove this stop", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(self.learnNode and "Right-click: remove this detour (for this route)" or "Right-click: remove this stop",
+      0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)
@@ -1679,9 +1680,13 @@ local function DrawStopPins(toScreen, viewCont)
     local sx, sy = toScreen(x, y)
     n = n + 1
     local b = StopPin(n)
-    b.icon:SetTexture(ns.Nav.StopIcon(d))
+    if d.learnNode then -- (a flight master's detour: a brown square)
+      b.icon:SetColorTexture(G.DETOUR_COLOR[1], G.DETOUR_COLOR[2], G.DETOUR_COLOR[3], 1)
+    else
+      b.icon:SetTexture(ns.Nav.StopIcon(d))
+    end
     b.icon:SetAlpha(pendingIndex and 0.75 or 1)
-    b.title, b.pendingIndex, b.stopIndex = title, pendingIndex, stopIndex
+    b.title, b.pendingIndex, b.stopIndex, b.learnNode = title, pendingIndex, stopIndex, d.learnNode
     if G.clickThrough then
       b.agpsMouse = true -- restored when click-through ends
       b:EnableMouse(false)
@@ -1700,6 +1705,12 @@ local function DrawStopPins(toScreen, viewCont)
   end
   for i, d in ipairs(pending) do
     pin(d, "New stop " .. i .. " (not confirmed yet)", i)
+  end
+  -- the detour to a flight master not learned yet (Nav.LearnOnRoute): its pin, removable
+  local learn = ns.Nav.route and not ns.Nav.QuestPaused() and ns.Nav.LearnOnRoute(ns.Nav.route)
+  if learn then
+    pin({ cont = learn.cont, x = learn.x, y = learn.y, learnNode = learn.node },
+      "Detour: learn the flight path at " .. learn.name)
   end
   for i = n + 1, #stopPins do stopPins[i]:Hide() end
 end
@@ -3492,7 +3503,10 @@ function G.AskRemove(pin)
     removeAsk:SetFrameLevel(keepLayer:GetFrameLevel() + 6)
     removeAsk:SetScript("OnClick", function(self)
       self:Hide()
-      if self.pendingIndex then
+      if self.learnNode then -- (a detour: skipped for this route)
+        ns.Nav.SkipLearn(self.learnNode)
+        elapsed = 1
+      elseif self.pendingIndex then
         G.RemovePending(self.pendingIndex)
       elseif self.stopIndex then
         ns.Nav.RemoveStop(self.stopIndex)
@@ -3503,7 +3517,7 @@ function G.AskRemove(pin)
       if GetTime() - self.shownAt > 5 then self:Hide() end -- not taken up: go away
     end)
   end
-  removeAsk.pendingIndex, removeAsk.stopIndex = pin.pendingIndex, pin.stopIndex
+  removeAsk.pendingIndex, removeAsk.stopIndex, removeAsk.learnNode = pin.pendingIndex, pin.stopIndex, pin.learnNode
   removeAsk.shownAt = GetTime()
   removeAsk:ClearAllPoints()
   removeAsk:SetPoint("BOTTOM", pin, "TOP", 0, 2)
