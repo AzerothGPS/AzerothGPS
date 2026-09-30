@@ -25,6 +25,7 @@ ns.DEFAULTS = {
     showRoads = false, -- draw the road network the routes use (drawn roads too)
     -- show on the map
     poiTaxi = true, -- flight masters
+    showParty = true, -- party and raid members on the map (GPS.DrawParty)
     poiPoi = true, -- the world map's points of interest
     poiLabels = true, -- place names (when zoomed in)
     layerQuests = true, -- your quests' objectives and turn-ins

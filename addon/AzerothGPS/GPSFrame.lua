@@ -1724,6 +1724,75 @@ local function DrawStopPins(toScreen, viewCont)
   for i = n + 1, #stopPins do stopPins[i]:Hide() end
 end
 
+-- Party and raid members on the map (option showParty): a dot each in their class's color, their
+-- name when pointed at, only those in the map's view placed. Where they are comes through
+-- G.party.io.members(): { { name, cont, x, y, class }, ... } (the game's positions by default;
+-- the private dev addon, AzerothGPS_Dev, swaps in fake members to test this).
+G.party = { io = {} }
+G.PARTY_COLOR = { 0.4, 0.8, 1 }
+function G.party.io.members()
+  local out = {}
+  local raid = IsInRaid and IsInRaid()
+  for i = 1, raid and 40 or 4 do
+    local u = (raid and "raid" or "party") .. i
+    if UnitExists and UnitExists(u) and not (UnitIsUnit and UnitIsUnit(u, "player")) then
+      local ok, x, y, _, inst = pcall(UnitPosition, u)
+      if ok and x and y and not ns.IsSecret(x) and not ns.IsSecret(y) then
+        local _, class = UnitClass and UnitClass(u)
+        out[#out + 1] = { name = UnitName and UnitName(u) or u, cont = inst, x = x, y = y, class = class }
+      end
+    end
+  end
+  return out
+end
+local partyPins = {}
+function G.DrawParty(cx, cy, rot, s, viewCont)
+  local n = 0
+  if S().showParty ~= false and not G.Held() and canvas then
+    local half = canvas:GetWidth() / 2
+    local ok, list = pcall(G.party.io.members)
+    for _, m in ipairs(ok and list or {}) do
+      local x, y = Geo.ToContinent(m.cont, m.x, m.y, viewCont)
+      local sx, sy
+      if x then
+        local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
+        sx, sy = Geo.Rotate(dx * s, dy * s, rot)
+      end
+      if sx and math.abs(sx) <= half and math.abs(sy) <= half then
+        n = n + 1
+        local b = partyPins[n]
+        if not b then
+          b = CreateFrame("Button", nil, keepLayer)
+          b:SetSize(10, 10)
+          b:SetFrameLevel(keepLayer:GetFrameLevel() + 1)
+          b.edge = b:CreateTexture(nil, "ARTWORK")
+          b.edge:SetAllPoints()
+          b.edge:SetColorTexture(0, 0, 0, 1)
+          b.dot = b:CreateTexture(nil, "OVERLAY")
+          b.dot:SetPoint("TOPLEFT", 2, -2)
+          b.dot:SetPoint("BOTTOMRIGHT", -2, 2)
+          b:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.name or "?", 1, 1, 1)
+            GameTooltip:AddLine("Party member", 0.7, 0.7, 0.7)
+            GameTooltip:Show()
+          end)
+          b:SetScript("OnLeave", GameTooltip_Hide)
+          partyPins[n] = b
+        end
+        local c = RAID_CLASS_COLORS and m.class and RAID_CLASS_COLORS[m.class]
+        b.dot:SetColorTexture(c and c.r or G.PARTY_COLOR[1], c and c.g or G.PARTY_COLOR[2], c and c.b or G.PARTY_COLOR[3], 1)
+        b.name = m.name
+        b:ClearAllPoints()
+        b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
+        b:Show()
+      end
+    end
+  end
+  for i = n + 1, #partyPins do partyPins[i]:Hide() end
+  return n
+end
+
 local hiddenShown -- the dungeon whose map was put up because the game hides the player's position in it
 function G.Update()
   local st = S()
@@ -2032,6 +2101,7 @@ function G.Update()
     local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
     return Geo.Rotate(dx * s, dy * s, rot)
   end, viewCont)
+  G.DrawParty(cx, cy, rot, s, viewCont) -- (party members: G, not a local of this file's, the 60 limit)
   -- a farming area being drawn: its outline so far
   local lasso = G.lasso
   if lasso and lasso.cont == viewCont then

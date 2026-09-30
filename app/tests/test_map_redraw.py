@@ -287,3 +287,37 @@ def test_debug_probes_party_members_positions(game):
         assert "Tester" not in party.value
     finally:
         lua.execute("AGPS_PARTY = {}")
+
+
+def test_party_members_are_dots_on_the_map(game):
+    # (asked) party members on the map where the game gives their position: a dot each in their
+    # class's color; the option off: none
+    lua, ns = game
+    G = ns.GPS
+    st = ns.settings.gps
+    lua.execute("""
+      AGPS_PARTY = { party1 = { 2260, 300 } }
+      UnitExists = function(u) return AGPS_PARTY[u] ~= nil end
+      UnitIsUnit = function(a, b) return a == b end
+      IsInRaid = function() return false end
+      UnitClass = function(u) return "Mage", "MAGE" end
+      RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+      AGPS_POS_REAL = UnitPosition
+      UnitPosition = function(u)
+        local p = AGPS_PARTY[u]
+        if p then return p[1], p[2], 0, 0 end
+        return AGPS_POS_REAL(u)
+      end
+    """)
+    try:
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        dots = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
+        assert len(dots) == 1 and dots[0].name == "Tester"  # (the mock's UnitName)
+        st.showParty = False
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert not [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
+    finally:
+        st.showParty = True
+        lua.execute("AGPS_PARTY = {} UnitPosition = AGPS_POS_REAL")

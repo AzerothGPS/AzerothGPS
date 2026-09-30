@@ -79,7 +79,8 @@ The addon is going public, so every change must keep it policy-safe:
     Developer hooks for the private dev addon (`AzerothGPS_Dev`, repo AzerothGPS/AzerothGPS-Dev,
     checked out next to this one, installed with `agps install-addon --dev`, never shipped):
     `AzerothGPS_Extend(fn)` (Core.lua: fn(ns) after login), `Import.io.send` (the only way out),
-    `Import.OnAddonMessage` (messages in), `Import.Offer` (the popup). Keep them small; if the
+    `Import.OnAddonMessage` (messages in), `Import.Offer` (the popup), `GPS.party.io.members` (party
+    members' positions for the map's party dots, option `showParty`). Keep them small; if the
     dev addon needs more, add a hook here with a test rather than copying code there.
   - `Taxi.lua`: known flight masters, recorded flight times, the flight being taken. Zeppelins'
     and boats' timetables: Data/Transports.lua has each one's `cycle` (the server's, from the
