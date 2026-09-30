@@ -2945,6 +2945,19 @@ def test_route_takes_a_known_flight(nav_env):
     assert secs < 400  # vs ~15 minutes on foot
 
 
+def test_debug_tells_how_the_trip_was_planned(nav_env):
+    # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
+    # high, the flight masters known, the plan and the walk straight there
+    lua, ns = flights_env(nav_env, [10, 11])  # the Sepulcher, Undercity
+    load(lua, ns, "Data/Zones.lua", "GPSFrame.lua")
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("UnitLevel = function() return 14 end UnitPosition = function() return 290.0, 2060.0, 0, 0 end")
+    ns.Nav.SetDestination(-1050.0, -750.0, 0, "Arathi")
+    text = ns.Nav.DescribePlan()
+    assert "level=14" in text and "Arathi Highlands" in text and "flight masters known=2" in text
+    assert "plan " in text and "walk straight there" in text
+
+
 def test_a_flight_beats_a_walk_through_zones_too_high(nav_env):
     # (reported) level 13 from Tarren Mill into Western Plaguelands: the straight line looked a short
     # walk (over Alterac Mountains, 30-40), so no flight; the walk then went the long way round.

@@ -337,6 +337,7 @@ function ns.RunProbe(reason)
   add("Layers.state", function() return ns.Layers and ns.Layers.Describe() end)
   add("Arrow.state", function() return ns.Arrow and ns.Arrow.Describe() end)
   add("Teleports.state", function() return ns.Teleports and ns.Teleports.Describe() end)
+  add("Nav.plan", function() return ns.Nav and ns.Nav.DescribePlan() end)
   add("start errors", function() return table.concat(ns.initErrors or {}, " | ") end)
   add("C_Minimap", function()
     local names = {}

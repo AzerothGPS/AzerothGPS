@@ -652,6 +652,43 @@ function N.Plan(cont, px, py, speed, d, teleports)
   return legs, dist[2]
 end
 
+-- For a bug report (/agps debug): how the trip to the next stop is planned from here, and why:
+-- the character's level and the zones too high for it, the flight masters known, the plan and
+-- its time, the planned walk straight there, and the route as it stands.
+function N.DescribePlan()
+  local d = N.stops[1]
+  if not d then return "no stop" end
+  local px, py, cont = Geo.PlayerWorld()
+  if not px then return "no position" end
+  cont = N.PlayerLevel(cont)
+  local _, walk = N.Speeds()
+  local R = ns.Router
+  local red = R and R.RedZones and R.RedZones()
+  local names = {}
+  for z in pairs(red or {}) do names[#names + 1] = ns.Maps and ns.Maps[z] and ns.Maps[z].name or tostring(z) end
+  table.sort(names)
+  local _, known = N.KnownFlightNodes()
+  local legs, secs = N.Plan(cont, px, py, walk, d)
+  local steps = {}
+  for _, l in ipairs(legs or {}) do
+    steps[#steps + 1] = l.ride and ("ride " .. tostring(l.ride[10] or l.ride[8]) .. string.format(" %.0fs", l.ride[7] or 0))
+      or string.format("walk %.0f yd", math.sqrt((l.x2 - l.x1) ^ 2 + (l.y2 - l.y1) ^ 2))
+  end
+  local direct
+  if Geo.Base(d.cont) == Geo.Base(cont) and R and R.ZoneAt then
+    local exempt = { [R.ZoneAt(Geo.Base(cont), px, py)] = true, [R.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
+    direct = N.PlanYards(cont, px, py, d.x, d.y, false, exempt) * N.WALK_FACTOR / walk
+  end
+  local lvl = UnitLevel and UnitLevel("player")
+  local st = ns.settings and ns.settings.gps or {}
+  local r = N.route
+  return string.format("from (%d, %.0f, %.0f) to (%s, %.0f, %.0f) level=%s walk=%.1f avoidHigh=%s useFlights=%s "
+    .. "flight masters known=%s | too high: %s | plan %.0fs: %s | walk straight there %.0fs | route %s yd, rides %s s",
+    cont, px, py, tostring(d.cont), d.x, d.y, tostring(lvl), walk, tostring(st.avoidHighZones ~= false),
+    tostring(st.useFlights ~= false), tostring(known), table.concat(names, ", "), secs or -1, table.concat(steps, " > "),
+    direct or -1, r and string.format("%.0f", r.totalYards or 0) or "none", r and string.format("%.0f", r.totalRide or 0) or "-")
+end
+
 -- One stretch of the route, from (sx, sy) on `cont` to stop `d`: every walking leg routed
 -- over its own continent's roads, transport rides as straight dotted lines.
 -- { parts = { { cont, pts, kinds }, ... }, legs, first = yards before any ride,
