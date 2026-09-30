@@ -328,7 +328,7 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   `CONTINENTS` in `app/azerothgps/extract/pipeline.py`. New WoW Forever zones on their own
   map need adding there, then `agps extract` and `agps gen-addon-data`.
 - WoW Forever lives at `C:\Program Files (x86)\World of Warcraft\_classic_beta_`: product
-  `wow_classic_beta`, build 1.60.1.70009, interface 16001.
+  `wow_classic_beta`, build 1.60.1.70058, interface 16001.
 - `gen-addon-data` rewrites the date line in every data file. Revert the files whose only
   change is that line.
 
