@@ -3045,15 +3045,22 @@ def test_a_flight_master_learned_on_the_way_is_flown_to(nav_env):
 
 def test_a_flight_master_passed_on_the_way_is_recommended(nav_env):
     # (asked) the walk from the Sepulcher into Arathi goes by Tarren Mill's flight master, not
-    # learned yet: the directions say to learn it (the next trips may fly there); learned, not
+    # learned yet: a detour to learn it (a step, a brown line on the map; the next trips may fly
+    # there); learned, not
     lua, ns = _flight_env(nav_env, [10, 11])
     N = ns.Nav
     ns.CharDB().faction = "Horde"
     N.SetDestination(-1441.0, -2332.0, 0, "Arathi")
     r = N.Route(2254.0, 293.0, 0)
     hint = N.LearnOnRoute(r)
-    assert hint and hint.name == "Tarren Mill"
-    assert "learn the flight path at Tarren Mill" in N.Status(2254.0, 293.0, 0)
+    assert hint and hint.name == "Tarren Mill" and 350 < hint.off < 450
+    # (a detour: a step after the walk passing it, drawn brown to it from the route; not in the
+    # panel's own lines)
+    steps = [N.Steps()[i] for i in range(1, len(N.Steps()) + 1)]
+    k = next(i for i, t in enumerate(steps) if "learn the flight path at Tarren Mill" in t)
+    assert steps[k].startswith("|cffc08040Detour") and steps[k - 1].startswith("Walk") and k == len(steps) - 1
+    assert "learn the flight path" not in N.Status(2254.0, 293.0, 0)
+    assert (hint.x, hint.y) == (-0.1, -859.9) and hint.rx and hint.ry
     ns.CharDB().faction = "Alliance"  # (not their faction's: Southshore's instead, near that walk too)
     r.learnAt = None
     hint = N.LearnOnRoute(r)

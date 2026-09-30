@@ -877,7 +877,7 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       rode = true
     else
       local lr = routes[li]
-      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs }
+      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs, leg = leg }
       st.walk, st.road = st.walk + lr.length, st.road + lr.road
       if lr.pending then st.pending = true end
       leg.yards = lr.length
@@ -939,7 +939,7 @@ local function Follow(r, px, py, ahead)
     nz = { zs[bi] + (zs[bi + 1] - zs[bi]) * bt }
     for i = bi, #pts / 2 - 1 do nz[#nz + 1] = zs[i + 1] end
   end
-  local trimmed = { cont = full.cont, pts = np, kinds = nk, stop = full.stop, zs = nz }
+  local trimmed = { cont = full.cont, pts = np, kinds = nk, stop = full.stop, zs = nz, leg = full.leg }
   r.parts[1], r.pts, r.kinds = trimmed, np, nk
   r.followIdx, r.consumed = bi, consumed
   local b = r.base
@@ -1917,6 +1917,12 @@ function N.Steps()
   -- walking at mount speed while mounted, else run speed, plus transport rides
   local _, walk, mount, mounted = N.Speeds()
   local speed = mounted and mount or walk
+  local learn = N.LearnOnRoute(r)
+  local function Detour(leg)
+    if learn and learn.leg == leg then
+      steps[#steps + 1] = string.format("|cffc08040Detour %s to learn the flight path at %s|r", N.FormatDistance(learn.off), learn.name)
+    end
+  end
   for i, st in ipairs(r.stretches) do
     local d = N.stops[i]
     if st and d then
@@ -1940,6 +1946,7 @@ function N.Steps()
             steps[#steps + 1] = string.format("Walk %s to %s", dist, StopLabel(i, d, count))
               .. (count > 1 and took or "")
           end
+          Detour(leg)
         end
       end
     end
@@ -2289,11 +2296,6 @@ function N.Status(px, py, cont)
   end
   local hint = N.HeightText(px, py, cont)
   if hint then head = head .. "\n" .. hint end
-  local learn = N.LearnOnRoute(r)
-  if learn then
-    head = head .. string.format("\n|cff66ccffOn the way: learn the flight path at %s|r%s", learn.name,
-      learn.off > 30 and string.format(" (%s off the route)", N.FormatDistance(learn.off)) or "")
-  end
   if d.boss and cont == d.cont and math.sqrt((d.x - px) ^ 2 + (d.y - py) ^ 2) <= N.BOSS_NEAR_YD then
     head = string.format("|cffffd100Defeat %s|r\n", d.name or "the boss") .. head
   end
@@ -2301,9 +2303,12 @@ function N.Status(px, py, cont)
 end
 
 -- A flight master of the player's faction they haven't learned, by the route's walks still ahead
--- (within LEARN_NEAR_YD): { name, off = yards from the route }, or nil. Learned on the way, the next
--- trips may fly from it (Taxi.lua sees it on the flight map: the route is worked out again). Only
--- once a flight map has been seen (else what's known isn't), and not with flights turned off.
+-- (within LEARN_NEAR_YD): { name, off = yards from the route, leg = the walk passing it, cont, x, y =
+-- the flight master, rx, ry = the nearest point of the route }, or nil. A detour: a brown line on the
+-- map from the route to it (GPSFrame) and a step after that walk's (Steps); the route itself isn't
+-- changed. Learned on the way, the next trips may fly from it (Taxi.lua sees it on the flight map:
+-- the route is worked out again). Only once a flight map has been seen (else what's known isn't),
+-- and not with flights turned off.
 N.LEARN_NEAR_YD = 450 -- (Tarren Mill from the walk into Arathi: 390 yd off it)
 local mastersList
 function N.LearnOnRoute(r)
@@ -2338,7 +2343,8 @@ function N.LearnOnRoute(r)
             local t = L2 > 0 and math.max(0, math.min(1, ((m[2] - ax) * vx + (m[3] - ay) * vy) / L2)) or 0
             local d2 = (ax + vx * t - m[2]) ^ 2 + (ay + vy * t - m[3]) ^ 2
             if d2 <= near2 and (not best or d2 < best.d2) then
-              best = { name = (m[4]:match("^([^,]+)") or m[4]), off = math.sqrt(d2), d2 = d2, node = e[1] }
+              best = { name = (m[4]:match("^([^,]+)") or m[4]), off = math.sqrt(d2), d2 = d2, node = e[1],
+                leg = part.leg, cont = c, x = m[2], y = m[3], rx = ax + vx * t, ry = ay + vy * t }
             end
           end
         end

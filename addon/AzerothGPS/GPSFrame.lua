@@ -922,6 +922,7 @@ local ROAD_COLORS = { [0] = { 1, 0.35, 0.1 }, [1] = { 0.1, 0.9, 1 }, [2] = { 0.3
 -- Route segment kinds -> { color, width, dotted }: road, off-road, transport ride, far-side walk.
 local ROUTE_STYLE = { [0] = { 3, 5, false }, [1] = { 3, 4, true }, [2] = { 4, 4, true }, [3] = { 5, 3, true } }
 local DASH, GAP = 7, 5 -- off-road route legs are dotted (UI units)
+G.DETOUR_COLOR = { 0.62, 0.40, 0.18 } -- brown: the detour to a flight master not learned yet (Nav.LearnOnRoute)
 -- Dotted legs as one line each, with Media\Dash repeated along it (DASH on, GAP off per
 -- 32 pixels of the texture) instead of a line per dash. `/agps debug dashes` switches back
 -- to a line per dash (G.dashTexture = false).
@@ -1988,6 +1989,16 @@ function G.Update()
         end
       end
     end)
+    -- a flight master not learned yet by the route (Nav.LearnOnRoute): a brown line to it from the
+    -- route, a detour (listed in the steps)
+    local learn = not questing and ns.Nav.LearnOnRoute(route)
+    local lx1, ly1 = learn and Geo.ToContinent(learn.cont, learn.rx, learn.ry, viewCont)
+    local lx2, ly2 = learn and Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
+    if lx1 and lx2 then
+      local ax, ay = toScreen(lx1, ly1)
+      local bx, by = toScreen(lx2, ly2)
+      AddSeg(ax, ay, bx, by, G.DETOUR_COLOR, 3, 1, true, G.dashTexture and true or nil)
+    end
   end
   DrawStopPins(function(x, y)
     local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
