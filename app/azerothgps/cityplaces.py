@@ -114,3 +114,37 @@ def with_heights(text: str, maps: dict, spawns) -> tuple[str, int, list[str]]:
                 line = line[:e.start()] + f"{{ {e.group(1)}, {e.group(2)}, {qname}, {z:.1f} }}" + line[e.end():]
         out.append(line)
     return "\n".join(out) + "\n", n, missing
+
+
+def map_bounds() -> dict:
+    """uiMap -> (continent, bounds (x0, y0, x1, y1) as ns.Maps), from Data/Maps.lua."""
+    import lupa
+
+    lua = lupa.LuaRuntime()
+    lua.execute("ns = {}")
+    loader = lua.eval("function(src) return assert(load(src, '@Maps.lua')) end")
+    loader((ADDON_DIR / "Data" / "Maps.lua").read_text(encoding="utf-8"))("AzerothGPS", lua.globals().ns)
+    out = {}
+    Maps = lua.globals().ns.Maps
+    for k in Maps.keys():
+        m = Maps[k]
+        if m.bounds and m.continent is not None:
+            b = m.bounds
+            out[int(k)] = (int(m.continent), (b[1], b[2], b[3], b[4]))
+    return out
+
+
+def places(ui: int, maps: dict | None = None) -> list[tuple[str, float, float, float]]:
+    """A city's places with their heights (CityPlaces.lua, uiMap `ui`): (name, x, y, z) world."""
+    maps = maps or map_bounds()
+    cont, b = maps[ui]
+    out, cur = [], None
+    for line in FILE.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\s*\[(\d+)\] = \{ city", line)
+        if m:
+            cur = int(m.group(1))
+        e = ENTRY.search(line)
+        if e and cur == ui and e.group(4):
+            u, v = float(e.group(1)), float(e.group(2))
+            out.append((e.group(3).strip('"'), b[2] - v / 100 * (b[2] - b[0]), b[3] - u / 100 * (b[3] - b[1]), float(e.group(4))))
+    return out

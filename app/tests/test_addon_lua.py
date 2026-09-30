@@ -1567,8 +1567,8 @@ def test_down_in_undercity_the_route_starts_on_the_players_own_floor(nav_env):
     lua.execute(f"UnitPosition = function() return {start[1]}, {start[0]}, {-124.0 + zoff}, 0 end")
     assert abs(N.PlayerCityZ(UC) + 124) < 0.1
     r = R.Route(UC, start[0], start[1], stop[0], stop[1], lua.table(offroad=False, z=-124.0 + zoff, tz=-61.9))
-    near = [(r.pts[i], r.pts[i + 1]) for i in range(1, len(r.pts), 2)][1:3]
-    assert all(N.CityHeight(UC, x, y) < -118 for x, y in near)  # (on the bottom floor, not up the walkway)
+    near = [r.zs[i] - zoff for i in range(2, 4)]  # (the route's own heights: floors over floors)
+    assert all(z < -118 for z in near)  # (on the bottom floor, not up the walkway)
 
 
 def test_city_places_carry_their_npcs_height_to_the_stop(nav_env):
@@ -1591,6 +1591,40 @@ def test_city_places_carry_their_npcs_height_to_the_stop(nav_env):
 
 def N_bank(ns, UC):
     return ns.Nav.CityHeight(UC, 1598.0, 262.0)  # (the bank's floor, the model's own height)
+
+
+def test_undercitys_roads_are_on_floors_over_floors(nav_env):
+    # (reported) the Cooking trainer and Guild Master on the bank's level, a Warlock trainer on
+    # the Magic Quarter's lower floor, First Aid on its walkway: each place's own floor, reached
+    # by the roads on that floor (floors over floors), not the top floor over it
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    zoff = ns.CityLevels[UC].zoff
+    lift = (1545.3, 239.5, -104.0 + zoff)
+    # (the places: Cooking, Guild Master, a Warlock trainer, First Aid; and at most how long, from the
+    # south lift: the old top-floor network's were 240, 216, 611 and 463 yd; on foot over the floors,
+    # the Warlock's is 437)
+    for x, y, z, most in ((1590.5, 277.0, -55.3, 160), (1591.2, 204.5, -55.3, 150), (1780.3, 44.0, -61.4, 600),
+                          (1525.0, 171.4, -62.1, 160)):
+        r = R.Route(UC, lift[0], lift[1], x, y, lua.table(offroad=False, z=lift[2], tz=z))
+        n = len(r.pts) // 2
+        last_road = next(r.zs[i] for i in range(n - 1, 0, -1) if r.zs[i])
+        assert abs(last_road - z) <= 4, (x, y, z, last_road)  # (on the place's floor, not the one over it: 12 yd up)
+        assert r.length < most, (x, y, r.length)
+
+
+def test_no_undercity_road_climbs_steeper_than_a_stair(nav_env):
+    # (a stair between floors whose cells were joined in the wrong order jumped and doubled back:
+    # a road a yard long rising 13 yd. Between two nodes, no steeper than a stair.)
+    lua, ns, UC = undercity_env(nav_env)
+    e, g = ns.Router.Edges(UC)
+    steep = []
+    for i in range(1, len(e) + 1):
+        a, b, length = e[i][1], e[i][2], e[i][3]
+        dz = abs(g.z[a] - g.z[b])
+        if dz > 1.2 * length + 3:
+            steep.append((i, round(length, 1), round(dz, 1)))
+    assert len(steep) <= 0.02 * len(e), steep[:10]  # (a few quirks of the floors: 80 when the stairs' cells were in the wrong order)
 
 
 def test_undercity_lift_tops_are_up_top(nav_env):
@@ -1646,29 +1680,22 @@ def test_offroad_goes_off_in_undercity_and_back_after(nav_env):
 
 def test_undercity_walk_to_the_road_goes_round_walls(nav_env):
     # (reported) by a wall north of the Trade Quarter, heading for the bank: onto the road
-    # beside the player, not through the one-cell wall to the road past it
-    lua, ns, UC = undercity_env(nav_env)
-    R, P = ns.Router, ns.Passability
-    r = R.Route(UC, 1594.4, 170.0, 1595.6, 232.5, lua.table(offroad=False))
-    pts = r.pts
-    i = 1
-    while r.kinds[(i + 1) // 2] != 0:  # the walk onto the road
-        x1, y1, x2, y2 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
-        assert all(P.IsOpen(UC, x1 + (x2 - x1) * k / 10, y1 + (y2 - y1) * k / 10) for k in range(11))
-        i += 2
-
-
-def test_undercity_drops_off_ledges_only_when_safe(nav_env):
-    # the Trade Quarter's ring to the War Quarter side: jumping down off the ledge is the
-    # short way, when the fall is safe
+    # beside the player, not through the one-cell wall to the road past it. (Floors over floors:
+    # a short step onto a road on the player's own floor; the 3D walk of Undercity's routes
+    # over its floors is checked offline.)
     lua, ns, UC = undercity_env(nav_env)
     R = ns.Router
-    def drops(max_drop):
-        r = R.Route(UC, 1590.6, 204.0, 1658.9, 275.8, lua.table(offroad=False, maxDrop=max_drop))
-        return sum(1 for i in range(1, len(r.kinds) + 1) if r.kinds[i] == R.KIND_DROP), r.length
-    n0, len0 = drops(0)
-    n40, len40 = drops(40)
-    assert n0 == 0 and n40 > 0 and len40 < len0
+    zoff = ns.CityLevels[UC].zoff
+    here = ns.Nav.CityHeight(UC, 1594.4, 170.0)
+    r = R.Route(UC, 1594.4, 170.0, 1595.6, 232.5, lua.table(offroad=False, z=here + zoff, tz=-52.1))
+    first = ((r.pts[3] - r.pts[1]) ** 2 + (r.pts[4] - r.pts[2]) ** 2) ** 0.5
+    assert first <= 8 and abs(r.zs[2] - zoff - here) <= 3
+
+
+def test_a_safe_drop_depends_on_health(nav_env):
+    # (a drop off a ledge: taken when the fall is safe; health decides how far. Undercity's
+    # roads have none now: floors over floors, joined by their stairs and ramps)
+    lua, ns, UC = undercity_env(nav_env)
     # health decides how far: full health survives more than a sliver
     lua.execute("UnitHealth = function() return AGPS_HP end UnitHealthMax = function() return 100 end")
     lua.execute("AGPS_HP = 100")
@@ -1720,12 +1747,10 @@ def test_undercity_lower_level_walks_stay_on_their_floor(nav_env):
     # floor, not up onto the ring through its wall
     lua, ns, UC = undercity_env(nav_env)
     R, P = ns.Router, ns.Passability
-    r = R.Route(UC, 1541.9, 295.6, 1488.82, 278.71, lua.table(offroad=False))
-    pts, kinds = r.pts, r.kinds
-    first = (pts[3], pts[4])
-    assert abs(ns.Nav.CityHeight(UC, *first) - ns.Nav.CityHeight(UC, 1541.9, 295.6)) < 4
-    x1, y1 = pts[1], pts[2]
-    assert all(P.IsOpen(UC, x1 + (first[0] - x1) * k / 10, y1 + (first[1] - y1) * k / 10) for k in range(11))
+    zoff = ns.CityLevels[UC].zoff
+    here = ns.Nav.CityHeight(UC, 1541.9, 295.6)  # (the floor by the ring's foot)
+    r = R.Route(UC, 1541.9, 295.6, 1488.82, 278.71, lua.table(offroad=False, z=here + zoff, tz=-62.1))
+    assert abs(r.zs[2] - zoff - here) < 4  # (onto the road on the same floor)
 
 
 def test_city_places_show_after_talking_to_a_guard(nav_env):
@@ -2509,7 +2534,7 @@ def test_shipped_overrides_and_drawn_roads_draw_as_roads(router):
     assert colors == {0}
 
 
-def test_recorded_roads_keep_the_ruins_roads_and_city_drops(nav_env):
+def test_recorded_roads_keep_the_ruins_roads_and_the_citys(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua")
     ns.db = lua.eval("""{ tracks = {
@@ -2521,9 +2546,9 @@ def test_recorded_roads_keep_the_ruins_roads_and_city_drops(nav_env):
     found = any(abs(e[5] - 1882) < 2 and abs(e[6] - 236) < 2 or abs(e[len(e) - 1] - 1882) < 2 and abs(e[len(e)] - 236) < 2
                 for e in R.Edges(0)[0].values())
     assert found
-    # the city's drops still work with a record on its level
-    r = R.Route(10001, 1590.6, 204.0, 1658.9, 275.8, lua.table(offroad=False, maxDrop=40))
-    assert any(r.kinds[i] == R.KIND_DROP for i in range(1, len(r.kinds) + 1))
+    # the city's routes still work with a record on its level (its roads on floors over floors)
+    r = R.Route(10001, 1590.6, 204.0, 1658.9, 275.8, lua.table(offroad=False))
+    assert len(r.pts) > 4 and r.zs
 
 
 # ---- Opt-in feedback (Feedback.lua) ------------------------------------------------------------

@@ -121,13 +121,21 @@ The addon is going public, so every change must keep it policy-safe:
     off down there and back on after (`Nav.CityOffroad`, kept per character).
     The grid is each cell's top floor (heights interpolated per triangle, small floors over
     a lower one left out): walls standing on a floor close it, and so does a ledge's foot.
-    Stairs between levels are found in 3D and added as roads; drops off ledges are one-way
-    roads (`ns.RoadDrops`, taken when `Nav.SafeDrop()` allows). Also written: floor heights
+    Its roads are on every floor (floors over floors, `layers.py`, `cities.LAYERED`), from the
+    faces a character collides with (the MPY2 flags; collision faces are often wound upside
+    down, the drawn floors over them decoration): doorways' gaps in the floor filled
+    (`fill_seams`), stairs between floors traced through the floor voxels, each city place
+    (CityPlaces' heights) joined by a road over its floor (`spurs`), and roads added where the
+    floors go and the roads went round (`complete`). Each node has its height (Roads' `z`, the
+    game's: the model's plus `zoff`), and a road a node where its height bends: the Router takes
+    the level as layered (roads only; start and stop on their floors by the player's and the
+    stop's heights, `Nav.StopZ`; a lift's city end `z1`; legs off the roads dear past a few
+    yards, `LAYER_LEG_FACTOR`). No drops there now. Also written: floor heights
     (`ns.CityHeights`, for "below / above you"), and the Ruins of Lordaeron up top: a grid
     laid over the continent's (`ns.CityHalls[0]`, `overlay = true`: 0 open, 2 closed, 1 the
     continent's there; `Passability.Overlay`) and roads merged into the continent's
     (`ns.RoadOverlays`; continent roads through its walls are dropped). Check changes with a
-    3D walk of routes over the heights, not only the 2D grid.
+    3D walk of routes over the floors, every place to every other (not only the 2D grid).
   - `Data/Hostile.lua` (`app/azerothgps/hostile.py`, from the NPC data under
     `data/thirdparty` and the client's FactionTemplate): each faction's guards as circles
     (A: dangerous to Alliance players). Routes pay `Router.HOSTILE_FACTOR` per yard in the

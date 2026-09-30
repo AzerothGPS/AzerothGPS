@@ -666,7 +666,10 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
   local st = { parts = {}, legs = legs, first = 0, walk = 0, ride = 0, road = 0 }
   local rode = false
   local legZ = sz -- (the height the next walking leg starts at, when known)
-  for _, leg in ipairs(legs) do
+  -- (a ride's ends' heights, when known: a portal's end in its dungeon (iz, end 2), a lift's
+  -- down in its city (z1, end 1); the roads there are on floors over floors)
+  local function EndZ(t, e) return e == 1 and t.z1 or e == 2 and t.iz or nil end
+  for li, leg in ipairs(legs) do
     if leg.ride then
       local t = leg.ride
       local c1, x1, y1, c2, x2, y2 = t[1], t[2], t[3], t[4], t[5], t[6]
@@ -682,12 +685,14 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       end
       st.ride = st.ride + t[7]
       rode = true
-      legZ = leg.from == 1 and t.iz or nil -- (into a dungeon: where its portal puts you)
+      legZ = EndZ(t, leg.from == 1 and 2 or 1) -- (where it puts you: into a dungeon, down a lift)
     else
       local toStop = leg.x2 == d.x and leg.y2 == d.y
+      local nxt = legs[li + 1]
+      local endZ = toStop and N.StopZ(d) or (nxt and nxt.ride and EndZ(nxt.ride, nxt.from)) or nil
       local lr = ns.Router.Route(leg.cont, leg.x1, leg.y1, leg.x2, leg.y2,
-        LegOpts((opts.transient and leg.x1 == sx and leg.y1 == sy) and opts or opts.fixed, legZ, toStop and d.z or nil))
-      legZ = toStop and d.z or nil
+        LegOpts((opts.transient and leg.x1 == sx and leg.y1 == sy) and opts or opts.fixed, legZ, endZ))
+      legZ = toStop and endZ or nil
       st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs }
       st.walk, st.road = st.walk + lr.length, st.road + lr.road
       if lr.pending then st.pending = true end
@@ -784,7 +789,7 @@ function N.FlyingRoute(px, py, cont, walk, offroad, f)
     local laterSt = {}
     for i = 2, N.PlannedStops() do
       local a = N.stops[i - 1]
-      laterSt[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, { offroad = offroad, fixed = fixed }, a.z) or false
+      laterSt[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, { offroad = offroad, fixed = fixed }, N.StopZ(a)) or false
     end
     flyingRest = { key = key, st = rest, later = laterSt }
   end
@@ -921,7 +926,7 @@ local function FillLater(walk, offroad, budget)
       local opts = { offroad = offroad }
       opts.fixed = { offroad = offroad }
       if later.tp and later.tp[i] then opts.teleports = TeleportsFrom(a.cont, a.x, a.y, { [later.tp[i]] = true }) end
-      later[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, opts, a.z) or false
+      later[i] = Stretch(a.cont, a.x, a.y, N.stops[i], walk, opts, N.StopZ(a)) or false
       later.done[i] = true
       budget = budget - 1
     end
@@ -2107,6 +2112,15 @@ function N.CityHeight(level, x, y)
   if not b or b == 46 then return nil end -- (".": no floor)
   if b > 92 then b = b - 1 end -- (the backslash isn't used)
   return (b - 48) * h.step + h.z0
+end
+
+-- A stop's height, the game's: its own (a city place's, a boss's), or down in an underground
+-- city, the floor's under it (the most common near it: N.CityFloor); nil when unknown.
+function N.StopZ(d)
+  if d.z then return d.z end
+  local l = ns.CityLevels and ns.CityLevels[d.cont]
+  local h = l and l.zoff and N.CityFloor(d.cont, d.x, d.y)
+  return h and h + l.zoff or nil
 end
 
 -- The player's height in an underground city's own terms (its heights are the model's: the

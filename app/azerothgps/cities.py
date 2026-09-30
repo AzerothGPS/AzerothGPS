@@ -35,7 +35,14 @@ from .roads.terrain import encode_row
 TILE = 1600 / 3
 CELL = 2.0  # yards per grid cell
 UNDERCITY_ID = 10001  # the pseudo-continent of Undercity's level
+UNDERCITY_MAP = 1458  # its uiMap (Data/CityPlaces.lua)
 LIFT_SECONDS = 25  # waiting for a lift and the ride
+LIFT_Z = -104.0  # local z of the lifts' bottoms (the Trade Quarter's raised ring)
+LIFT_GAP = 12.0  # yards: a lift's platform joined to the floor out of its shaft across this at most
+Z_LOW, NB_BANDS = -150.0, 120  # local z: the city's lowest floor band (the Apothecarium's bottom, about -143), and bands up from it
+LAYERED = True  # Undercity's roads on every floor (layers.py), not the top one's in each cell
+Z_BEND = 1.5  # yards: a road's floor this far off the even change in height between its nodes: a node there
+LAYER_REACH = 6.0  # yards: a road node's floor, this near the height it was given
 CANAL_BED = -127.5  # local z: canal floors below this are water
 HIGH = -95.0  # local z: floors above this are arch tops and roofs (not the sewers)
 STREET = -125.0  # local z of the streets
@@ -179,17 +186,22 @@ def undercity(cd: ClientData, log=print) -> dict:
 
     floors, walls, gz = _floors(cd, p.wmo, names)
     under = {gi for gi, (lo, hi) in gz.items() if lo < -60}
-    keep = []  # (the floors down there: (world triangle, local heights, the sewers' own))
-    for gi, name, z, tri in floors:
-        if gi not in under:
-            continue
-        if name == "Sewers" or (z <= HIGH and not (name == "Canals" and z < CANAL_BED)):
-            keep.append(([world(v) for v in tri], [v[2] for v in tri], name == "Sewers"))
-    wl = [(zz, [world(v) for v in tri]) for gi, name, zz, tri in walls if gi in under and name != "Sewers"]
+
+    def down_there(floors, walls):
+        """The floors down there: (world triangle, local heights, the sewers' own); the walls."""
+        keep = []
+        for gi, name, z, tri in floors:
+            if gi not in under:
+                continue
+            if name == "Sewers" or (z <= HIGH and not (name == "Canals" and z < CANAL_BED)):
+                keep.append(([world(v) for v in tri], [v[2] for v in tri], name == "Sewers"))
+        wl = [(zz, [world(v) for v in tri]) for gi, name, zz, tri in walls if gi in under and name != "Sewers"]
+        return keep, wl
+    keep, wl = down_there(floors, walls)
     lq = [([world(q) for q in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))], lz)
           for gi, (x0, y0, x1, y1), lz in _liquids(cd, p.wmo) if gi in under]
     # (the sewers, which run over the streets, are walkable but not a level of the heights)
-    u = walknet.build(keep, wl, lq, label="Undercity", z0=-140.0, nb=110, log=log)
+    u = walknet.build(keep, wl, lq, label="Undercity", z0=Z_LOW, nb=NB_BANDS, log=log)
     g, tx0, ty0, cells, top = u["graph"], u["tx0"], u["ty0"], u["cells"], u["top"]
     is_open, height_at, floor_at, stair_z, debug = u["is_open"], u["height_at"], u["floor_at"], u["stair_z"], u["debug"]
 
@@ -208,6 +220,30 @@ def undercity(cd: ClientData, log=print) -> dict:
             lifts.append(tuple(pts[near].mean(0)))
     log(f"  Undercity: {len(lifts)} lifts at " + ", ".join(f"({x:.0f}, {y:.0f})" for x, y in lifts))
 
+    # floors over floors (layers.py): roads on every floor, not only the top one in each cell (a
+    # walkway over the bank's level, the canal walks under the bridges), from the faces a
+    # character collides with, either side up; doorways' gaps in the floor filled; the lifts'
+    # bottoms the ways in. Each road node's height: Roads' z (the game's: the model's + zoff).
+    layered = None
+    if LAYERED:
+        from . import layers
+        sfloors, swalls, _ = _floors(cd, p.wmo, names, solid=True)
+        skeep, swl = down_there(sfloors, swalls)
+        u2 = walknet.build(skeep, swl, lq, label="Undercity (floors over floors)", z0=Z_LOW, nb=NB_BANDS, log=lambda *a: None)
+        # (joins across gaps: only a lift's platform to the floor out of its shaft; the floors'
+        # gaps at doorways are filled, and a longer straight join is a way through the air)
+        # (and each of its places joined by a road over its floor: CityPlaces' heights, its NPCs')
+        from .cityplaces import places
+        spots = [(x, y, z - p.z) for _n, x, y, z in places(UNDERCITY_MAP)]
+        layered = layers.build(u2, [(x, y, LIFT_Z) for x, y in lifts], log=log, walls=swl, gap_max=LIFT_GAP,
+                               spurs=spots, completing=True)
+        layered["u"] = u2
+        lg = layered["graph"]
+        log(f"  Undercity: floors over floors: {len(layered['masks'])} layers, roads {len(lg.nodes)} nodes, "
+            f"{len(lg.edges)} edges, {lg.total_length():.0f} yd")
+        for x, y, z, why in layered["unjoined"]:
+            log(f"  Undercity: a place not joined to its floor's roads: ({x:.0f}, {y:.0f}) z {z:.0f}: {why}")
+
     # the Ruins of Lordaeron up top (the lifts' tops too): a grid and roads of their own
     # (the ruins' steps up into the throne room and the like are steep: counted as floors)
     rfloors, rwalls, _ = _floors(cd, p.wmo, names, RUINS_SLOPE)
@@ -219,7 +255,7 @@ def undercity(cd: ClientData, log=print) -> dict:
     log(f"  Undercity: up top: {', '.join(upper)}")
 
     map_id = next((r["ID"] for r in cd.table("UiMap") if (r.get("Name_lang") or "") == "Undercity"), 0)
-    return {"id": UNDERCITY_ID, "base": 0, "name": "Undercity", "map": map_id, "tx0": tx0, "ty0": ty0, "zoff": p.z,
+    return {"id": UNDERCITY_ID, "base": 0, "name": "Undercity", "map": map_id, "tx0": tx0, "ty0": ty0, "zoff": p.z, "layered": layered,
             "cells": cells, "graph": g, "lifts": lifts, "is_open": is_open, "upper": upper, "debug": debug, "hall": hall, "top": top, "wmo": p.wmo,
             "stair_z": stair_z, "floor_at": floor_at, "height_at": height_at}
 
@@ -522,7 +558,8 @@ _clear, _simplify, _unzig, _simplify_3d = walknet.clear, walknet.simplify, walkn
 
 def cities_lua(cd: ClientData, log=print) -> str:
     u = undercity(cd, log)
-    g, cells = u["graph"], u["cells"]
+    lay = u.get("layered")
+    g, cells = (lay["graph"] if lay else u["graph"]), u["cells"]
     # roads drawn down there in game (`agps roads` / `agps watch-roads` import them)
     from .paths import RESOURCES
     from .roads.graph import apply_overrides
@@ -541,6 +578,132 @@ def cities_lua(cd: ClientData, log=print) -> str:
            f"upper = {{ {', '.join('[' + chr(34) + n + chr(34) + '] = true' for n in u['upper'])} }} }}",
            "-- roads (the format of Data/Roads.lua)",
            f"ns.Roads[{u['id']}] = {{"]
+    if lay:
+        out += _layered_roads(u, lay)
+    else:
+        out += _flat_roads(u, g)
+    out.append("}")
+    out += _heights_and_rest(u, cells, drops=[] if lay else u["_drops"])
+    return "\n".join(out) + "\n"
+
+
+def _layered_roads(u: dict, lay: dict) -> list[str]:
+    """Roads on every floor: nodes, each one's height (the game's: the model's plus zoff), roads
+    simplified on their own floor (layers.roads), then laid on the floors: a yard at a time, each
+    point's height the floor's there nearest the last point's (a ramp's, a stair's), and a node
+    where that bends from an even change in height between the road's nodes (the addon takes a
+    road's height to change evenly between them) by more than Z_BEND."""
+    from . import layers
+    g, nz = lay["graph"], lay["node_z"]
+    for n, (x, y) in g.nodes.items():
+        if n not in nz:  # (a drawn road's new node: the top floor's height there, or the nearest node's)
+            h = u["height_at"](x, y)
+            if h is None:
+                near = min((m for m in g.nodes if m in nz), key=lambda m: math.hypot(g.nodes[m][0] - x, g.nodes[m][1] - y))
+                h = nz[near]
+            nz[n] = h
+    u2, f = lay["u"], lay["floors"]
+    NB, H, W = f.shape
+    Z0 = u2["Z0"]
+
+    def floor_near(x, y, z, reach=LAYER_REACH):
+        """The height of the floor at (x, y) nearest z (within `reach`), or None."""
+        cx, cy = u2["cellxy"](x, y)
+        r, c = int(cy), int(cx)
+        best = None
+        for rr in range(max(0, r - 1), min(H, r + 2)):
+            for cc in range(max(0, c - 1), min(W, c + 2)):
+                for b in np.nonzero(f[:, rr, cc])[0]:
+                    fz = Z0 + b + 0.5
+                    d = abs(fz - z) + (0 if (rr, cc) == (r, c) else 0.5)
+                    if d <= reach and (best is None or d < best[0]):
+                        best = (d, fz)
+        return best[1] if best else None
+
+    nodes, edges, _drops, zs = layers.roads(lay, u2, SMOOTH)
+    nodes = list(nodes)
+    # (each node on its floor: its layer's height there, else the floor nearest the one it was given)
+    node_ids = sorted(g.nodes)
+    for i, n in enumerate(node_ids):
+        L = lay["node_layer"].get(n)
+        h = None
+        if L in lay["masks"]:
+            r0, c0, _m = lay["masks"][L]
+            top = lay["tops"][L]
+            rr, cc = layers._px(u2, nodes[i])
+            rr, cc = rr - r0, cc - c0
+            if 0 <= rr < top.shape[0] and 0 <= cc < top.shape[1] and not np.isnan(top[rr, cc]):
+                h = float(top[rr, cc])
+        zs[i] = h if h is not None else (floor_near(nodes[i][0], nodes[i][1], zs[i]) or zs[i])
+    runs = []
+    for (a, b, pts), (eid, e) in zip(edges, g.edges.items()):
+        ez = lay["edge_z"].get(eid)
+        if e.source == "stair" and ez and len(ez) == len(e.pts):
+            # (a stair: its whole way, cell by cell, with its own heights: simplified in 2D, a
+            # stair down a ledge's steps became a step straight down)
+            dense = [tuple(nodes[a])] + [tuple(q) for q in e.pts[1:-1]] + [tuple(nodes[b])]
+            kept = [True] * len(dense)
+            hs = [zs[a]] + list(ez[1:-1]) + [zs[b]]
+        else:
+            # (a road on one floor: a point every yard along it, its own points kept, each at its
+            # floor's height there, else the floor nearest the last point's)
+            pts = [tuple(nodes[a])] + [tuple(q) for q in pts[1:-1]] + [tuple(nodes[b])]
+            dense, kept = [], []
+            for i in range(len(pts) - 1):
+                (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+                n = max(1, int(math.hypot(x2 - x1, y2 - y1)))
+                for s_ in range(n):
+                    dense.append((x1 + (x2 - x1) * s_ / n, y1 + (y2 - y1) * s_ / n))
+                    kept.append(s_ == 0)
+            dense.append(pts[-1])
+            kept.append(True)
+            on = layers.point_heights(lay, u2, eid, dense)
+            hs = [zs[a]]
+            for q, h in zip(dense[1:-1], on[1:-1]):
+                # (its floor's height, when that's a step on from the last point's: a point on a
+                # cell's edge can read the cell past a ledge; else the floor nearest the last one)
+                if h is None or abs(h - hs[-1]) > LEDGE + 1.0:
+                    h = floor_near(q[0], q[1], hs[-1], LEDGE + 1.0) or hs[-1]
+                hs.append(h)
+            hs.append(zs[b])
+        cum = [0.0]
+        for p_, q in zip(dense, dense[1:]):
+            cum.append(cum[-1] + math.hypot(q[0] - p_[0], q[1] - p_[1]))
+        ids = {0: a, len(dense) - 1: b}
+
+        def split(i, j):
+            if j - i < 2:
+                return
+            worst, at = Z_BEND, None
+            span = max(cum[j] - cum[i], 1e-6)
+            for m in range(i + 1, j):
+                dev = abs(hs[m] - (hs[i] + (hs[j] - hs[i]) * (cum[m] - cum[i]) / span))
+                if dev > worst:
+                    worst, at = dev, m
+            if at is not None:
+                nodes.append(dense[at])
+                zs.append(hs[at])
+                ids[at] = len(nodes) - 1
+                split(i, at)
+                split(at, j)
+        split(0, len(dense) - 1)
+        cuts = sorted(ids)
+        for i, j in zip(cuts, cuts[1:]):
+            way = [dense[i]] + [dense[m] for m in range(i + 1, j) if kept[m]] + [dense[j]]
+            runs.append((ids[i], ids[j], way))
+    out = ["  n = {" + ",".join(f"{x:.1f},{y:.1f}" for x, y in nodes) + "},",
+           "  z = {" + ",".join(f"{z + u['zoff']:.1f}" for z in zs) + "},",
+           "  e = {"]
+    for a, b, pts in runs:
+        length = sum(math.hypot(q[0] - p_[0], q[1] - p_[1]) for p_, q in zip(pts, pts[1:]))
+        out.append(f"    {{{a + 1},{b + 1},{length:.1f},0,{','.join(f'{x:.1f},{y:.1f}' for x, y in pts)}}},")
+    out.append("  },")
+    return out
+
+
+def _flat_roads(u: dict, g) -> list[str]:
+    """The top floor's roads (each cell's top floor: before floors over floors), and its drops."""
+    out = []
     order = {nid: i + 1 for i, nid in enumerate(sorted(g.nodes))}
     flat = ",".join(f"{g.nodes[nid][0]:.1f},{g.nodes[nid][1]:.1f}" for nid in sorted(g.nodes))
     out.append(f"  n = {{{flat}}},")
@@ -563,7 +726,12 @@ def cities_lua(cd: ClientData, log=print) -> str:
             pts = ",".join(f"{x:.1f},{y:.1f}" for x, y in _unzig(sm, u["is_open"], u["height_at"]))
         out.append(f"    {{{order[e.a]},{order[e.b]},{e.length:.1f},0,{pts}}},")
     out.append("  },")
-    out.append("}")
+    u["_drops"] = drops
+    return out
+
+
+def _heights_and_rest(u: dict, cells, drops: list) -> list[str]:
+    out = []
     # each cell's floor height, for "12 yd below": a character per cell, HEIGHT_STEP yards a
     # step up from HEIGHT_Z0 ("0" first); "." no floor. Rows as the grid's.
     out.append(f"-- floor heights (the model's own, relative): (byte - 48) * {HEIGHT_STEP:.0f} + {HEIGHT_Z0:.0f}; \".\" none")
@@ -609,8 +777,9 @@ def cities_lua(cd: ClientData, log=print) -> str:
         out.append(f"    {{{horder[e.a]},{horder[e.b]},{e.length:.1f},0,{pts}}},")
     out.append("  },")
     out.append("} }")
-    out.append("-- lifts to the Ruins of Lordaeron (as transports: city end, surface end)")
+    out.append("-- lifts to the Ruins of Lordaeron (as transports: city end, surface end; z1: the city end's")
+    out.append("-- height, the game's: the roads there are on floors over floors)")
     for x, y in u["lifts"]:
         out.append(f"ns.Transports[#ns.Transports + 1] = {{ {u['id']}, {x:.1f}, {y:.1f}, {u['base']}, {x:.1f}, {y:.1f}, "
-                   f"{LIFT_SECONDS}, \"lift\", \"Undercity\", \"Ruins of Lordaeron\", \"lift\" }}")
-    return "\n".join(out) + "\n"
+                   f"{LIFT_SECONDS}, \"lift\", \"Undercity\", \"Ruins of Lordaeron\", \"lift\", z1 = {LIFT_Z + u['zoff']:.1f} }}")
+    return out

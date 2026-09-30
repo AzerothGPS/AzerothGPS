@@ -30,6 +30,7 @@ R.ON_ROAD_MIN = 25 -- yards: shorter stretches along a road stay off-road
 R.NODE_LINKS = 8 -- offroad mode: straight shortcuts from each road node, one per direction
 R.NODE_LINK_MAX = 1500 -- yards
 R.LAYER_Z = 5 -- a dungeon's floors (roads with heights): a road this far above or below is another floor
+R.LAYER_LEG_FREE, R.LAYER_LEG_FACTOR = 3, 4 -- ...: a leg onto or off the roads, past this many yards, costs this per yard
 R.NODE_LINK_TRIES = 3 -- ... the nearest this many nodes tried in each direction (past rock, give that one up)
 R.NODE_LINK_MS = 12 -- ... worked out for this long per route calculation, the rest in the background (a long
 -- route's search reaches thousands of nodes: done at once, the game froze)
@@ -2089,6 +2090,10 @@ end
 function RouteBody(cont, sx, sy, tx, ty, opts)
   local grid = ns.Terrain and ns.Terrain[cont]
   local Pass = ns.Passability
+  -- (floors over floors, roads with heights, Undercity's: its grid is the top floor in each cell,
+  -- no guide to where a stop on another floor stands; its roads reach the places)
+  local g0 = Graph(cont)
+  if g0 and g0.z then grid = nil end
   -- a city's stop inside blocked cells: to the best open spot around it, then the last step
   if grid and grid.slack and Pass and not Pass.IsOpen(cont, tx, ty) then
     local t0 = ns.PerfStart and ns.PerfStart()
@@ -2259,7 +2264,12 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     local d = Dist(x1, y1, x2, y2)
     local c, path = d, nil
     if Pass and not layered then c = SegCost(cont, x1, y1, x2, y2) end
-    if layered then walk = false end
+    if layered then
+      walk = false
+      -- (floors over floors: the grid can't tell what's between, a wall or a gap down to the
+      -- floor below; the roads can, so onto the nearest one: past a few yards, dearer)
+      c = d + math.max(0, d - R.LAYER_LEG_FREE) * (R.LAYER_LEG_FACTOR - 1)
+    end
     -- (in a capital no walk around: the terrain grid's cells are coarser than its streets,
     -- and blind to its floors over each other; a leg there is straight, its walls real)
     local capital = not c and (R.CapitalAt(cont, x1, y1) or R.CapitalAt(cont, x2, y2))
