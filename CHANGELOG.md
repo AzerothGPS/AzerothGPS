@@ -2,6 +2,57 @@
 
 Each version's section is its release notes (GitHub and CurseForge).
 
+## 1.1.0
+
+For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so fully restart the game after updating, rather than just /reload.
+
+### New
+
+- **Joining the roads where they're heading:** off the road, a route now joins it where it's going (across open ground, around fences and buildings), not back at its nearest point and round. Walk off the way drawn to the road and it's worked out again from where you are, so the join point moves with you. A short walk over open ground goes straight. This replaces the experimental off-road shortcuts, and their option is gone.
+- **Flight paths to learn on the way:** when your walk passes a flight master of your faction you haven't learned, a brown line shows the detour to it and the steps list it where the walk passes ("Detour 388 yd to learn the flight path at Tarren Mill", or "Learn the flight path at … (on the way)"). Right-click the flight master's icon, **Remove?**, to skip it for this route.
+- **Use your hearthstone or a teleport from the directions:** when a route starts with one, a button with its icon sits in the directions panel's corner; your click uses it (nothing is ever used without it, and it hides in combat). New teleports: the engineers' **Dimensional Ripper - Everlook** and **Ultrasafe Transporter: Gadgetzan**. A hearthstone or teleport is only suggested when it saves more than 800 yd.
+- **Stops routed and drawn ahead** (Options → Routing, 1 to 8, default 3): how many stops are worked out and drawn at a time. Every stop keeps its marker and its place in the fastest order; the ones further on are listed with an estimated distance until they're routed. Fewer is less work for the addon.
+- **Party and raid members on the map,** as round class icons in their class's color (Options → Map, Party members). They don't need AzerothGPS themselves.
+- **Movement abilities in travel times:** Ghost Wolf, Travel Form, Cat Form with Feline Swiftness, and Aspect of the Cheetah or the Pack show their time beside walking, and become the walking time while on.
+- **The Deeprun Tram** between Stormwind and Ironforge, for Alliance characters.
+- **Undercity, floor by floor:** routes follow every floor (walkways over the bank's level, the canal walks under the bridges, the Magic Quarter's rooms), picked by your height and the stop's. Trips across the city are shorter, and no longer go through floors, over the canals' rims, or out over the Ruins' walls.
+- **Cave and mine entrances on the map** (double-click one for a stop), in the map menu's new **Caves/Dungeons/Raids** group.
+- **Blackwing Lair** (through Upper Blackrock Spire) and **WoW Forever's own dungeons and raids:** their maps, bosses and entrances. Entrances not known yet are learned when you go in; share them with **Copy Map Data...**.
+- **Zephras Isle on the world map:** a framed picture at the top; click it to open the island. On a continent's map, the zone under the pointer lights up.
+- **A route to another continent** is shown on the world map first, then the map follows you again.
+- **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the way ahead shows.
+- **Right-click inside a building** shows the outside view first; the next right-click, the continent's map.
+- **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
+- **More roads** on Eastern Kingdoms, drawn in game.
+- **For other addons:** API versions 3 to 8 (HoldMap, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
+
+### Changed
+
+- **Flights at a low level:** a flight is weighed against the walk as it's actually routed, not a straight line, so a route flies when walking would go the long way round zones too high for you (e.g. from Brill into Arathi Highlands at level 14).
+- Changing a route option (flight paths, the hearthstone, teleports, the zones or towns avoided) works the trip out again at once.
+- "Route there anyway?" is remembered for the route, also after a /reload.
+- The last stop clears as soon as you reach it.
+- With a stop down in Undercity, only the city's stops keep the order you placed them; the others go in the fastest order.
+- The map window sits under other windows.
+
+### Fixed
+
+- **Lag:**
+  - the first route after a /reload, and very long walks, are worked out in the background (no freeze);
+  - recalculating a route with a flight in it (up to 200 ms in game);
+  - riding a zeppelin or a boat no longer works the route out again all the way;
+  - the first road display after a /reload, and each road or wall edit.
+- A straight line over the hills could replace the roads after standing still for a while.
+- A flight could stop being suggested after a stop was added elsewhere and taken back.
+- Roads vanished from the map when zoomed out (road and wall tools).
+- Clicking the open sea on a continent's map opened a black terrain view.
+
+### Known limits
+
+- Party members show where the game gives their position: not inside dungeons.
+- In some dungeons with floors over floors (Blackrock Spire and Depths, Temple of Ahn'Qiraj) the gold line can still jump between floors in places.
+- Zeppelin and boat countdowns start once you've ridden that one (the game doesn't tell addons where they are).
+
 ## 1.0.7
 
 For WoW Forever client 1.60.1 (interface 16001). New data and image files are included, so fully restart the game after updating, rather than just /reload.

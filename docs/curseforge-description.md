@@ -8,7 +8,7 @@ _Double-click where you want to go, confirm, and follow the arrow._
 
 ## Routes that know the terrain
 
-When mountains or cliffs block the straight way, the route goes around them and in through the pass. It follows the roads, or takes off-road shortcuts across open ground (experimental, off by default); one button switches between them. A trip can have many stops, put in the fastest order.
+When mountains or cliffs block the straight way, the route goes around them and in through the pass. It follows the roads, and off the road it joins them where they're heading, not back at their nearest point; walk your own way and the join point moves with you. A trip can have many stops, put in the fastest order.
 
 ![A route around a mountain ridge and in through the pass to a walled-off valley](https://i.imgur.com/IyVpGiY.png)
 
@@ -40,10 +40,11 @@ Draw a trail the routes miss, or a wall they walk through, and routes use it rig
 
 ## Also
 
-- **Every way to travel:** flight paths (even ones you'll learn on the way), boats and zeppelins with arrival countdowns, the Deeprun Tram, your hearthstone and class teleports.
+- **Every way to travel:** flight paths (and a detour to learn the ones you pass), boats and zeppelins with arrival countdowns, the Deeprun Tram, your hearthstone, class teleports and engineers' teleporters, used with one click from the directions.
 - **Cities and caves:** every capital's streets, Undercity's floors and lifts, and 351 caves and mines.
 - **Dungeons and raids:** their maps floor by floor, bosses in order, a boss route.
 - **Staying safe:** routes go around the other faction's towns and zones too high for your level.
+- **Your party on the map:** party and raid members as class icons (they don't need the addon).
 - **Turn-by-turn directions**, with ETAs at your walking, mount or travel-form speed.
 - **TomTom `/way`** import and route sharing.
 - **Display only:** it never moves your character, clicks for you or automates anything.
