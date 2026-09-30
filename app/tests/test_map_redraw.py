@@ -366,7 +366,8 @@ def test_the_options_window_builds_with_its_performance_page(game):
     ns.Options.Show()
     texts = _texts(lua)
     for label in ("Performance", "Use Low-End Settings", "Restore Defaults", "Map redraws per second",
-                  "Work out a route you've left at most every", "Gentle background work", "Turn the arrow every frame"):
+                  "Work out a route you've left at most every", "Gentle background work", "Turn the arrow every frame",
+                  "Other settings to improve performance"):
         assert label in texts, label
     # (asked) the stops routed ahead on the Performance page only, not Routing's too
     assert texts.count("Stops routed and drawn ahead") == 1

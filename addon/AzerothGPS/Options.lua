@@ -884,7 +884,7 @@ local function BuildWindow()
   header("Direction arrow")
   check("Turn the arrow every frame", "On: the arrow turns with every frame, as smoothly as the game runs. Off: 20 times a second, less work at high frame rates.",
     function() return (GPS().arrowHz or 0) == 0 end, function(v) GPS().arrowHz = v and 0 or 20 end)
-  header("Also lighter")
+  header("Other settings to improve performance")
   note("Fewer icons on the map (Map > Show on the map, or the round button at the map's bottom-left): herbs, ore, quests and points of interest; quest areas' outlines off; and a smaller map.")
 
   ---------------------------------------------------------------- Road tools
