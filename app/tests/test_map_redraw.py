@@ -541,3 +541,57 @@ def test_the_performance_page_tells_the_addons_share_of_the_time(game):
         assert ns.PerfTotal() == 15
     finally:
         lua.execute("AGPS_NS.perf = AGPS_SAVED")
+
+
+def test_the_road_tools_show_the_roads_and_the_map_data_button_sits_under_undo(game):
+    # (asked) the road tools on show the road network (the wall tools the walls, as before); "Show
+    # extracted roads/walls" is a map button now, under Undo, showing both (or neither)
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    lua.execute("""
+      AGPS_ROADS = 0
+      local lay = AGPS_NS.GPS.LayoutRoads
+      AGPS_NS.GPS.LayoutRoads = function(...) AGPS_ROADS = AGPS_ROADS + 1 return lay(...) end
+    """)
+    try:
+        st.showRoads, st.showWalls, st.devTools, st.wallTools = False, False, True, True
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert lua.eval("AGPS_ROADS") == 0
+        G.SetRoadMode(True)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert lua.eval("AGPS_ROADS") > 0  # (the road tools on: the roads drawn)
+        G.SetRoadMode(False)
+        G.SetWallMode(True)
+        assert G.ShowsWalls()  # (the wall tools on: the walls)
+        G.SetWallMode(False)
+        assert not G.ShowsWalls()
+        # the button: under Undo, over the wall and road tools
+        ids = [str(t.id) for t in G.QuickSlots().values()]
+        tools = [i for i in ids if i in ("roadTools", "wallTools", "showMapData", "roadUndo")]
+        assert tools == ["roadTools", "wallTools", "showMapData", "roadUndo"]
+        assert G.ToggleMapData() and st.showRoads and st.showWalls
+        assert not G.ToggleMapData() and not st.showRoads and not st.showWalls
+    finally:
+        G.SetRoadMode(False)
+        G.SetWallMode(False)
+        st.showRoads, st.showWalls, st.devTools, st.wallTools = False, False, False, False
+
+
+def test_undo_takes_back_roads_and_walls_in_the_order_drawn(game):
+    # (asked) one Undo for both: the last change, road or wall, first
+    lua, ns = game
+    Rec = ns.Record
+    ns.db.tracks = lua.eval("{}")
+    road = lua.eval("{ op = 'add', drawn = true, continent = 0, time = 1000, pts = { 2200, 300, 2210, 300, 2220, 305 } }")
+    wall = lua.eval("{ op = 'wall', drawn = true, continent = 0, time = 1001, pts = { 2230, 320, 2240, 330 } }")
+    try:
+        Rec.Save(road)
+        Rec.Save(wall)
+        Rec.Undo()
+        assert [str(t.op) for t in ns.db.tracks.values()] == ["add"]  # (the wall, drawn last, first)
+        Rec.Undo()
+        assert len(ns.db.tracks) == 0
+    finally:
+        ns.db.tracks = lua.eval("{}")

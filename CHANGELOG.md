@@ -30,6 +30,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **Right-click inside a building** shows the outside view first; the next right-click, the continent's map.
 - **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
 - **More roads** on Eastern Kingdoms, drawn in game.
+- **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
 - **For other addons:** API versions 3 to 8 (HoldMap, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
@@ -49,6 +50,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
   - riding a zeppelin or a boat no longer works the route out again all the way;
   - the first road display after a /reload, and each road or wall edit.
 - Talking to a guard in Stormwind, Ironforge or Darnassus showed only the place you asked for: now all of that city's places show (trainers, the bank, the inn, the flight master and more), as in the Horde capitals.
+- Stormwind's map switched between the city's own map and the terrain as you zoomed: the inside map now shows only indoors (at any zoom), and the city's streets keep the outside map.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.
 - Roads vanished from the map when zoomed out (road and wall tools).

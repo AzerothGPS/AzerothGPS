@@ -92,11 +92,12 @@ function R.Delete(i)
   R.Changed()
 end
 
--- The last one taken back.
+-- The last one taken back: roads and walls (and their erasings) are one list, in the order drawn, so
+-- Undo takes back whichever came last.
 function R.Undo()
   local n = #Tracks()
   if n == 0 then
-    ns.Print("no drawn road to take back")
+    ns.Print("no drawn road or wall to take back")
     return
   end
   R.Delete(n)

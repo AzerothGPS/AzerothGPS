@@ -548,7 +548,7 @@ end
 -- Interiors (WMO minimaps; see app/azerothgps/interiors.py for the conventions)
 
 local Z_SLACK = 3 -- yards above/below a group's height range still counted as "in" it
-G.INTERIOR_MAX_ZOOM = 500 -- zoomed out further than this, show the outside view instead
+G.INTERIOR_MAX_ZOOM = 500 -- zoomed out further than this, show the outside view instead (not while indoors)
 
 -- Height range of the rooms in `w` named `name` (cached): the floor the minimap names.
 local function NamedBand(w, name)
@@ -604,7 +604,11 @@ function G.FindInterior(px, py, pz, cont, zoneText, indoors, cityZ, cityWmo)
         local inside = lx >= g[1] and lx <= g[4] and ly >= g[2] and ly <= g[5]
         local ok
         if haveZ then
+          -- (a model's outdoor pieces, a city's streets and squares (Stormwind's), are the outside:
+          -- only its indoor rooms, or where the game says indoors; down in an underground city,
+          -- any of its rooms)
           ok = inside and lz >= g[3] - Z_SLACK and lz <= g[6] + Z_SLACK
+            and (g["in"] or indoors or (cityZ ~= nil and p[1] == cityWmo))
         else
           local onFloor = band and g[6] >= band[1] - Z_SLACK and g[3] <= band[2] + Z_SLACK
           ok = inside and g["in"] and (named or indoors or onFloor)
@@ -1897,12 +1901,15 @@ function G.Update()
   -- (down in an underground city: its map anywhere over the city, not only round the player:
   -- zooming in on the cursor moved the view off them, and the outside map flipped in)
   local downCity = here and not onMe and G.DownInCityAt(cont, cx, cy)
+  -- (indoors, the inside map at any zoom, as the game's minimap: which map shows is up to indoors or
+  -- outdoors, not the zoom)
+  local indoors = IsIndoors and IsIndoors() and true or false
   if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and (onMe or downCity)
-      and zoom <= G.INTERIOR_MAX_ZOOM then
+      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors) then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)
-    place, wmo, room = G.FindInterior(px, py, pz, cont, GetMinimapZoneText and GetMinimapZoneText(), IsIndoors(),
+    place, wmo, room = G.FindInterior(px, py, pz, cont, GetMinimapZoneText and GetMinimapZoneText(), indoors,
       cityZ, city and city.wmo)
     -- an underground city's model while up top (the Ruins of Lordaeron): its art there is
     -- mostly black, so the outside map until down in the city
@@ -1998,7 +2005,8 @@ function G.Update()
   local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
   -- (an underground city's map: its level's roads; not over another inside map, a building's)
   G.shownLevel, G.shownCont = artLevel or viewCont, viewCont
-  if (st.showRoads or forced) and (not place or artLevel) then
+  -- (the road network: the option, the Show Roads and Walls button, or the road tools on)
+  if (st.showRoads or G.roadMode or forced) and (not place or artLevel) then
     for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or artLevel or viewCont, rot, zoom, half)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
     end
@@ -3386,6 +3394,17 @@ function G.ShowsWalls()
   return (S().showWalls or G.wallMode) and not G.Held() and true or false
 end
 
+-- The Show Roads and Walls button: the road network and the walls on the map, or neither (either on:
+-- both off).
+function G.ToggleMapData()
+  local on = not (S().showRoads or S().showWalls)
+  S().showRoads, S().showWalls = on, on
+  if G.RefreshQuick then G.RefreshQuick() end
+  if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
+  G.Redraw()
+  return on
+end
+
 -- A hold starting: every drawing tool off (they come back only when turned on again).
 function G.StopTools()
   if G.roadMode then G.SetRoadMode(false) end
@@ -4670,6 +4689,13 @@ function G.Init()
         if G.mapMenu then G.mapMenu:Hide() end
         G.ToggleWallMode()
       end },
+    { id = "showMapData", icon = "Interface\\Icons\\INV_Misc_Spyglass_02", label = "Show Roads and Walls", dev = true, wallDev = true,
+      tip = "Shows the road network the routes use and the walls they don't walk through (blood red: the terrain's cliffs, buildings and the walls drawn in), with the tools off too. The road tools show the roads while they're on, the wall tools the walls. (Shown with the road or wall tools)",
+      isOn = function() return S().showRoads or S().showWalls end,
+      action = function()
+        if G.mapMenu then G.mapMenu:Hide() end
+        G.ToggleMapData()
+      end },
     { id = "roadUndo", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", label = "Undo", dev = true, wallDev = true,
       tip = "Takes back your last drawn or erased road or wall (until it's in the data). (Shown with the road or wall tools)",
       action = function()
@@ -4692,7 +4718,7 @@ function G.Init()
   -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
   G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight",
-    city = "hidden", dungeonsG = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp" }
+    city = "hidden", dungeonsG = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp", showMapData = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).
   G.QUICK_GROUPS = {
@@ -4874,9 +4900,10 @@ function G.Init()
       if shown then out[#out + 1] = t end
       base[t.id] = i
     end
-    -- (the wall tools right above the road tools, and Undo above both)
+    -- (the wall tools right above the road tools, Show Roads and Walls above them, and Undo on top)
     local function key(t)
       if t.id == "roadUndo" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.7 end
+      if t.id == "showMapData" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.6 end
       if t.id == "wallTools" and base.roadTools then return (rank.roadTools or 1000 + base.roadTools) + 0.5 end
       return rank[t.id] or 1000 + base[t.id]
     end
