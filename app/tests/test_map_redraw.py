@@ -325,7 +325,7 @@ def test_party_members_are_dots_on_the_map(game):
 
 
 def test_party_members_show_their_class_icon(game):
-    # (asked) a class icon, not a plain dot: the game's own (atlas), else the class sheet cut to the
+    # (asked) a round class icon, not a plain dot: the game's own (atlas), else the class sheet cut to the
     # class; the dot's color only when neither is there
     lua, ns = game
     G = ns.GPS
@@ -348,5 +348,8 @@ def test_party_members_show_their_class_icon(game):
         G.Update()
         (pin,) = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
         assert pin.dot._tex == G.CLASS_SHEET
+        # (asked) round: the icon and its class-colored ring each cut to a circle by the portrait mask
+        for part in (pin.dot, pin.edge):
+            assert part._masks and part._masks[1]._tex == G.ROUND_MASK
     finally:
         lua.execute("AGPS_PARTY = {} UnitPosition = AGPS_POS_REAL CLASS_ICON_TCOORDS = nil")

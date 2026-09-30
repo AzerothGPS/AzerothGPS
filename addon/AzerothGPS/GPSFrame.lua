@@ -1764,6 +1764,17 @@ function G.ClassIcon(tex, class)
   end
   return false
 end
+-- `tex` cut to a circle (the game's portrait mask, as the map's round buttons); left square where
+-- masks aren't there
+G.ROUND_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+function G.MakeRound(owner, tex)
+  if not (owner.CreateMaskTexture and tex.AddMaskTexture) then return false end
+  local mask = owner:CreateMaskTexture()
+  mask:SetAllPoints(tex)
+  mask:SetTexture(G.ROUND_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  tex:AddMaskTexture(mask)
+  return true
+end
 function G.DrawParty(cx, cy, rot, s, viewCont)
   local n = 0
   if S().showParty ~= false and not G.Held() and canvas then
@@ -1772,7 +1783,7 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
     for _, m in ipairs(ok and list or {}) do
       local x, y = Geo.ToContinent(m.cont, m.x, m.y, viewCont)
       local sx, sy
-      if x then
+      if x and y then
         local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
         sx, sy = Geo.Rotate(dx * s, dy * s, rot)
       end
@@ -1783,11 +1794,13 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
           b = CreateFrame("Button", nil, keepLayer)
           b:SetSize(16, 16)
           b:SetFrameLevel(keepLayer:GetFrameLevel() + 1)
-          b.edge = b:CreateTexture(nil, "ARTWORK") -- (a thin frame in the class's color)
+          b.edge = b:CreateTexture(nil, "ARTWORK") -- (a thin ring in the class's color)
           b.edge:SetAllPoints()
           b.dot = b:CreateTexture(nil, "OVERLAY") -- (the class's icon, or its color)
-          b.dot:SetPoint("TOPLEFT", 1, -1)
-          b.dot:SetPoint("BOTTOMRIGHT", -1, 1)
+          b.dot:SetPoint("TOPLEFT", 1.5, -1.5)
+          b.dot:SetPoint("BOTTOMRIGHT", -1.5, 1.5)
+          G.MakeRound(b, b.edge)
+          G.MakeRound(b, b.dot)
           b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(self.name or "?", 1, 1, 1)

@@ -63,6 +63,7 @@ M.GetChecked = function(s) return s._checked or false end
 M.SetChecked = function(s, v) s._checked = v end
 M.SetTexture = function(s, t) s._tex = t end
 M.GetTexture = function(s) return s._tex end
+M.AddMaskTexture = function(s, m) s._masks = s._masks or {} s._masks[#s._masks + 1] = m end
 M.SetColorTexture = function(s, r, g, b) s._tex = string.format("color:%.2f,%.2f,%.2f", r, g, b) end
 M.GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end
 M.GetTextColor = function() return 1, 1, 1, 1 end
