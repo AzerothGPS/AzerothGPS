@@ -11,7 +11,13 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **Joining the roads where they're heading:** off the road, a route now joins it where it's going (across open ground, around fences and buildings), not back at its nearest point and round. Walk off the way drawn to the road and it's worked out again from where you are, so the join point moves with you. A short walk over open ground goes straight. This replaces the experimental off-road shortcuts, and their option is gone.
 - **Flight paths to learn on the way:** when your walk passes a flight master of your faction you haven't learned, a brown line shows the detour to it and the steps list it where the walk passes ("Detour 388 yd to learn the flight path at Tarren Mill", or "Learn the flight path at … (on the way)"). Right-click the flight master's icon, **Remove?**, to skip it for this route.
 - **Use your hearthstone or a teleport from the directions:** when a route starts with one, a button with its icon sits in the directions panel's corner; your click uses it (nothing is ever used without it, and it hides in combat). New teleports: the engineers' **Dimensional Ripper - Everlook** and **Ultrasafe Transporter: Gadgetzan**. A hearthstone or teleport is only suggested when it saves more than 800 yd.
-- **Stops routed and drawn ahead** (Options → Routing, 1 to 8, default 3): how many stops are worked out and drawn at a time. Every stop keeps its marker and its place in the fastest order; the ones further on are listed with an estimated distance until they're routed. Fewer is less work for the addon.
+- **Performance options** (Options → Performance) for slower PCs, with how much of the time AzerothGPS is using shown live:
+  - **Map redraws per second** (5 to 30, default 20): the biggest saving; at 10 the map needs about half the work.
+  - **Work out a route you've left at most every** 2 to 10 seconds.
+  - **Stops routed and drawn ahead** (1 to 8, default 3): how many stops are worked out and drawn at a time. Every stop keeps its marker and its place in the fastest order; the ones further on are listed with an estimated distance until they're routed.
+  - **Gentle background work:** fewer stutters, while routes take a moment longer to appear.
+  - **Turn the arrow every frame,** or 20 times a second.
+  - **Use Low-End Settings** sets them all lighter at once; **Restore Defaults** puts them back.
 - **Party and raid members on the map,** as round class icons in their class's color (Options → Map, Party members). They don't need AzerothGPS themselves.
 - **Movement abilities in travel times:** Ghost Wolf, Travel Form, Cat Form with Feline Swiftness, and Aspect of the Cheetah or the Pack show their time beside walking, and become the walking time while on.
 - **The Deeprun Tram** between Stormwind and Ironforge, for Alliance characters.

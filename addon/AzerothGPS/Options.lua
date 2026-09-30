@@ -362,7 +362,7 @@ local function ShowShareInfo()
 end
 O.ShowShareInfo = ShowShareInfo
 
--- Stops routed ahead (Routing and Performance pages): the trip worked out again with it.
+-- Stops routed ahead (the Performance page): the trip worked out again with it.
 function O.SetStopsAhead(v)
   GPS().stopsAhead = v
   ns.Nav.Invalidate(true)
@@ -790,8 +790,6 @@ local function BuildWindow()
       GPS().avoidHostile = v
       ns.Nav.OptionsChanged()
     end)
-  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
-  note("Every stop is still in the fastest order and on the map. The stops past these are listed with an estimated distance until they're routed. Fewer routed stops is less work for the addon.")
   check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
     function() return GPS().fastestOrder end, function(v)
       GPS().fastestOrder = v
@@ -880,6 +878,7 @@ local function BuildWindow()
     function(v) GPS().rerouteSeconds = v end)
   note("Off the route (fighting, gathering, or going your own way), it's worked out again from where you are. Less often is less work; the route catches up with you a little later.")
   slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
+  note("How many of the route's stops are worked out and drawn at a time; the next come in as you reach them. Every stop is still in the fastest order and on the map, and the ones further on are listed with an estimated distance until they're routed.")
   check("Gentle background work", "Walks around obstacles and the road data (after a /reload) are worked out in smaller slices of each frame: fewer stutters on a slow PC. The first route after a /reload, and walks off the roads, take a little longer to appear.",
     function() return GPS().gentleBackground end, function(v) GPS().gentleBackground = v end)
   header("Direction arrow")

@@ -368,7 +368,8 @@ def test_the_options_window_builds_with_its_performance_page(game):
     for label in ("Performance", "Use Low-End Settings", "Restore Defaults", "Map redraws per second",
                   "Work out a route you've left at most every", "Gentle background work", "Turn the arrow every frame"):
         assert label in texts, label
-    assert texts.count("Stops routed and drawn ahead") == 2  # (Routing's, and Performance's: the same setting)
+    # (asked) the stops routed ahead on the Performance page only, not Routing's too
+    assert texts.count("Stops routed and drawn ahead") == 1
 
 
 def test_low_end_settings_and_back(game):

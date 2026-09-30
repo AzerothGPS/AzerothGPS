@@ -419,7 +419,7 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - **Options > Performance** (for slower PCs): `hz` (map redraws per second: the biggest saving,
     about half the redraw work at 10), `rerouteSeconds` (`Nav.RerouteTiming`: a route the player
     left is worked out again at most this often; the yards moved and the finished-search
-    recalculation scale with it), `stopsAhead` (the Routing slider, shown here too),
+    recalculation scale with it), `stopsAhead` (stops routed and drawn ahead: only on this page),
     `gentleBackground` (`GPS.PumpBudget`: smaller background slices, `GENTLE_*`) and `arrowHz` (the
     arrow turned that often; 0: every frame). "Use Low-End Settings" (`Options.LOW_END`) and
     "Restore Defaults" set them. The page shows the addon's share of the time from `ns.PerfTotal`,

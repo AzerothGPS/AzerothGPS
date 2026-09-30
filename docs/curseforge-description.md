@@ -47,6 +47,7 @@ Draw a trail the routes miss, or a wall they walk through, and routes use it rig
 - **Your party on the map:** party and raid members as class icons (they don't need the addon).
 - **Turn-by-turn directions**, with ETAs at your walking, mount or travel-form speed.
 - **TomTom `/way`** import and route sharing.
+- **Light on slower PCs:** a Performance page with a one-click low-end preset.
 - **Display only:** it never moves your character, clicks for you or automates anything.
 
 ## Getting started
