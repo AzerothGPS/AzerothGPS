@@ -1638,6 +1638,12 @@ def test_a_route_to_another_continent_is_overviewed_on_the_world_map(nav_env):
     assert not G.TourAcrossContinents(0)
     N.stops = lua.eval("{ { x = 1590, y = 277, cont = 10001 } }")  # down in Undercity: on it too
     assert not G.TourAcrossContinents(0)
+    # (reported, a recording) a stop on this continent reached through the other one (Tirisfal to
+    # Riverglades by the zeppelins through Durotar): the world map too
+    N.stops = lua.eval("{ { x = -12000, y = 200, cont = 0 } }")
+    N.route = lua.eval("{ parts = { { cont = 0, pts = {} }, { cont = 1, pts = {} }, { cont = 0, pts = {} } } }")
+    assert G.TourAcrossContinents(0)
+    N.route = None
 
 
 def test_undercity_lift_tops_are_up_top(nav_env):

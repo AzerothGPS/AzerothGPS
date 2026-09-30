@@ -3005,15 +3005,22 @@ local function Overview(px, py, cont)
   return (minX + maxX) / 2, (minY + maxY) / 2, math.max(MIN_ZOOM, half * 1.35) -- margin for rotation
 end
 
--- Whether the route's stops reach another continent than the player's (a boat or a zeppelin
--- over): its overview is the world map's, not the continent's.
+-- Whether the route goes to another continent than the player's (a boat or a zeppelin over),
+-- its stops or its way (a stop on this continent reached through the other one: from Tirisfal to
+-- Riverglades by the zeppelins through Durotar): its overview is the world map's, not the
+-- continent's (whose art stops at its coasts).
 function G.TourAcrossContinents(cont)
   local here = Geo.Base(cont)
+  local function other(c)
+    return c and Geo.Base(c) ~= here and not (ns.CityLevels and ns.CityLevels[c] and ns.CityLevels[c].instance)
+  end
   for i = 1, #ns.Nav.stops do
     local d = ns.Nav.stops[i]
-    if d and d.cont and Geo.Base(d.cont) ~= here and not (ns.CityLevels and ns.CityLevels[d.cont] and ns.CityLevels[d.cont].instance) then
-      return true
-    end
+    if d and other(d.cont) then return true end
+  end
+  local r = ns.Nav.route
+  for _, part in ipairs(r and r.parts or {}) do
+    if other(part.cont) then return true end
   end
   return false
 end
