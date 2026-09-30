@@ -1199,12 +1199,22 @@ def test_road_data_warms_up_in_the_background(nav_env):
         longest = max(longest, clock() - t0)
         steps += 1
     assert steps > 5 and longest < 25  # built in slices (generous: lupa timing is coarse)
+    # (then the route itself, worked out in the background too: no frame waits on it)
+    assert N.Route(1350.0, 150.0, 0) is None and "Working out" in N.Status(1350.0, 150.0, 0)
+    while R.HasWork():
+        t0 = clock()
+        R.Pump(t0 + 1, clock)
+        longest = max(longest, clock() - t0)
+    assert longest < 25
     r = N.Route(1350.0, 150.0, 0)
     assert r and r.totalYards > 1000
     # another continent while its warm-up can't run: after WARM_WAIT, worked out anyway
     N.SetDestination(-600.0, -4180.0, 1)
     assert N.Route(-800.0, -4400.0, 1) is None
     lua.execute("AGPS_T = 10")
+    N.Route(-800.0, -4400.0, 1)
+    while R.HasWork():
+        R.Pump(clock() + 5, clock)
     assert N.Route(-800.0, -4400.0, 1)
 
 

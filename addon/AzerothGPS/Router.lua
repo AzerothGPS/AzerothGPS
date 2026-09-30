@@ -1091,7 +1091,7 @@ function BuildGraph(cont)
   local edgeZones, hasZones = {}, ns.Zones and ns.Zones[cont] ~= nil -- [edge] = { [zone] = yards }
   local side = HostileSide()
   for ei, e in ipairs(edges) do
-    Breathe(ei, 100)
+    Breathe(ei, 20) -- (each road: the guards and zones along it)
     local a, b, len = e[1], e[2], e[3]
     adj[a] = adj[a] or {}
     adj[b] = adj[b] or {}
@@ -1359,7 +1359,7 @@ function R.HasWork() return walkJobs[1] ~= nil end
 -- Other work in the background, pumped with the searches: fn() (it may route: a route's search
 -- pauses every ROUTE_BREATHE nodes when run here), then done(result) with what it returned. One
 -- job per key at a time. (Tests, SYNC_WALKS: at once.) False when that key's job is queued already.
-R.ROUTE_BREATHE = 150
+R.ROUTE_BREATHE = 10
 function R.Background(key, fn, done)
   if walkQueued[key] then return false end
   if R.SYNC_WALKS then
@@ -1984,7 +1984,8 @@ local function Build(g, pieces)
     end
   end
   local blocked = 0 -- (yards straight over ground the terrain blocks: a leg no walk around was found for)
-  for _, p in ipairs(pieces) do
+  for pi, p in ipairs(pieces) do
+    Breathe(pi, 12) -- (in a background job: a pause now and then)
     if p.edge then
       local kind = g.drops and g.drops[p.edge] and R.KIND_DROP or R.KIND_ROAD
       for _, q in ipairs(EdgePoints(g.e[p.edge], p.from, p.to)) do add(q[1], q[2], kind, zs and R.EdgeZ(g, p.edge, q[3])) end
@@ -2085,8 +2086,10 @@ function R.Smooth(cont, r)
   local function P(i) return pts[2 * i - 1], pts[2 * i] end
   local smoothable = { [R.KIND_ROAD] = true, [R.KIND_OFFROAD] = true }
   local out, ok = { pts[1], pts[2] }, {}
-  local i = 1
+  local i, steps = 1, 0
   while i < n do
+    steps = steps + 1
+    Breathe(steps, 10) -- (in a background job: a pause now and then; each step checks the ground)
     local best
     local k = kinds[i]
     if smoothable[k] then
@@ -2255,6 +2258,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     return v
   end
   local direct = not Pass or Pass.SegmentCost(cont, sx, sy, tx, ty)
+  Breathe(1, 1)
   -- a dungeon's floors over floors (roads with heights): the start and the stop on theirs
   -- (opts.z / opts.tz), no shortcuts off the roads (the terrain grid is only the top floor),
   -- and straight only on one floor
@@ -2266,6 +2270,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   -- (straight past the other faction's guards isn't a way to go if there's another)
   if direct and R.HostileYards(cont, sx, sy, tx, ty) > 0 then direct = nil end
+  Breathe(1, 1)
   -- (straight at once when it's open, unless through a zone too high for the player: then it's
   -- weighed against the ways round, below)
   local directSafe = direct and DangerLine(sx, sy, tx, ty) == 0
@@ -2601,6 +2606,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
           if not b.open and (R.CapitalAt(cont, x, y) or R.CapitalAt(cont, mx, my)) then b.shut = true end
           if not b.open and Pass and Pass.CrossesWall and Pass.CrossesWall(cont, x, y, mx, my) then b.shut = true end
           b.cost = ((c or b[2] * blockedPenalty(x, y, mx, my)) + HostileExtra(cont, x, y, mx, my)) * R.OFFROAD_PENALTY
+          Breathe(1, 1) -- (a link costed the first time: the ground along it, the guards: a pause after, in a background job)
         end
         if not b.shut then
           if red and b.zy == nil then b.zy = R.ZoneYards(cont, x, y, mx, my) end
@@ -2659,6 +2665,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
     end
   end
+  Breathe(1, 1) -- (the search done: in a background job, a pause before the rest)
   if not gscore[GOAL] then -- not connected
     local res = Straight(g, sx, sy, tx, ty)
     res.pending, res.unconnected = pending, true -- (no way there on foot found: a line across)

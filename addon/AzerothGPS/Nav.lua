@@ -612,6 +612,8 @@ function N.Plan(cont, px, py, speed, d, teleports, direct)
   local Rt = ns.Router
   local exempt = Rt and Rt.ZoneAt and { [Rt.ZoneAt(Geo.Base(cont), px, py)] = true, [Rt.ZoneAt(Geo.Base(d.cont), d.x, d.y)] = true }
   local dist, prev, rode, done = { [1] = 0 }, {}, {}, {}
+  local breathe = ns.Router and ns.Router.Breathe
+  local expanded = 0
   while true do
     local u, best
     for i in pairs(dist) do
@@ -619,6 +621,8 @@ function N.Plan(cont, px, py, speed, d, teleports, direct)
     end
     if not u or u == 2 then break end
     done[u] = true
+    expanded = expanded + 1
+    if breathe then breathe(expanded, 1) end -- (in a background job: a pause after each place: each weighs them all)
     local a = nodes[u]
     for v, b in ipairs(nodes) do
       if not done[v] then
@@ -1361,6 +1365,97 @@ function N.StopLevel(cont, x, y)
   return cont
 end
 
+local Apply, Rejoin
+-- The route from (px, py) worked out: the stretch to the next stop and those after it (a few more
+-- each call), assembled; nil when there's no way.
+local function Compute(px, py, cont, d, offroad)
+  local _, walk = N.Speeds()
+  local key = version .. ":" .. tostring(offroad)
+  if later.key ~= key then later = { key = key, done = {} } end
+  local tps = AssignTeleports(cont, px, py, d, walk)
+  if ns.Router.Breathe then ns.Router.Breathe(1, 1) end -- (in a background job: a pause between the parts)
+  local t1 = ns.PerfStart and ns.PerfStart()
+  local first = Stretch(cont, px, py, d, walk, { offroad = offroad, transient = true, fixed = { offroad = offroad },
+    teleports = tps, indoors = N.Indoors(), z = N.PlayerZ() })
+  if t1 then ns.PerfEnd("route calculation: next stop", t1) end
+  if not first then return nil end
+  if ns.Router.Breathe then ns.Router.Breathe(1, 1) end
+  local t2 = ns.PerfStart and ns.PerfStart()
+  FillLater(walk, offroad, N.LATER_PER_CALL)
+  if t2 then ns.PerfEnd("route calculation: later stops", t2) end
+  return Assemble(first, px, py, cont, walk, offroad)
+end
+
+-- `new` (worked out at (px, py)) as the route; but `old`, when the player is still on it and `new`
+-- is clearly longer (KeepOld).
+function Apply(new, old, px, py, cont, offroad, now, trim)
+  local _, walk = N.Speeds()
+  if old and new and old ~= new and N.KeepOld(old, new, walk, now) and Follow(old, px, py) then
+    old.keptSince = old.keptSince or now
+    new = old
+  elseif new then
+    new.keptSince = nil
+    if trim then Follow(new, px, py) end -- (worked out a moment ago, in the background: from where the player is now)
+  end
+  N.route, kept = new, new
+  N.warming = nil
+  N.routeX, N.routeY, N.routeTime, N.routeOffroad, N.routeCont = px, py, now, offroad, cont
+  N.trimX, N.trimY = px, py
+  N.CheckRedRoute(px, py, cont, now)
+  return new
+end
+
+-- Off a long walk from the player: back onto it a little ahead of the nearest point (REJOIN_AHEAD_YD),
+-- a short way routed from the player, the rest of the walk and the route after it as they were.
+-- nil when it doesn't fit (too far off, a city's floors, near the walk's end).
+N.REJOIN_MIN_YD = 1500 -- a walk from the player this long left: rejoined, worked out again in the background
+N.REJOIN_MAX_OFF_YD = 250
+N.REJOIN_AHEAD_YD = 60
+function Rejoin(old, px, py, cont, offroad)
+  local full, f0 = old.fullFirst, old.firstStretch
+  if not (full and f0 and old.cum) or full.zs or Geo.Base(full.cont) ~= Geo.Base(cont) then return nil end
+  local pts, cum = full.pts, old.cum
+  local best, bi, bt
+  for i = old.followIdx or 1, #pts / 2 - 1 do
+    local ax, ay, bx, by = pts[2 * i - 1], pts[2 * i], pts[2 * i + 1], pts[2 * i + 2]
+    local vx, vy = bx - ax, by - ay
+    local L2 = vx * vx + vy * vy
+    local t = L2 > 0 and math.max(0, math.min(1, ((px - ax) * vx + (py - ay) * vy) / L2)) or 0
+    local d2 = (ax + vx * t - px) ^ 2 + (ay + vy * t - py) ^ 2
+    if not best or d2 < best then best, bi, bt = d2, i, t end
+  end
+  if not best or best > N.REJOIN_MAX_OFF_YD ^ 2 then return nil end
+  local total = cum[#cum]
+  local along = cum[bi] + (cum[bi + 1] - cum[bi]) * bt + N.REJOIN_AHEAD_YD
+  if along >= total - N.REJOIN_AHEAD_YD then return nil end
+  local j = bi
+  while cum[j + 1] < along do j = j + 1 end
+  local f = (along - cum[j]) / math.max(cum[j + 1] - cum[j], 1e-6)
+  local tx, ty = pts[2 * j - 1] + (pts[2 * j + 1] - pts[2 * j - 1]) * f, pts[2 * j] + (pts[2 * j + 2] - pts[2 * j]) * f
+  local lr = ns.Router.Route(full.cont, px, py, tx, ty, { offroad = offroad, transient = true })
+  if not lr or Unwalkable(lr) then return nil end
+  local np, nk = {}, {}
+  for k = 1, #lr.pts do np[k] = lr.pts[k] end
+  for k = 1, #lr.kinds do nk[k] = lr.kinds[k] end
+  nk[#nk + 1] = full.kinds[j] -- (on from the way back on along the walk)
+  for k = j + 1, #pts / 2 do
+    np[#np + 1], np[#np + 2] = pts[2 * k - 1], pts[2 * k]
+    if k < #pts / 2 then nk[#nk + 1] = full.kinds[k] end
+  end
+  local newLen = lr.length + (total - along)
+  local legs, l1 = {}, {}
+  for k, v in pairs(f0.legs[1]) do l1[k] = v end
+  l1.yards = newLen
+  for k, leg in ipairs(f0.legs) do legs[k] = k == 1 and l1 or leg end
+  local part = { cont = full.cont, pts = np, kinds = nk, leg = l1, stop = full.stop }
+  local parts = { part }
+  for k = 2, #f0.parts do parts[k] = f0.parts[k] end
+  local first = { parts = parts, legs = legs, first = f0.first - total + newLen, walk = f0.walk - total + newLen,
+    ride = f0.ride, road = f0.road, pending = lr.pending or f0.pending }
+  local _, walk = N.Speeds()
+  return Assemble(first, px, py, cont, walk, offroad)
+end
+
 -- In a city, the floor under the player changing height at a stroke (jumped down, or
 -- back up top): worked out again from there (a drop may be the way again).
 N.FLOOR_JUMP = 5
@@ -1368,6 +1463,7 @@ N.FLOOR_JUMP_EVERY = 4 -- seconds, at most (walking along a ledge's foot flicker
 local lastFloor, floorJumpAt = nil, -math.huge
 function N.Route(px, py, cont)
   cont = N.PlayerLevel(cont)
+  N.playerX, N.playerY = px, py
   local d = N.dest
   if not d then return nil end
   if ns.CityLevels and ns.CityLevels[cont] and px and N.CityHeight then
@@ -1463,35 +1559,35 @@ function N.Route(px, py, cont)
   -- the route so far, to compare with (also after Invalidate)
   local old = r or kept
   if old and not (old.version == version and old.offroad == offroad and old.cont == cont) then old = nil end
-  local _, walk = N.Speeds()
+  -- Worked out in the background (Router.Background: its searches pause, no frame waits on them):
+  -- the first route (nothing to show yet: "Working out the route..."), and a route whose walk from
+  -- the player is long, `old` shown meanwhile (off it: rejoined, a short way back onto it ahead).
+  -- Else, a short walk, at once. (A long walk worked out again in the frame on every reroute, and
+  -- the first route after a /reload, were a tenth of a second and more in one frame.)
+  local long = old and old.fullFirst and old.cum and (old.cum[#old.cum] - (old.consumed or 0)) >= N.REJOIN_MIN_YD
+  if ns.Router.WARM and not ns.Router.SYNC_WALKS and (not old or long) then -- (as in game; tests: at once)
+    if old and not Follow(old, px, py) then
+      local rj = Rejoin(old, px, py, cont, offroad)
+      if rj then Apply(rj, nil, px, py, cont, offroad, now) end
+    end
+    ns.Router.Background("route:" .. version .. ":" .. tostring(offroad), function()
+      return Compute(px, py, cont, d, offroad)
+    end, function(res)
+      -- (still this route's stops: in, unless the one shown is clearly shorter; from where the
+      -- player is now)
+      if not res or res.version ~= version then return end
+      local cur = N.route or kept
+      if cur and not (cur.version == version and cur.cont == res.cont) then cur = nil end
+      Apply(res, cur, N.playerX or px, N.playerY or py, res.cont, offroad, GetTime(), true)
+    end)
+    -- (queued now, or already: what's shown meanwhile, never worked out in the frame as well)
+    N.warming = N.route == nil or nil
+    return N.route
+  end
   local t0 = ns.PerfStart and ns.PerfStart()
-  local key = version .. ":" .. tostring(offroad)
-  if later.key ~= key then later = { key = key, done = {} } end
-  local tps = AssignTeleports(cont, px, py, d, walk)
-  local t1 = ns.PerfStart and ns.PerfStart()
-  local first = Stretch(cont, px, py, d, walk, { offroad = offroad, transient = true, fixed = { offroad = offroad },
-    teleports = tps, indoors = N.Indoors(), z = N.PlayerZ() })
-  if t1 then ns.PerfEnd("route calculation: next stop", t1) end
-  N.route = nil
-  if first then
-    local t2 = ns.PerfStart and ns.PerfStart()
-    FillLater(walk, offroad, N.LATER_PER_CALL)
-    if t2 then ns.PerfEnd("route calculation: later stops", t2) end
-    N.route = Assemble(first, px, py, cont, walk, offroad)
-  end
-  -- still on the current route and the new one is clearly longer: keep the current one
-  if old and N.route and old ~= N.route and N.KeepOld(old, N.route, walk, now) and Follow(old, px, py) then
-    old.keptSince = old.keptSince or now
-    N.route = old
-  elseif N.route then
-    N.route.keptSince = nil
-  end
-  kept = N.route
-  N.routeX, N.routeY, N.routeTime, N.routeOffroad, N.routeCont = px, py, now, offroad, cont
-  N.trimX, N.trimY = px, py
+  local new = Compute(px, py, cont, d, offroad)
   if t0 then ns.PerfEnd("route calculation", t0) end
-  N.CheckRedRoute(px, py, cont, now)
-  return N.route
+  return Apply(new, old, px, py, cont, offroad, now)
 end
 
 -- Once a route is worked out (settled, or 3 s on): walking through a zone too high for the
