@@ -3012,6 +3012,48 @@ def test_a_zone_too_high_said_yes_to_isnt_asked_again_after_a_reload(nav_env):
     assert not N.redOk[1417] and len(N.stops) == 0
 
 
+def _flight_env(nav_env, known):
+    lua, ns = flights_env(nav_env, known)
+    load(lua, ns, "Data/Zones.lua", "Data/Terrain.lua", "Passability.lua", "Data/Cities.lua", "GPSFrame.lua")
+    ns.Router.Reset()
+    ns.Router.SYNC_WALKS = True
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("UnitLevel = function() return 14 end")
+    return lua, ns
+
+
+def _flights(r):
+    out = []
+    for i in range(1, len(r.legs) + 1):
+        t = r.legs[i].ride
+        if t and t.pts:
+            out.append((t[9], t[10], [(round(t.pts[j]), round(t.pts[j + 1])) for j in range(1, len(t.pts) + 1, 2)]))
+    return out
+
+
+def test_a_flight_master_learned_on_the_way_is_flown_to(nav_env):
+    # (asked) Brill into Arathi at level 14: knowing Undercity and the Sepulcher, the flight to the
+    # Sepulcher and a long walk; Tarren Mill learned too, the flight to Tarren Mill instead, drawn
+    # as the dotted line from Undercity straight to it (the flight's own path)
+    lua, ns = _flight_env(nav_env, [10, 11, 13])  # the Sepulcher, Undercity, Tarren Mill
+    ns.Nav.SetDestination(-1441.0, -2332.0, 0, "Arathi")
+    r = ns.Nav.Route(2254.0, 293.0, 0)
+    (a, b, pts), = _flights(r)
+    assert (a, b) == ("Undercity, Tirisfal", "Tarren Mill, Hillsbrad") and len(pts) == 2
+    assert r.totalYards < 4000  # (via the Sepulcher: 6.4k on foot)
+
+
+def test_a_connecting_flight_is_drawn_through_its_stops(nav_env):
+    # (asked) Undercity to Hammerfall: the direct path known only its ends; with Tarren Mill known
+    # the flight goes through it (faster), and the dotted line goes through it too
+    for known, via in (([11, 17], 2), ([11, 13, 17], 3)):
+        lua, ns = _flight_env(nav_env, known)
+        ns.Nav.SetDestination(-1000.0, -3500.0, 0, "Hammerfall")
+        r = ns.Nav.Route(2254.0, 293.0, 0)
+        (a, b, pts), = _flights(r)
+        assert (a, b) == ("Undercity, Tirisfal", "Hammerfall, Arathi") and len(pts) == via, (known, pts)
+
+
 def test_debug_tells_how_the_trip_was_planned(nav_env):
     # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
     # high, the flight masters known, the plan and the walk straight there
