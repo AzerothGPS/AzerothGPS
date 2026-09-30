@@ -339,6 +339,39 @@ function ns.RunProbe(reason)
   add("Arrow.state", function() return ns.Arrow and ns.Arrow.Describe() end)
   add("Teleports.state", function() return ns.Teleports and ns.Teleports.Describe() end)
   add("Nav.plan", function() return ns.Nav and ns.Nav.DescribePlan() end)
+  -- (party and raid members' positions: what the game gives an addon for them, for showing them on
+  -- the map; by unit, not name: no other player's name in the saved probes)
+  add("party positions", function()
+    local units = {}
+    if IsInRaid and IsInRaid() then
+      for i = 1, 40 do units[#units + 1] = "raid" .. i end
+    else
+      for i = 1, 4 do units[#units + 1] = "party" .. i end
+    end
+    local function show(v, fmt)
+      if v == nil then return "nil" end
+      if ns.IsSecret and ns.IsSecret(v) then return "secret" end
+      local ok, t = pcall(string.format, fmt, v)
+      return ok and t or "?"
+    end
+    local out = {}
+    for _, u in ipairs(units) do
+      if UnitExists and UnitExists(u) and not (UnitIsUnit and UnitIsUnit(u, "player")) then
+        local okp, x, y, _, inst = pcall(UnitPosition, u)
+        local okm, map = pcall(C_Map.GetBestMapForUnit, u)
+        local mx, my, mapErr
+        if okm and map then
+          local ok2, pos = pcall(C_Map.GetPlayerMapPosition, map, u)
+          if ok2 and pos then mx, my = pos:GetXY() elseif not ok2 then mapErr = true end
+        end
+        out[#out + 1] = string.format("%s: UnitPosition=%s map=%s mapPos=%s connected=%s",
+          u, okp and (show(x, "%.0f") .. "," .. show(y, "%.0f") .. " inst=" .. tostring(inst)) or "error",
+          okm and show(map, "%d") or "error", mapErr and "error" or (show(mx, "%.3f") .. "," .. show(my, "%.3f")),
+          tostring(UnitIsConnected and UnitIsConnected(u)))
+      end
+    end
+    return #out > 0 and table.concat(out, " | ") or "not in a group"
+  end)
   add("start errors", function() return table.concat(ns.initErrors or {}, " | ") end)
   add("C_Minimap", function()
     local names = {}

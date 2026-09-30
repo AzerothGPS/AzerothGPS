@@ -260,3 +260,30 @@ def test_every_stop_has_its_marker_though_the_route_is_drawn_a_few_ahead(game):
     finally:
         st.zoom, st.stopsAhead = zoom, ahead
         N.Clear()
+
+
+def test_debug_probes_party_members_positions(game):
+    # (asked: showing party members on the map, with or without the addon on their side) /agps debug
+    # says what the game gives an addon for each member: by unit, no names saved
+    lua, ns = game
+    lua.execute("""
+      AGPS_PARTY = { party1 = { 2200, 300 }, party2 = { 2100, 250 } }
+      UnitExists = function(u) return AGPS_PARTY[u] ~= nil end
+      UnitIsUnit = function(a, b) return a == b end
+      UnitIsConnected = function(u) return AGPS_PARTY[u] ~= nil end
+      IsInRaid = function() return false end
+      local pos = UnitPosition
+      UnitPosition = function(u)
+        local p = AGPS_PARTY[u]
+        if p then return p[1], p[2], 0, 0 end
+        return pos(u)
+      end
+    """)
+    try:
+        ns.RunProbe("test")
+        rec = ns.db.probes[len(ns.db.probes)]
+        party = next(r for r in rec.results.values() if r.name == "party positions")
+        assert party.ok and "party1: UnitPosition=2200,300" in party.value and "party2:" in party.value
+        assert "Tester" not in party.value
+    finally:
+        lua.execute("AGPS_PARTY = {}")
