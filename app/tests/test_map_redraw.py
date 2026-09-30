@@ -94,17 +94,26 @@ def test_a_detour_is_removed_for_this_route_by_its_pin(game):
     cdb.faction = "Horde"
     N.FlightsChanged()
     stop = lua.eval("{ { x = -1441, y = -2332, cont = 0 } }")
+    ns.settings.gps.zoom = 2400  # (out far enough to show Tarren Mill's flight master from Brill)
     N.SetStops(stop, False, "red")
     lua.execute("AGPS_T = 300")
     G.Update()
     pins = _detour_pins(lua)
     assert len(pins) == 1 and pins[0].learnNode == 13 and "Tarren Mill" in pins[0].title
+    # (the flight master's own icon, not a new marker; the map's icon under it left out, as under a
+    # stop made from a map icon)
+    assert pins[0].icon._tex == r"Interface\TaxiFrame\UI-Taxi-Icon-Gray"
+    taxi = [w for w in lua.eval("AGPS_WIDGETS").values() if w._shown and w.icon and w.icon._tex
+            and "UI-Taxi-Icon" in str(w.icon._tex) and not w.learnNode and w.name and "Tarren Mill" in w.name]
+    assert not taxi
     G.AskRemove(pins[0])
     ask = next(w for w in lua.eval("AGPS_WIDGETS").values() if w._text == "Remove?")
     ask._scripts.OnClick(ask)
     lua.execute("AGPS_T = 301")
     G.Update()
     assert not N.LearnOnRoute(N.route) and not _detour_pins(lua)
+    assert [w for w in lua.eval("AGPS_WIDGETS").values() if w._shown and w.icon and w.icon._tex  # (the map's icon back)
+            and "UI-Taxi-Icon" in str(w.icon._tex) and w.name and "Tarren Mill" in w.name]
     assert "Detour" not in N.StepsText(9)
     N.skipLearn = lua.eval("{}")  # (a /reload: back from the saved stops)
     N.Restore()

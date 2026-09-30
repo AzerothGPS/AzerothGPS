@@ -61,7 +61,9 @@ M.GetRect = function() return 100, 100, 400, 400 end
 M.GetFrameStrata = function() return "MEDIUM" end
 M.GetChecked = function(s) return s._checked or false end
 M.SetChecked = function(s, v) s._checked = v end
-M.GetTexture = function() return nil end
+M.SetTexture = function(s, t) s._tex = t end
+M.GetTexture = function(s) return s._tex end
+M.SetColorTexture = function(s, r, g, b) s._tex = string.format("color:%.2f,%.2f,%.2f", r, g, b) end
 M.GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end
 M.GetTextColor = function() return 1, 1, 1, 1 end
 M.GetVertexColor = function() return 1, 1, 1, 1 end

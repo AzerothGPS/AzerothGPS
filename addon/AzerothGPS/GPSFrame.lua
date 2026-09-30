@@ -1680,8 +1680,8 @@ local function DrawStopPins(toScreen, viewCont)
     local sx, sy = toScreen(x, y)
     n = n + 1
     local b = StopPin(n)
-    if d.learnNode then -- (a flight master's detour: a brown square)
-      b.icon:SetColorTexture(G.DETOUR_COLOR[1], G.DETOUR_COLOR[2], G.DETOUR_COLOR[3], 1)
+    if d.learnNode then -- (a flight master's detour: the map's own icon for it, as a stop made from a map icon)
+      b.icon:SetTexture(TAXI_ICON.unlearned)
     else
       b.icon:SetTexture(ns.Nav.StopIcon(d))
     end
@@ -1694,7 +1694,13 @@ local function DrawStopPins(toScreen, viewCont)
       b:EnableMouse(true)
     end
     b:ClearAllPoints()
-    b:SetPoint("BOTTOM", poiLayer, "CENTER", sx, sy - 4)
+    if d.learnNode then -- (where the map's icon is, its size: that icon, right-clickable)
+      b:SetSize(16, 16)
+      b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
+    else
+      b:SetSize(18, 18)
+      b:SetPoint("BOTTOM", poiLayer, "CENTER", sx, sy - 4)
+    end
     b:Show()
   end
   -- the stops routed ahead (a long list: the rest show up as they come next)
@@ -2066,6 +2072,12 @@ function G.Update()
           if x then under[#under + 1] = { x, y } end
         end
       end
+    end
+    -- (and a flight master's detour: its pin is that flight master's icon, right-clickable)
+    local learn = ns.Nav.route and ns.Nav.LearnOnRoute(ns.Nav.route)
+    if learn then
+      local x, y = Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
+      if x then under[#under + 1] = { x, y } end
     end
     if not under[1] then return pois end
     local out = {}
