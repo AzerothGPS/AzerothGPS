@@ -325,6 +325,8 @@ agps perf              # read /agps debug perf timings (saved on /reload)
 agps feedback          # export opt-in shared roads and trips to data/feedback/
 agps route-check        # routing on random trips in every zone; flags detours and cliff cuts
 agps route-sweep        # random trips routed as in game (background searches, moving): snapbacks, U-turns, spikes
+agps trip-sweep         # random trips planned and followed with the whole addon (gameharness): flights vs walks at
+                        # random levels, detours, frame budget; data/debug/trip-sweep/report.json (nightly task too)
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)
@@ -376,7 +378,7 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - `test_terrain_hpa.py`: stale prepared terrain blocks.
   - `test_road_display.py`: roads vanishing zoomed out, or while being rebuilt after an edit.
   - `test_map_redraw.py`: the map's setup and redraw, run under Lua 5.1 with a stand-in for the
-    game's UI (`tests/wowmock.lua`: add what a new game call needs there). In the game a redraw
+    game's UI (`app/azerothgps/gameharness.py` + `wowmock.lua`: add what a new game call needs there). In the game a redraw
     failing is caught and nothing after the failing line is drawn (no route, no panel).
   - `test_lua_lint.py`'s `truncated_and_or`: `x, y = a and f()` (only f's first value).
 

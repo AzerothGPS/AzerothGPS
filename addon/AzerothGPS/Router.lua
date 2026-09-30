@@ -1983,11 +1983,13 @@ local function Build(g, pieces)
       if r[1] > 0 then add(x1 + (x2 - x1) * r[1], y1 + (y2 - y1) * r[1], r[2] and R.KIND_ROAD or R.KIND_OFFROAD) end
     end
   end
+  local blocked = 0 -- (yards straight over ground the terrain blocks: a leg no walk around was found for)
   for _, p in ipairs(pieces) do
     if p.edge then
       local kind = g.drops and g.drops[p.edge] and R.KIND_DROP or R.KIND_ROAD
       for _, q in ipairs(EdgePoints(g.e[p.edge], p.from, p.to)) do add(q[1], q[2], kind, zs and R.EdgeZ(g, p.edge, q[3])) end
     else
+      if p.gap then blocked = blocked + Dist(p[2], p[3], p[4], p[5]) end
       straight(p[2], p[3], p[4], p[5])
     end
   end
@@ -2000,7 +2002,7 @@ local function Build(g, pieces)
       if zs[i] then last = zs[i] elseif last then zs[i] = last end
     end
   end
-  return { pts = flat, kinds = kinds, length = length, road = road, zs = zs }
+  return { pts = flat, kinds = kinds, length = length, road = road, zs = zs, blocked = blocked > 0 and blocked or nil }
 end
 
 local function Straight(g, sx, sy, tx, ty)
@@ -2659,7 +2661,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   if not gscore[GOAL] then -- not connected
     local res = Straight(g, sx, sy, tx, ty)
-    res.pending = pending
+    res.pending, res.unconnected = pending, true -- (no way there on foot found: a line across)
     return res
   end
 

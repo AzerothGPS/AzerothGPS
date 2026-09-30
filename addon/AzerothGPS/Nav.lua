@@ -751,13 +751,29 @@ N.RIDE_CHECK_MIN_YD = 800 -- (shorter walks: not worth a second look)
 N.RIDE_CHECK_YD = 200
 local rideCheck = {} -- [key] = whether the way with a ride won
 local rideLast = {} -- [stop] = the last answer for it (from wherever: used while this square's is worked out)
+-- Seconds for a walk along `pts` as planning weighs it: the zones too high for the player (but
+-- `exempt`) counted extra (PlanYards), and water at swimming's cost (Passability's: across the sea
+-- to an island isn't a walk to take over the boat).
 local function Weighed(cont, pts, walk, exempt)
+  local P = ns.Passability
   local yards = 0
   for i = 1, #pts - 3, 2 do
-    yards = yards + N.PlanYards(cont, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], false, exempt)
+    local x1, y1, x2, y2 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+    yards = yards + N.PlanYards(cont, x1, y1, x2, y2, false, exempt)
+    local c = P and P.SegmentCost and P.SegmentCost(cont, x1, y1, x2, y2, 0)
+    if c then yards = yards + math.max(0, c - math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)) end
   end
   return yards / walk
 end
+N.WeighedWalk = Weighed -- (the trip sweep's checks weigh as this does)
+
+-- A routed walk that isn't one: no way there found on foot (a line across), or more than
+-- RIDE_BLOCKED_YD straight over ground the terrain blocks (the sea to an island, a mountain range).
+N.RIDE_BLOCKED_YD = 60
+local function Unwalkable(r)
+  return r.unconnected or (r.blocked or 0) > N.RIDE_BLOCKED_YD
+end
+N.Unwalkable = Unwalkable
 -- Walks between fixed points (a lift to a flight master, a landing to the stop: not from the
 -- player) routed once and kept: rerouting as the player moves redoes only the walk from them
 -- (a long walk after a flight, routed again on every recalculation, was a lag spike each time).
@@ -818,12 +834,12 @@ local function CompareRide(cont, sx, sy, d, walk, tps, opts, sz)
     if leg.ride then
       secs = secs + (leg.ride[7] or 0)
     elseif routes[li] then
-      secs = secs + Weighed(leg.cont, routes[li].pts, walk, exempt)
+      secs = secs + (Unwalkable(routes[li]) and math.huge or Weighed(leg.cont, routes[li].pts, walk, exempt))
       pending = pending or routes[li].pending
     end
   end
-  local walkSecs = Weighed(cont, lr.pts, walk, exempt)
-  local won = secs < walkSecs
+  local walkSecs = Unwalkable(lr) and math.huge or Weighed(cont, lr.pts, walk, exempt)
+  local won = secs < walkSecs or (secs == math.huge and walkSecs == math.huge) -- (neither: the plan's ride)
   N.lastRideCheck = string.format("walk routed %.0fs (%.0f yd) vs with rides %.0fs: %s%s", walkSecs, lr.length, secs,
     won and "rides" or "walk", pending and " (provisional, not remembered)" or "")
   return { won = won, final = not pending }
@@ -864,8 +880,8 @@ local function RideInstead(cont, sx, sy, d, walk, tps, opts, sz)
   else
     N.lastRideCheck = (N.lastRideCheck or "") .. " [remembered]"
   end
-  if not won then return nil end
-  return legs, WalkRoutes(legs, sx, sy, d, opts, sz)
+  if not won then return nil, nil, won end
+  return legs, WalkRoutes(legs, sx, sy, d, opts, sz), true
 end
 
 local function Stretch(cont, sx, sy, d, walk, opts, sz)
@@ -874,10 +890,19 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
   local legs = N.Plan(cont, sx, sy, walk, d, tps)
   if not legs then return nil end
   local routes
-  if #legs == 1 and legs[1].walk and legs[1].cont == cont and d.cont == cont
+  -- (walk vs ride, both routed: when the plan walks all the way, and when it rides, not a teleport,
+  -- on this continent: its straight lines can pick a ride that's slower, a walk round to a flight
+  -- master far off; reported, Winterspring to Aldrassil at level 14)
+  local rides = false
+  for _, leg in ipairs(legs) do rides = rides or (leg.ride ~= nil and not leg.ride.use) end
+  if ((#legs == 1 and legs[1].walk) or rides) and legs[1].cont == cont and d.cont == cont
       and math.sqrt((d.x - sx) ^ 2 + (d.y - sy) ^ 2) >= N.RIDE_CHECK_MIN_YD / N.WALK_FACTOR then
-    local ride, rideRoutes = RideInstead(cont, sx, sy, d, walk, tps, opts, sz)
-    if ride then legs, routes = ride, rideRoutes end
+    local ride, rideRoutes, won = RideInstead(cont, sx, sy, d, walk, tps, opts, sz)
+    if ride then
+      legs, routes = ride, rideRoutes
+    elseif won == false and rides then -- (walking all the way wins)
+      legs = { { walk = true, cont = cont, x1 = sx, y1 = sy, x2 = d.x, y2 = d.y } }
+    end
   end
   routes = routes or WalkRoutes(legs, sx, sy, d, opts, sz)
   local st = { parts = {}, legs = legs, first = 0, walk = 0, ride = 0, road = 0 }
@@ -903,7 +928,8 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       rode = true
     else
       local lr = routes[li]
-      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs, leg = leg }
+      st.parts[#st.parts + 1] = { cont = leg.cont, pts = lr.pts, kinds = lr.kinds, zs = lr.zs, leg = leg,
+        blocked = lr.blocked, unconnected = lr.unconnected }
       st.walk, st.road = st.walk + lr.length, st.road + lr.road
       if lr.pending then st.pending = true end
       leg.yards = lr.length
@@ -1952,7 +1978,11 @@ function N.Steps()
   -- `yards` the walk's still to go: returns what's left after the detours)
   -- (a detour where the walk ends, the stop or a dock: after the walk's step, `after`)
   local function Detour(h)
-    steps[#steps + 1] = string.format("|cffc08040Detour %s to learn the flight path at %s|r", N.FormatDistance(h.off), h.name)
+    if h.off < N.LEARN_BY_YD then -- (right by the way)
+      steps[#steps + 1] = string.format("|cffc08040Learn the flight path at %s (on the way)|r", h.name)
+    else
+      steps[#steps + 1] = string.format("|cffc08040Detour %s to learn the flight path at %s|r", N.FormatDistance(h.off), h.name)
+    end
   end
   local function Detours(leg, yards)
     local walked, after = 0, {}
@@ -2358,6 +2388,7 @@ end
 -- the route is worked out again). Only once a flight map has been seen (else what's known isn't),
 -- and not with flights turned off.
 N.LEARN_NEAR_YD = 450 -- (Tarren Mill from the walk into Arathi: 390 yd off it)
+N.LEARN_BY_YD = 40 -- ... this close: "on the way", not a detour
 local mastersList
 -- Flight masters whose detour the player removed (right-click on its pin: GPSFrame): not suggested
 -- again on this route, rerouting or after a /reload (saved with the stops); a new route clears it.
@@ -2404,7 +2435,7 @@ function N.LearnOnRoute(r)
             local d2 = (ax + vx * t - m[2]) ^ 2 + (ay + vy * t - m[3]) ^ 2
             local b = best[e[1]]
             if d2 <= near2 and (not b or d2 < b.d2) then
-              best[e[1]] = { name = (m[4]:match("^([^,]+)") or m[4]), off = math.sqrt(d2), d2 = d2, node = e[1],
+              best[e[1]] = { name = (m[4]:match("^([^,]+)") or m[4]), full = m[4], off = math.sqrt(d2), d2 = d2, node = e[1],
                 leg = part.leg, cont = c, x = m[2], y = m[3], rx = ax + vx * t, ry = ay + vy * t,
                 part = pi, along = acc + math.sqrt(L2) * t }
             end
@@ -2414,9 +2445,16 @@ function N.LearnOnRoute(r)
       acc = acc + math.sqrt(L2)
     end
   end
+  -- (not one the route takes a flight from: learned there, "Learn the flight path, then...")
+  local from = {}
+  for _, leg in ipairs(r.legs or {}) do
+    if leg.ride and leg.ride.pts then from[leg.ride[leg.from == 2 and 10 or 9] or ""] = true end
+  end
   -- (in the order the route passes them)
   local list = {}
-  for _, b in pairs(best) do list[#list + 1] = b end
+  for _, b in pairs(best) do
+    if not from[b.full] then list[#list + 1] = b end
+  end
   table.sort(list, function(a, b) return a.part < b.part or (a.part == b.part and a.along < b.along) end)
   r.learnAt, r.learnHint = at, list[1] and list or false
   return list[1] and list or nil

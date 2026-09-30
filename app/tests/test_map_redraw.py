@@ -9,47 +9,13 @@ from pathlib import Path
 import pytest
 
 ADDON = Path(__file__).resolve().parents[2] / "addon" / "AzerothGPS"
-MOCK = Path(__file__).resolve().parent / "wowmock.lua"
-
-
-def _toc_files():
-    out = []
-    for line in (ADDON / "AzerothGPS.toc").read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            out.append(line.replace("\\", "/"))
-    return out
 
 
 @pytest.fixture(scope="module")
 def game():
-    lua51 = pytest.importorskip("lupa.lua51")
-    lua = lua51.LuaRuntime()
-    lua.execute(MOCK.read_text(encoding="utf-8"))
-    lua.execute("""
-      strsplit = function(sep, s, n)
-        local out, pat = {}, "([^" .. sep .. "]*)"
-        for part in (s .. sep):gmatch(pat .. sep) do out[#out + 1] = part end
-        return unpack(out)
-      end
-      strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
-      strjoin = function(sep, ...) return table.concat({ ... }, sep) end
-      tinsert, tremove, wipe = table.insert, table.remove, function(t) for k in pairs(t) do t[k] = nil end return t end
-      format = string.format
-      date = os.date
-      time = os.time
-    """)
-    ns = lua.table()
-    lua.globals().AGPS_NS = ns
-    loader = lua.eval("function(src, name) return assert(loadstring(src, '@' .. name)) end")
-    for name in _toc_files():
-        loader((ADDON / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
-    fire = lua.eval("AGPS_FIRE")
-    fire("ADDON_LOADED", "AzerothGPS")
-    fire("PLAYER_LOGIN")
-    assert not list(ns.initErrors.values()), list(ns.initErrors.values())
-    ns.Router.WARM, ns.Router.SYNC_WALKS = False, True
-    return lua, ns
+    pytest.importorskip("lupa.lua51")
+    from azerothgps.gameharness import start  # (the same harness `agps trip-sweep` runs)
+    return start()
 
 
 def _redraw(lua, ns):
