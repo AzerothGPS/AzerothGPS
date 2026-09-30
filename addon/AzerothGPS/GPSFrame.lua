@@ -1747,6 +1747,23 @@ function G.party.io.members()
   return out
 end
 local partyPins = {}
+-- A class's icon on `tex`: the game's own (the atlas classicon-<class>), else the class sheet cut to
+-- it (CLASS_ICON_TCOORDS); false when neither is there (old art missing here: a dot instead).
+G.CLASS_SHEET = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
+function G.ClassIcon(tex, class)
+  if not class then return false end
+  local atlas = "classicon-" .. class:lower()
+  if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
+    tex:SetAtlas(atlas)
+    return true
+  end
+  local tc = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+  if tc and tex:SetTexture(G.CLASS_SHEET) ~= false then
+    tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4])
+    return true
+  end
+  return false
+end
 function G.DrawParty(cx, cy, rot, s, viewCont)
   local n = 0
   if S().showParty ~= false and not G.Held() and canvas then
@@ -1764,14 +1781,13 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
         local b = partyPins[n]
         if not b then
           b = CreateFrame("Button", nil, keepLayer)
-          b:SetSize(10, 10)
+          b:SetSize(16, 16)
           b:SetFrameLevel(keepLayer:GetFrameLevel() + 1)
-          b.edge = b:CreateTexture(nil, "ARTWORK")
+          b.edge = b:CreateTexture(nil, "ARTWORK") -- (a thin frame in the class's color)
           b.edge:SetAllPoints()
-          b.edge:SetColorTexture(0, 0, 0, 1)
-          b.dot = b:CreateTexture(nil, "OVERLAY")
-          b.dot:SetPoint("TOPLEFT", 2, -2)
-          b.dot:SetPoint("BOTTOMRIGHT", -2, 2)
+          b.dot = b:CreateTexture(nil, "OVERLAY") -- (the class's icon, or its color)
+          b.dot:SetPoint("TOPLEFT", 1, -1)
+          b.dot:SetPoint("BOTTOMRIGHT", -1, 1)
           b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(self.name or "?", 1, 1, 1)
@@ -1782,7 +1798,9 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
           partyPins[n] = b
         end
         local c = RAID_CLASS_COLORS and m.class and RAID_CLASS_COLORS[m.class]
-        b.dot:SetColorTexture(c and c.r or G.PARTY_COLOR[1], c and c.g or G.PARTY_COLOR[2], c and c.b or G.PARTY_COLOR[3], 1)
+        local r, g, bl = c and c.r or G.PARTY_COLOR[1], c and c.g or G.PARTY_COLOR[2], c and c.b or G.PARTY_COLOR[3]
+        b.edge:SetColorTexture(r, g, bl, 1)
+        if not G.ClassIcon(b.dot, m.class) then b.dot:SetColorTexture(r, g, bl, 1) end
         b.name = m.name
         b:ClearAllPoints()
         b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)

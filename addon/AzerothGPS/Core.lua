@@ -356,6 +356,22 @@ function ns.RunProbe(reason)
       return ok and t or "?"
     end
     local out = {}
+    -- (the group as the game tells it, and which member units exist: "none" while grouped would
+    -- mean party1-4 aren't how this client names them)
+    local exists = {}
+    for _, u in ipairs({ "party1", "party2", "party3", "party4", "raid1", "raid2", "raid3" }) do
+      local ok, e = pcall(UnitExists or error, u)
+      if ok and e and not (ns.IsSecret and ns.IsSecret(e)) then exists[#exists + 1] = u end
+    end
+    local function call(f)
+      local ok, v = pcall(f or error)
+      return ok and tostring(v) or "error"
+    end
+    out[1] = string.format("group: IsInGroup=%s IsInRaid=%s members=%s units=%s", call(IsInGroup), call(IsInRaid),
+      call(GetNumGroupMembers), #exists > 0 and table.concat(exists, ",") or "none")
+    out[2] = string.format("class art: atlas classicon-mage=%s CLASS_ICON_TCOORDS=%s",
+      tostring(C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("classicon-mage") ~= nil or false),
+      tostring(CLASS_ICON_TCOORDS ~= nil))
     for _, u in ipairs(units) do
       if UnitExists and UnitExists(u) and not (UnitIsUnit and UnitIsUnit(u, "player")) then
         local okp, x, y, _, inst = pcall(UnitPosition, u)
@@ -371,7 +387,7 @@ function ns.RunProbe(reason)
           tostring(UnitIsConnected and UnitIsConnected(u)))
       end
     end
-    return #out > 0 and table.concat(out, " | ") or "not in a group"
+    return table.concat(out, " | ")
   end)
   add("start errors", function() return table.concat(ns.initErrors or {}, " | ") end)
   add("C_Minimap", function()

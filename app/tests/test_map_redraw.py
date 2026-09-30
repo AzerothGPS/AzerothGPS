@@ -322,3 +322,31 @@ def test_party_members_are_dots_on_the_map(game):
     finally:
         st.showParty = True
         lua.execute("AGPS_PARTY = {} UnitPosition = AGPS_POS_REAL")
+
+
+def test_party_members_show_their_class_icon(game):
+    # (asked) a class icon, not a plain dot: the game's own (atlas), else the class sheet cut to the
+    # class; the dot's color only when neither is there
+    lua, ns = game
+    G = ns.GPS
+    lua.execute("""
+      AGPS_PARTY = { party1 = { 2260, 300 } }
+      UnitExists = function(u) return AGPS_PARTY[u] ~= nil end
+      UnitIsUnit = function(a, b) return a == b end
+      IsInRaid = function() return false end
+      UnitClass = function(u) return "Mage", "MAGE" end
+      CLASS_ICON_TCOORDS = { MAGE = { 0.25, 0.5, 0, 0.25 } }
+      AGPS_POS_REAL = UnitPosition
+      UnitPosition = function(u)
+        local p = AGPS_PARTY[u]
+        if p then return p[1], p[2], 0, 0 end
+        return AGPS_POS_REAL(u)
+      end
+    """)
+    try:
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        (pin,) = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
+        assert pin.dot._tex == G.CLASS_SHEET
+    finally:
+        lua.execute("AGPS_PARTY = {} UnitPosition = AGPS_POS_REAL CLASS_ICON_TCOORDS = nil")
