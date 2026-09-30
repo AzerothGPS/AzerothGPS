@@ -77,6 +77,7 @@ R.OFFROAD_WALK_AROUND = 3000 -- yards: offroad trips up to this long may walk ar
 R.OFFROAD_ALONG_STEP = 50 -- offroad mode: points this far apart along nearby roads, to join or leave them
 R.OFFROAD_ALONG_MAX = 700 -- ... within this many yards of the start or the destination
 R.JOIN_ALONG_MAX = 200 -- road mode: the same, onto (or off) the roads within this many yards, over open ground
+R.DIRECT_SHORT = 400 -- road mode: a straight walk there up to this long weighs like a walk onto the roads
 R.JOIN_WALK_TRIES = 3 -- ... and the few best of them blocked in a straight line: walked around what's in the way
 R.WALK_AROUND_CANDIDATES = 3 -- only the nearest few get-on/get-off legs search the terrain grid
 -- Road mode: walking straight there (around obstacles) instead, off the roads the whole way,
@@ -2400,9 +2401,11 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     goalVia(e[2], part(c.edge, math.max(0, e[3] - c.along)) + cost, Join({ { kind = ROAD, edge = c.edge, from = e[3], to = c.along } }, leg))
   end
   -- Start: onto a nearby edge's closest point, then either way along it.
+  local starts = {} -- (onto the roads: { edge, along, cost, leg }, for a way off the same edge further on)
   for i, c in ipairs(candidates(ss)) do
     local e = g.e[c.edge]
     local cost, leg = Leg(sx, sy, c.px, c.py, true, i <= R.WALK_AROUND_CANDIDATES, sz, layered and R.EdgeZ(g, c.edge, c.along))
+    starts[#starts + 1] = { edge = c.edge, along = c.along, cost = cost, leg = leg }
     relax(START, e[1], cost + part(c.edge, c.along), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = 0 } }))
     relax(START, e[2], cost + part(c.edge, math.max(0, e[3] - c.along)), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = e[3] } }))
     for _, gl in ipairs(goals) do
@@ -2463,15 +2466,19 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
       return blocked
     end
+    -- (onto and off the same edge: along it between, not round by its end and back)
+    local ons, offs = {}, {}
     local function onto(p)
       local cost, leg = Leg(sx, sy, p[3], p[4], false, p.walk)
       local e = g.e[p[1]]
+      ons[#ons + 1] = { edge = p[1], along = p[2], cost = cost, leg = leg }
       relax(START, e[1], cost + part(p[1], p[2]), Join(leg, { { kind = ROAD, edge = p[1], from = p[2], to = 0 } }))
       relax(START, e[2], cost + part(p[1], math.max(0, e[3] - p[2])), Join(leg, { { kind = ROAD, edge = p[1], from = p[2], to = e[3] } }))
     end
     local function off(p)
       local cost, leg = Leg(p[3], p[4], tx, ty, false, p.walk)
       local e = g.e[p[1]]
+      offs[#offs + 1] = { edge = p[1], along = p[2], cost = cost, leg = leg }
       goalVia(e[1], part(p[1], p[2]) + cost, Join({ { kind = ROAD, edge = p[1], from = 0, to = p[2] } }, leg))
       goalVia(e[2], part(p[1], math.max(0, e[3] - p[2])) + cost, Join({ { kind = ROAD, edge = p[1], from = e[3], to = p[2] } }, leg))
     end
@@ -2482,6 +2489,24 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       for i = 1, math.min(#blocked, R.JOIN_WALK_TRIES) do
         blocked[i].walk = true
         use(blocked[i])
+      end
+    end
+    -- (a short walk straight there over open ground: weighed like the walks onto and off the
+    -- roads, not at ROAD_DIRECT_PENALTY: a road only a little of the way doesn't beat it)
+    if direct and directSafe and not cityPenalty and not R.CapitalAt(cont, sx, sy) and not R.CapitalAt(cont, tx, ty)
+        and not (Pass.Overlay and (Pass.Overlay(cont, sx, sy) or Pass.Overlay(cont, tx, ty)))
+        and Dist(sx, sy, tx, ty) <= R.DIRECT_SHORT then
+      relax(START, GOAL, Leg(sx, sy, tx, ty, false, false))
+    end
+    for _, gl in ipairs(goals) do offs[#offs + 1] = { edge = gl.c.edge, along = gl.c.along, cost = gl.cost, leg = gl.leg } end
+    for _, pair in ipairs({ { ons, offs }, { starts, offs } }) do
+      for _, a in ipairs(pair[1]) do
+        for _, b in ipairs(pair[2]) do
+          if a.edge == b.edge and a.cost and b.cost then
+            relax(START, GOAL, a.cost + part(a.edge, math.abs(b.along - a.along)) + b.cost,
+              Join(a.leg, { { kind = ROAD, edge = a.edge, from = a.along, to = b.along } }, b.leg))
+          end
+        end
       end
     end
   end
@@ -2634,6 +2659,13 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     end
   end
   local res = Build(g, pieces)
+  -- off the roads more than walking straight there (open ground, nothing in the way): the roads
+  -- only made it longer (to a road, a bit along it and off again), so straight
+  -- (not on floors over floors, nor in a capital: grids too coarse for walls between)
+  if direct and directSafe and not layered and not R.CapitalAt(cont, sx, sy) and not R.CapitalAt(cont, tx, ty)
+      and res.length - res.road >= Dist(sx, sy, tx, ty) then
+    res = Straight(g, sx, sy, tx, ty)
+  end
   res.pending = pending
   return res
 end

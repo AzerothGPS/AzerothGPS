@@ -2819,6 +2819,18 @@ def test_the_route_joins_the_road_where_its_heading(env):
         assert P.SegmentCost(0, *pts[i], *pts[i + 1]) is not None
 
 
+def test_a_short_walk_over_open_ground_isnt_sent_along_a_bit_of_road(env):
+    # (reported) north of a junction west of Stillwater Pond: 58 yd back to the junction, 88 yd up
+    # the road and 190 yd off it again to the stop (322 yd, most of it off the road anyway),
+    # when the stop was 201 yd straight over open ground
+    lua, ns, at = tirisfal_env(env)
+    s, t = at(43.9, 47.6), at(44.55, 41.0)
+    assert ns.Passability.SegmentCost(0, *s, *t) is not None
+    r = ns.Router.Route(0, *s, *t, lua.table(offroad=False))
+    pts, _ = route_pts(r)
+    assert len(pts) == 2 and r.length < 205
+
+
 def test_the_offroad_option_is_gone(env):
     # (asked) no offroad toggle: routes always keep to the roads, joining them where they're heading
     addon = Path(__file__).parents[2] / "addon" / "AzerothGPS"
