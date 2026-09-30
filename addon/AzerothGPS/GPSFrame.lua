@@ -1784,6 +1784,14 @@ function G.Update()
         if l.wmo == place[1] then place, wmo, room = nil, nil, nil break end
       end
     end
+    -- right-clicked out of a building's inside map: the outside view while in that building
+    -- (G.outsideOf, until the player leaves it)
+    local building = place and not city and place[1] or nil
+    G.outsideOf = G.KeepOutside(G.outsideOf, building)
+    if building and G.outsideOf == building then place, wmo, room = nil, nil, nil end
+    G.shownInside = place and not city and place[1] or nil
+  else
+    G.shownInside = nil
   end
   -- a city inside a mountain (Ironforge) opened from its icon: its interior map while looking there
   if not place and free and free.interior and not browse and not G.IsMapStyle(st.style) and zoom <= G.INTERIOR_MAX_ZOOM then
@@ -2640,7 +2648,20 @@ function G.ShowWorld()
   G.Browse(w, ViewCont(cont))
 end
 
+-- Still outside the building `outside` (right-clicked out of its inside map), with the player in
+-- building `building` now (nil: outdoors): that building, or nil once they've left it.
+function G.KeepOutside(outside, building)
+  if outside and outside ~= building then return nil end
+  return outside
+end
+
 function G.TerrainZoomOut()
+  -- in a building, its inside map shown: first the outside view there (the continent's map next)
+  if not browse and G.shownInside then
+    G.outsideOf, G.shownInside = G.shownInside, nil
+    elapsed = 1
+    return
+  end
   if not browse and LeaveOpened() then return end
   local m = browse and ns.Maps[browse]
   local _, _, cont = Geo.PlayerWorld()

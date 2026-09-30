@@ -1556,6 +1556,22 @@ def test_undercitys_map_stays_up_anywhere_over_the_city_while_down_in_it(nav_env
     assert G.DownInCityAt(0, 1700.0, 60.0) is None
 
 
+def test_right_click_in_a_building_goes_to_the_outside_view_first(nav_env):
+    # (reported) inside a building, its inside map shown: a right-click jumped to the continent's
+    # map. First the outside view there (kept while in that building), the continent's map next.
+    lua, ns, UC = undercity_env(nav_env)
+    G = ns.GPS
+    browsed = []
+    G.Browse = lambda *a: browsed.append(a)
+    G.shownInside, G.outsideOf = "Inn", None
+    G.TerrainZoomOut()
+    assert G.outsideOf == "Inn" and G.shownInside is None and not browsed
+    assert G.KeepOutside("Inn", "Inn") == "Inn"  # still in there: still outside
+    assert G.KeepOutside("Inn", None) is None  # left it: its inside map again next time in
+    assert G.KeepOutside("Inn", "Bank") is None
+    assert G.KeepOutside(None, "Inn") is None
+
+
 def test_down_in_undercity_the_route_starts_on_the_players_own_floor(nav_env):
     # (reported) under a walkway, the top floor's height at the player's spot is the walkway's:
     # the route started up there (up the stairs and back). The game's height says which floor.
