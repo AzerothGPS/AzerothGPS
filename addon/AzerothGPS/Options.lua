@@ -362,6 +362,36 @@ local function ShowShareInfo()
 end
 O.ShowShareInfo = ShowShareInfo
 
+-- Stops routed ahead (Routing and Performance pages): the trip worked out again with it.
+function O.SetStopsAhead(v)
+  GPS().stopsAhead = v
+  ns.Nav.Invalidate(true)
+  if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+end
+
+-- Options > Performance. "Use Low-End Settings" sets these; "Restore Defaults" puts them back.
+O.PERF_KEYS = { "hz", "rerouteSeconds", "stopsAhead", "gentleBackground", "arrowHz" }
+O.LOW_END = { hz = 10, rerouteSeconds = 6, stopsAhead = 1, gentleBackground = true, arrowHz = 20 }
+local function SetPerf(values)
+  local before = GPS().stopsAhead
+  for _, k in ipairs(O.PERF_KEYS) do GPS()[k] = values[k] end
+  if GPS().stopsAhead ~= before then O.SetStopsAhead(GPS().stopsAhead) end
+end
+function O.UseLowEnd() SetPerf(O.LOW_END) end
+function O.PerfDefaults() SetPerf(ns.DEFAULTS.gps) end
+function O.IsLowEnd()
+  for _, k in ipairs(O.PERF_KEYS) do
+    if GPS()[k] ~= O.LOW_END[k] then return false end
+  end
+  return true
+end
+-- The addon's share of the time, from its work (ms) over `secs` seconds of play.
+function O.UsageText(ms, secs)
+  if not ms or not secs or secs <= 0 then return "AzerothGPS's work: measuring..." end
+  local perSec = math.max(0, ms / secs)
+  return string.format("AzerothGPS's work: %.1f ms a second, %.1f%% of the time", perSec, perSec / 10)
+end
+
 -- The options window, laid out like the game's Settings: categories on the left, one page
 -- of settings at a time on the right. New settings go on the page they belong to (or a new
 -- page: one more entry in the list).
@@ -760,11 +790,7 @@ local function BuildWindow()
       GPS().avoidHostile = v
       ns.Nav.OptionsChanged()
     end)
-  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, function(v)
-    GPS().stopsAhead = v
-    ns.Nav.Invalidate(true)
-    if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
-  end)
+  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
   note("Every stop is still in the fastest order and on the map. The stops past these are listed with an estimated distance until they're routed. Fewer routed stops is less work for the addon.")
   check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
     function() return GPS().fastestOrder end, function(v)
@@ -823,6 +849,44 @@ local function BuildWindow()
   slider("Arrow opacity in combat", 0, 100, 5, "%d%%",
     function() return math.floor((GPS().arrowCombatAlpha or 1) * 100 + 0.5) end, function(v) GPS().arrowCombatAlpha = v / 100 end,
     function() return not GPS().combatHideArrow end)
+
+  ---------------------------------------------------------------- Performance
+  Page("Performance")
+  header("Lighter settings", "For a slower PC: the same routes, worked out and drawn less often.")
+  -- the addon's work over the last few seconds, while this page is open
+  local usage = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  place(usage, 20, 4)
+  local ticker = CreateFrame("Frame", nil, page)
+  local lastMs, lastT, wait = nil, nil, 0
+  ticker:SetScript("OnShow", function() lastMs, lastT, wait = nil, nil, 0 usage:SetText(O.UsageText()) end)
+  ticker:SetScript("OnUpdate", function(_, dt)
+    wait = wait - dt
+    if wait > 0 then return end
+    wait = 2
+    local ms, t = ns.PerfTotal(), GetTime()
+    if lastMs and ms >= lastMs then usage:SetText(O.UsageText(ms - lastMs, t - lastT)) end
+    lastMs, lastT = ms, t
+  end)
+  local lowBtn = Button(page, "Use Low-End Settings", 170, O.UseLowEnd)
+  place(lowBtn, 30, 4)
+  local defBtn = Button(page, "Restore Defaults", 140, O.PerfDefaults)
+  defBtn:SetPoint("LEFT", lowBtn, "RIGHT", 6, 0)
+  controls[#controls + 1] = function() lowBtn:SetEnabled(not O.IsLowEnd()) end
+  header("Map")
+  slider("Map redraws per second", 5, 30, 1, "%d", function() return GPS().hz or 20 end, function(v) GPS().hz = v end)
+  note("The setting that saves the most: at 10 the map needs about half the work it does at 20, and still follows you smoothly. Standing still, it only redraws when something changes.")
+  header("Routes")
+  slider("Work out a route you've left at most every", 2, 10, 1, "%d s", function() return GPS().rerouteSeconds or 2 end,
+    function(v) GPS().rerouteSeconds = v end)
+  note("Off the route (fighting, gathering, or going your own way), it's worked out again from where you are. Less often is less work; the route catches up with you a little later.")
+  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
+  check("Gentle background work", "Walks around obstacles and the road data (after a /reload) are worked out in smaller slices of each frame: fewer stutters on a slow PC. The first route after a /reload, and walks off the roads, take a little longer to appear.",
+    function() return GPS().gentleBackground end, function(v) GPS().gentleBackground = v end)
+  header("Direction arrow")
+  check("Turn the arrow every frame", "On: the arrow turns with every frame, as smoothly as the game runs. Off: 20 times a second, less work at high frame rates.",
+    function() return (GPS().arrowHz or 0) == 0 end, function(v) GPS().arrowHz = v and 0 or 20 end)
+  header("Also lighter")
+  note("Fewer icons on the map (Map > Show on the map, or the round button at the map's bottom-left): herbs, ore, quests and points of interest; quest areas' outlines off; and a smaller map.")
 
   ---------------------------------------------------------------- Road tools
   Page("Road tools")

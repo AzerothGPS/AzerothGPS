@@ -15,7 +15,11 @@ ns.DEFAULTS = {
     windowFrame = true, -- the game-style window frame around the map (title bar, logo, close)
     arrowLocked = true, -- the direction arrow; unlocked: drag to move, corner to resize
     point = { "BOTTOM", "UIParent", "BOTTOM", 495, 191 },
-    hz = 20, -- redraws per second (at most; skipped when nothing changed)
+    hz = 20, -- redraws per second (at most; skipped when nothing changed; Options > Performance)
+    -- performance (Options > Performance; its "Use Low-End Settings" sets these lighter)
+    arrowHz = 0, -- the direction arrow turned this many times a second (0: every frame)
+    rerouteSeconds = 2, -- a route the player left is worked out again at most this often
+    gentleBackground = false, -- background searches in smaller slices of each frame (GPS.PumpBudget)
     -- map
     style = "minimap", -- "minimap" (terrain tiles), "zone" (world map art) or "nospoiler" (explored parts only)
     rotate = false, -- heading-up; false = north-up
@@ -104,6 +108,17 @@ end
 ns.perf = {}
 ns.perfSince = GetTime and GetTime() or 0
 function ns.PerfStart() return debugprofilestop and debugprofilestop() end
+-- The timings that don't overlap (the others are parts of these): their sum is all the addon's work
+-- (Options > Performance shows it as a share of the time).
+ns.PERF_TOP = { "redraw", "arrow window", "every frame: fade, tooltip", "terrain search", "quest area tracing" }
+function ns.PerfTotal()
+  local sum = 0
+  for _, k in ipairs(ns.PERF_TOP) do
+    local p = ns.perf[k]
+    if p then sum = sum + p.total end
+  end
+  return sum
+end
 function ns.PerfEnd(name, t0)
   if not t0 then return end
   local ms = debugprofilestop() - t0

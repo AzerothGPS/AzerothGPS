@@ -380,8 +380,8 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - `test_every_addon_file_compiles_under_the_games_lua_5_1`: the 60-upvalue limit.
   - `test_terrain_hpa.py`: stale prepared terrain blocks.
   - `test_road_display.py`: roads vanishing zoomed out, or while being rebuilt after an edit.
-  - `test_map_redraw.py`: the map's setup and redraw, run under Lua 5.1 with a stand-in for the
-    game's UI (`app/azerothgps/gameharness.py` + `wowmock.lua`: add what a new game call needs there). In the game a redraw
+  - `test_map_redraw.py`: the map's setup and redraw, and the options window (every page), run under
+    Lua 5.1 with a stand-in for the game's UI (`app/azerothgps/gameharness.py` + `wowmock.lua`: add what a new game call needs there). In the game a redraw
     failing is caught and nothing after the failing line is drawn (no route, no panel).
   - `test_lua_lint.py`'s `truncated_and_or`: `x, y = a and f()` (only f's first value).
 
@@ -414,8 +414,16 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - A continent's road data is built in the background the first time (`Router.WarmUp`;
     Nav waits for it up to `WARM_WAIT` s). Long loops that can run inside it call
     `Breathe`. Tests set `Router.WARM = false`.
-  - Drawing: at most 20 redraws a second; dotted legs are one line each with
+  - Drawing: at most `hz` (20) redraws a second; dotted legs are one line each with
     `Media\Dash` repeated along it (`/agps debug dashes` switches back to a line per dash).
+  - **Options > Performance** (for slower PCs): `hz` (map redraws per second: the biggest saving,
+    about half the redraw work at 10), `rerouteSeconds` (`Nav.RerouteTiming`: a route the player
+    left is worked out again at most this often; the yards moved and the finished-search
+    recalculation scale with it), `stopsAhead` (the Routing slider, shown here too),
+    `gentleBackground` (`GPS.PumpBudget`: smaller background slices, `GENTLE_*`) and `arrowHz` (the
+    arrow turned that often; 0: every frame). "Use Low-End Settings" (`Options.LOW_END`) and
+    "Restore Defaults" set them. The page shows the addon's share of the time from `ns.PerfTotal`,
+    the sum of `ns.PERF_TOP` (the timings that don't overlap): a new top-level timing goes there.
 - **Shell pitfall:** Bash heredocs and Python string literals collapse `\\` in Lua strings
   (`"Interface\\Icons\\..."`) and turn `\n` into real newlines. Edit such lines with the
   Edit tool, or write the script to a file first.

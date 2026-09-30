@@ -311,12 +311,18 @@ local function Update(dt)
 end
 
 -- Errors are reported once (else the window would just stay invisible).
+local sinceUpdate = 0
 local function OnUpdate(_, dt)
   -- the map window runs the route's background searches; while it's hidden, this does
   if ns.GPS and ns.GPS.IsVisible and not ns.GPS.IsVisible() then
     ns.GPS.PumpSearches()
     ns.Nav.Tick() -- (the map's redraw does this while it shows: clears an arrived trip)
   end
+  -- (Options > Performance: the arrow turned at most arrowHz times a second; 0: every frame)
+  sinceUpdate = sinceUpdate + dt
+  local hz = S().arrowHz or 0
+  if hz > 0 and sinceUpdate < 1 / hz then return end
+  dt, sinceUpdate = sinceUpdate, 0
   local t0 = ns.PerfStart and ns.PerfStart()
   local ok, err = pcall(Update, dt)
   if t0 then ns.PerfEnd("arrow window", t0) end
