@@ -36,7 +36,7 @@ ns.DEFAULTS = {
     layerCaves = true, -- cave and mine entrances (double-click one for a stop)
     approachZoom = true, -- zoom in near the next stop, back out once there
     -- routing
-    offroad = true, -- straight across open ground, roads only where needed
+    offroad = false, -- straight across open ground, roads only where needed (experimental: off by default)
     navCloseClears = true, -- the X on the map's route panel cancels the route (else just closes the panel)
     reopenFollow = false, -- hidden while looking around the map (a route set): reopens on the player
     questing = true, -- a stop in a quest area is done when the quest's objectives are
@@ -202,6 +202,7 @@ local function InitDB()
   if gps and gps.layerNodes ~= nil then -- split into Herbs and Ore
     gps.layerHerbs, gps.layerOre, gps.layerNodes = gps.layerNodes, gps.layerNodes, nil
   end
+  if ns.Nav and ns.Nav.MigrateOffroad then ns.Nav.MigrateOffroad(db) end -- (off by default from 1.0.8)
   Merge(db.settings, ns.DEFAULTS)
   db.chars = db.chars or {}
   db.probes = db.probes or {}
@@ -232,6 +233,11 @@ do
       if not ns.db then return end
       local N = ns.Nav
       if ev == "PLAYER_ENTERING_WORLD" then
+        if ns.db.offroadNote and ns.Print then -- (turned off once, 1.0.8: InitDB)
+          ns.db.offroadNote = nil
+          ns.Print("Off-road shortcuts are now off by default: they're experimental. Routes follow the roads. "
+            .. "Turn them back on in Options > Routes (or /agps offroad on).")
+        end
         local inside = N and N.CurrentInstance and N.CurrentInstance() ~= nil
         if inside ~= combatLog then
           combatLog = inside

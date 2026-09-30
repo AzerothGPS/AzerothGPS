@@ -2787,6 +2787,27 @@ def flights_env(nav_env, known):
     return lua, ns
 
 
+def test_offroad_is_off_by_default_and_said_to_be_experimental(nav_env):
+    # (asked) off-road shortcuts off by default, turned off once for players who had the old
+    # default, and a warning when turned on (once a session)
+    lua, ns = nav_env
+    N = ns.Nav
+
+    core = (Path(__file__).parents[2] / "addon" / "AzerothGPS" / "Core.lua").read_text(encoding="utf-8")
+    assert "offroad = false," in core
+    db = lua.eval("{ settings = { gps = { offroad = true } } }")
+    N.MigrateOffroad(db)
+    assert db.settings.gps.offroad is False and db.offroadNote and db.offroadOff108
+    db.settings.gps.offroad = True  # (turned back on by the player: left on after)
+    db.offroadNote = None
+    N.MigrateOffroad(db)
+    assert db.settings.gps.offroad is True and not db.offroadNote
+    said = []
+    ns.Print = lambda msg: said.append(msg)
+    assert N.OffroadTurnedOn() and not N.OffroadTurnedOn()
+    assert len(said) == 1 and "experimental" in said[0]
+
+
 def test_route_takes_a_known_flight(nav_env):
     lua, ns = flights_env(nav_env, [11, 17])  # Undercity, Hammerfall
     lua.execute("function AGPS_STOP(x, y) return { x = x, y = y, cont = 0 } end")

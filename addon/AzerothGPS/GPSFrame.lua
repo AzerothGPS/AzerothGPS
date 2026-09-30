@@ -4356,7 +4356,7 @@ function G.Init()
     { id = "hearth", key = "useHearthstone", icon = "Interface\\Icons\\INV_Misc_Rune_01", label = "Use Hearthstone",
       tip = "A route may start with your Hearthstone when it's ready and faster.", route = true, defaultOn = true },
     { id = "offroad", key = "offroad", icon = "Interface\\Icons\\INV_Boots_05", label = "Off-Road Shortcuts",
-      tip = "Routes cut across open ground where that's faster. Off: they follow the roads.", route = true },
+      tip = "Experimental: routes cut across open ground where that's faster, and may cross ground you can't walk. Off: they follow the roads.", route = true },
     { id = "quests", key = "layerQuests", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective, label = "Quests",
       tip = "Your quests' objectives and turn-ins on the map." },
     { id = "questAreas", key = "layerQuestAreas", icon = ns.Layers and ns.Layers.ICON and ns.Layers.ICON.objective,
@@ -4521,7 +4521,10 @@ function G.Init()
         end
         if t.needs and not S()[t.needs] then return end
         S()[t.key] = not G.QuickOn(t)
-        if t.key == "offroad" then ns.Nav.OffroadSetByPlayer() end
+        if t.key == "offroad" then
+          ns.Nav.OffroadSetByPlayer()
+          if S().offroad then ns.Nav.OffroadTurnedOn() end -- (experimental: said once a session)
+        end
         if t.route then
           if ns.Teleports then ns.Teleports.Changed() end
           ns.Nav.Invalidate(true, true)

@@ -8,7 +8,7 @@ _Double-click where you want to go, confirm, and follow the arrow._
 
 ## Routes that know the terrain
 
-When mountains or cliffs block the straight way, the route goes around them and in through the pass. It follows the roads, or takes off-road shortcuts across open ground; one button switches between them. A trip can have many stops, put in the fastest order.
+When mountains or cliffs block the straight way, the route goes around them and in through the pass. It follows the roads, or takes off-road shortcuts across open ground (experimental, off by default); one button switches between them. A trip can have many stops, put in the fastest order.
 
 ![A route around a mountain ridge and in through the pass to a walled-off valley](https://i.imgur.com/IyVpGiY.png)
 

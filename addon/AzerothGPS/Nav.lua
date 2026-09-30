@@ -2253,6 +2253,30 @@ local function OffroadChanged(text)
   if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
 end
 
+-- Off-road shortcuts: off by default from 1.0.8 (experimental, still wrong in places). The old
+-- default was on, so turned off once for everyone (the saved settings, `db`), with a note at
+-- login saying how to turn them back on (db.offroadNote, Core.lua).
+function N.MigrateOffroad(db)
+  local gps = db.settings and db.settings.gps
+  if gps and not db.offroadOff108 and gps.offroad then
+    gps.offroad = false
+    db.offroadNote = true
+  end
+  db.offroadOff108 = true
+end
+
+-- Off-road shortcuts turned on by the player: they're experimental, said once a session.
+N.OFFROAD_WARNING = "Off-road shortcuts are experimental: a route may cross ground you can't walk (a cliff, a wall, " ..
+  "deep water) or change as the terrain around it is searched. If one looks wrong, turn them off (Options > Routes, " ..
+  "or /agps offroad off)."
+local offroadWarned = false
+function N.OffroadTurnedOn()
+  if offroadWarned then return false end
+  offroadWarned = true
+  if ns.Print then ns.Print(N.OFFROAD_WARNING) end
+  return true
+end
+
 -- The player set offroad themselves: while in a city, left as they set it after.
 function N.OffroadSetByPlayer()
   local st = ns.CharDB and ns.CharDB().cityOffroad

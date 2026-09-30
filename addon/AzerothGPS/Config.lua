@@ -10,7 +10,7 @@ local HELP = {
   "/agps rotate on|off      (heading-up / north-up)",
   "/agps style minimap|zone|nospoiler (terrain / world map / explored parts only)",
   "/agps clear              (cancel the route)",
-  "/agps offroad on|off     (straight across open ground; roads only where needed)",
+  "/agps offroad on|off     (experimental: straight across open ground; roads only where needed)",
   "/agps arrow on|off       (turn-by-turn direction arrow window)",
   "/agps import             (paste TomTom /way lines as stops; copy or send your route)",
   "/way [zone] x y [text]   (add a stop; several pasted lines = several stops; with TomTom too)",
@@ -77,6 +77,7 @@ SlashCmdList.AZEROTHGPS = function(msg)
     gps.arrow = OnOff(b, gps.arrow)
   elseif a == "offroad" then
     gps.offroad = OnOff(b, gps.offroad)
+    if gps.offroad and ns.Nav and ns.Nav.OffroadTurnedOn then ns.Nav.OffroadTurnedOn() end
   elseif a == "poi" then
     local key = ({ taxi = "poiTaxi", poi = "poiPoi", labels = "poiLabels" })[b]
     if key then gps[key] = OnOff(select(3, strsplit(" ", msg:lower())), gps[key]) end

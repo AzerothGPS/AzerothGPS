@@ -704,7 +704,10 @@ local function BuildWindow()
       on:SetPoint("LEFT", row, "LEFT", ON_X + 1, 0)
       on:SetScript("OnClick", function(self)
         GPS()[t.key] = self:GetChecked() and true or false
-        if t.key == "offroad" then ns.Nav.OffroadSetByPlayer() end
+        if t.key == "offroad" then
+          ns.Nav.OffroadSetByPlayer()
+          if GPS().offroad then ns.Nav.OffroadTurnedOn() end
+        end
         if t.route then
           if ns.Teleports then ns.Teleports.Changed() end
           ns.Nav.Invalidate(true, true)
@@ -735,8 +738,12 @@ local function BuildWindow()
   header("Routes")
   check("Avoid zones too high for your level", "Routes go around zones whose levels are red for your character (their lowest level more than 4 above yours) when there's another way, like the other faction's towns. The zones you start and end in don't count.",
     function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.Invalidate() end)
-  check("Off-road shortcuts", "Riskier but faster: heads straight across open ground and only uses roads where the terrain forces it (mountains, cliffs), then straight again. Off: routes take you to the nearest road and follow the roads.",
-    function() return GPS().offroad end, function(v) GPS().offroad = v ns.Nav.OffroadSetByPlayer() end)
+  check("Off-road shortcuts (experimental)", "Experimental, off by default: heads straight across open ground and only uses roads where the terrain forces it (mountains, cliffs), then straight again. A route may cross ground you can't walk (a cliff, a wall, deep water) or change as the terrain is searched. Off: routes take you to the nearest road and follow the roads.",
+    function() return GPS().offroad end, function(v)
+      GPS().offroad = v
+      ns.Nav.OffroadSetByPlayer()
+      if v then ns.Nav.OffroadTurnedOn() end
+    end)
   check("Use flight paths", "Routes take flights (connecting ones too) between the flight masters this character knows, when that's faster. The addon learns which ones you know from the flight map: open it once at any flight master.",
     function() return GPS().useFlights ~= false end, function(v)
       GPS().useFlights = v
