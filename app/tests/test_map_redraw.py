@@ -238,3 +238,25 @@ def test_riding_a_zeppelin_doesnt_work_the_route_out_again(game):
     lua.execute(f"AGPS_T = {t0 + 100}")
     N.Route(x, y, 0)
     assert lua.eval("AGPS_ROUTES") > 0
+
+
+def test_every_stop_has_its_marker_though_the_route_is_drawn_a_few_ahead(game):
+    # (asked) the option "stops routed and drawn ahead" limits the route worked out and drawn; the
+    # stops' markers all show (only those in the map's view are placed)
+    lua, ns = game
+    N, G = ns.Nav, ns.GPS
+    st = ns.settings.gps
+    zoom, ahead = st.zoom, st.stopsAhead
+    try:
+        st.zoom, st.stopsAhead = 1500, 2
+        N.SetStops(lua.eval("""{ { x = 2300, y = 250, cont = 0 }, { x = 2350, y = 150, cont = 0 },
+          { x = 2200, y = 100, cont = 0 }, { x = 2150, y = 350, cont = 0 }, { x = 2400, y = 400, cont = 0 },
+          { x = -9000, y = 400, cont = 0 } }"""), False, "red")
+        lua.execute("AGPS_T = AGPS_T + 100")
+        G.Update()
+        assert N.PlannedStops() == 2
+        shown = sorted(int(w.stopIndex) for w in lua.eval("AGPS_WIDGETS").values() if w.stopIndex and w._shown)
+        assert shown == [1, 2, 3, 4, 5]  # (not the 6th: far off the map)
+    finally:
+        st.zoom, st.stopsAhead = zoom, ahead
+        N.Clear()

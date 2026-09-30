@@ -1675,10 +1675,12 @@ local function DrawStopPins(toScreen, viewCont)
     return
   end
   local n = 0
+  local half = canvas and canvas:GetWidth() / 2 or math.huge
   local function pin(d, title, pendingIndex, stopIndex)
     local x, y = Geo.ToContinent(d.cont, d.x, d.y, viewCont)
     if not x then return end
     local sx, sy = toScreen(x, y)
+    if math.abs(sx) > half + 20 or math.abs(sy) > half + 20 then return end -- (off the map: not placed)
     n = n + 1
     local b = StopPin(n)
     if d.learnNode then -- (a flight master's detour: the map's own icon for it, as a stop made from a map icon)
@@ -1704,9 +1706,10 @@ local function DrawStopPins(toScreen, viewCont)
     end
     b:Show()
   end
-  -- the stops routed ahead (a long list: the rest show up as they come next)
+  -- every stop's marker (the route is worked out and drawn only to the ones ahead, PlannedStops:
+  -- the option; a marker costs next to nothing)
   local stops = ns.Nav.stops
-  for i = 1, ns.Nav.PlannedStops() do
+  for i = 1, #stops do
     local d = stops[i]
     pin(d, d.name or (#stops > 1 and ("Stop " .. i) or "Destination"), nil, i)
   end
