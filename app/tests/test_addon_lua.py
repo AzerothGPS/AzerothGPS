@@ -1556,6 +1556,21 @@ def test_undercitys_map_stays_up_anywhere_over_the_city_while_down_in_it(nav_env
     assert G.DownInCityAt(0, 1700.0, 60.0) is None
 
 
+def test_down_in_undercity_the_route_starts_on_the_players_own_floor(nav_env):
+    # (reported) under a walkway, the top floor's height at the player's spot is the walkway's:
+    # the route started up there (up the stairs and back). The game's height says which floor.
+    lua, ns, UC = undercity_env(nav_env)
+    R, N = ns.Router, ns.Nav
+    zoff = ns.CityLevels[UC].zoff
+    start, stop = (1520.0, 172.0), (1677.8, 99.0)  # under the First Aid walkway; the Fishing trainer
+    assert N.CityHeight(UC, *start) > -110  # (the top floor there: the walkway)
+    lua.execute(f"UnitPosition = function() return {start[1]}, {start[0]}, {-124.0 + zoff}, 0 end")
+    assert abs(N.PlayerCityZ(UC) + 124) < 0.1
+    r = R.Route(UC, start[0], start[1], stop[0], stop[1], lua.table(offroad=False, z=-124.0 + zoff, tz=-61.9))
+    near = [(r.pts[i], r.pts[i + 1]) for i in range(1, len(r.pts), 2)][1:3]
+    assert all(N.CityHeight(UC, x, y) < -118 for x, y in near)  # (on the bottom floor, not up the walkway)
+
+
 def test_undercity_lift_tops_are_up_top(nav_env):
     # The halls at the lifts' tops report Undercity's map too, but they're up at the surface:
     # a stop in the Trade Quarter right below is down a lift, not a few yards away.

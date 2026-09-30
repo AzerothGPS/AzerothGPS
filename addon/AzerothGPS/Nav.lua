@@ -1112,7 +1112,9 @@ function N.Route(px, py, cont)
   local d = N.dest
   if not d then return nil end
   if ns.CityLevels and ns.CityLevels[cont] and px and N.CityHeight then
-    local h = N.CityHeight(cont, px, py)
+    -- (the player's own height when the game gives it: the floor's under them can be a walkway
+    -- over their head, and they didn't jump up to it)
+    local h = N.PlayerCityZ(cont) or N.CityHeight(cont, px, py)
     if h and lastFloor and math.abs(h - lastFloor) >= N.FLOOR_JUMP and GetTime() - floorJumpAt >= N.FLOOR_JUMP_EVERY then
       floorJumpAt = GetTime()
       kept = nil
@@ -2107,6 +2109,14 @@ function N.CityHeight(level, x, y)
   return (b - 48) * h.step + h.z0
 end
 
+-- The player's height in an underground city's own terms (its heights are the model's: the
+-- game's height less the level's zoff), or nil when unknown.
+function N.PlayerCityZ(level)
+  local l = ns.CityLevels and ns.CityLevels[level]
+  local z = l and l.zoff and N.PlayerZ()
+  return z and z - l.zoff or nil
+end
+
 -- The floor a stop is on: the most common floor height within a few yards (a marker can
 -- sit on a sliver of another floor, under or beside a counter).
 N.FLOOR_AROUND_YD = 4
@@ -2146,7 +2156,10 @@ function N.HeightHint(px, py, cont)
     return nil
   end
   if not ns.CityLevels[lvl] then return nil end
-  local zs, zp = N.CityFloor(lvl, tx, ty), N.CityHeight(lvl, px, py)
+  -- (the player's own height, and the stop's when it has one: not the top floor over them)
+  local zoff = ns.CityLevels[lvl].zoff
+  local zs = (tx == d.x and ty == d.y and d.z and zoff) and d.z - zoff or N.CityFloor(lvl, tx, ty)
+  local zp = N.PlayerCityZ(lvl) or N.CityHeight(lvl, px, py)
   if not (zs and zp) or math.abs(zs - zp) < N.HEIGHT_HINT_YD then return nil end
   return zs < zp and "down" or "up", math.abs(zs - zp)
 end

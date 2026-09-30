@@ -2229,8 +2229,11 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   -- walk right above or below)
   local H = not layered and grid and grid.slack and ns.Nav and ns.Nav.CityHeight
   if H then
-    local function sameFloor(list, x, y, around)
-      local h0 = around and ns.Nav.CityFloor(cont, x, y) or H(cont, x, y)
+    -- (the heights given, the game's: the player's own floor, not the top one over them, a
+    -- walkway overhead; and the stop's, a trainer under one. The level's are the model's: less zoff.)
+    local zoff = ns.CityLevels and ns.CityLevels[cont] and ns.CityLevels[cont].zoff
+    local function sameFloor(list, x, y, around, z)
+      local h0 = (z and zoff) and z - zoff or around and ns.Nav.CityFloor(cont, x, y) or H(cont, x, y)
       if not h0 then return list end
       local out = {}
       for _, c in ipairs(list) do
@@ -2239,7 +2242,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       end
       return out[1] and out or list
     end
-    ss, ts = sameFloor(ss, sx, sy), sameFloor(ts, tx, ty, true)
+    ss, ts = sameFloor(ss, sx, sy, false, sz), sameFloor(ts, tx, ty, true, tz)
   end
   local s, t = ss[1], ts[1]
   if not s or not t then return Straight(g, sx, sy, tx, ty) end

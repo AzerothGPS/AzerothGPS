@@ -6,8 +6,9 @@ its base continent's coordinates (Geo.ToContinent treats it as the base) but con
 the surface only through its lifts.
 
 From the city's WMO (walknet.py builds the walk network of its floors):
-- walkable floors (faces pointing up, by the vertex normals; this client's MOPY flags are
-  all 0), minus the canal beds (water) and anything well above street level (arch tops,
+- walkable floors (faces pointing up, by the vertex normals: the one-floor grid; for the
+  layered roads, the faces a character collides with, from the MPY2 flags, either side up),
+  minus the canal beds (water) and anything well above street level (arch tops,
   roofs), except the sewers, which climb;
 - a passability grid of them (the same format as Data/Terrain.lua: 0 open, 2 blocked), so
   routes inside keep to the floors and off-road legs don't cross walls;
@@ -55,10 +56,30 @@ SLACK = 0.0  # yards: blocked cells ignored at a walk's ends (Passability's END_
 HEIGHT_Z0, HEIGHT_STEP = -140.0, 2.0  # the floor heights written for the addon
 
 
-def _floors(cd: ClientData, wmo: int, names: list[str], slope: float = None):
+def solid_flags(data: bytes, sub: dict) -> list | None:
+    """Whether each face of a WMO group is one a character collides with, from its poly flags
+    (MOPY, or this client's MPY2: u16 flags and u16 material a face): collision-only ones
+    (0x08) and rendered ones that aren't detail (0x20 without 0x04). None: no flags."""
+    if "MPY2" in sub:
+        pa, pb = sub["MPY2"]
+        flags = [struct.unpack_from("<H", data, i)[0] for i in range(pa, pb, 4)]
+    elif "MOPY" in sub:
+        pa, pb = sub["MOPY"]
+        flags = list(data[pa:pb:2])
+    else:
+        return None
+    if not any(flags):
+        return None
+    return [bool(f & 0x08) or (bool(f & 0x20) and not f & 0x04) for f in flags]
+
+
+def _floors(cd: ClientData, wmo: int, names: list[str], slope: float = None, solid: bool = False):
     """Walkable faces: (group, name, centroid local z, local triangle), and walls: steep faces
     (group, name, (zmin, zmax), local triangle). The floors run on under the walls, so the
-    walls standing at walking height are what closes the way."""
+    walls standing at walking height are what closes the way.
+    `solid`: only the faces a character collides with (solid_flags), either side up: the city's
+    collision faces are often wound upside down (a ramp's, a bridge's deck), and its drawn
+    floors over them are decoration a character doesn't stand on."""
     w = I.read_wmo(cd, wmo)
     out, walls, gz = [], [], {}
     for gi in range(min(w.n_groups, len(w.group_files))):
@@ -75,7 +96,10 @@ def _floors(cd: ClientData, wmo: int, names: list[str], slope: float = None):
             idx = struct.unpack_from(f"<{(ib - ia) // 2}H", data, ia)
             zs = [v[2] for v in verts]
             gz[gi] = (min(zs), max(zs)) if zs else (0, 0)
+            hard = solid_flags(data, sub) if solid else None
             for k in range(len(idx) // 3):
+                if hard is not None and (k >= len(hard) or not hard[k]):
+                    continue
                 i1, i2, i3 = idx[3 * k], idx[3 * k + 1], idx[3 * k + 2]
                 a1, a2, a3 = verts[i1], verts[i2], verts[i3]
                 ux, uy, uz = a2[0] - a1[0], a2[1] - a1[1], a2[2] - a1[2]
@@ -90,7 +114,7 @@ def _floors(cd: ClientData, wmo: int, names: list[str], slope: float = None):
                     continue
                 if abs(nz) / L < (slope or FLOOR_SLOPE):
                     continue
-                if norms and norms[i1][2] + norms[i2][2] + norms[i3][2] <= 0:
+                if hard is None and norms and norms[i1][2] + norms[i2][2] + norms[i3][2] <= 0:
                     continue
                 out.append((gi, names[gi] if gi < len(names) else "", (a1[2] + a2[2] + a3[2]) / 3, (a1, a2, a3)))
             break
@@ -195,7 +219,7 @@ def undercity(cd: ClientData, log=print) -> dict:
     log(f"  Undercity: up top: {', '.join(upper)}")
 
     map_id = next((r["ID"] for r in cd.table("UiMap") if (r.get("Name_lang") or "") == "Undercity"), 0)
-    return {"id": UNDERCITY_ID, "base": 0, "name": "Undercity", "map": map_id, "tx0": tx0, "ty0": ty0,
+    return {"id": UNDERCITY_ID, "base": 0, "name": "Undercity", "map": map_id, "tx0": tx0, "ty0": ty0, "zoff": p.z,
             "cells": cells, "graph": g, "lifts": lifts, "is_open": is_open, "upper": upper, "debug": debug, "hall": hall, "top": top, "wmo": p.wmo,
             "stair_z": stair_z, "floor_at": floor_at, "height_at": height_at}
 
@@ -512,7 +536,8 @@ def cities_lua(cd: ClientData, log=print) -> str:
            "local _, ns = ...",
            "ns.CityLevels = ns.CityLevels or {}",
            "-- (upper: the areas up at the surface inside the city, where the game reports its map too)",
-           f"ns.CityLevels[{u['id']}] = {{ base = {u['base']}, name = \"{u['name']}\", map = {u['map']}, wmo = {u['wmo']}, "
+           "-- (zoff: its heights here are the model's own; the game's (world) are these plus zoff)",
+           f"ns.CityLevels[{u['id']}] = {{ base = {u['base']}, name = \"{u['name']}\", map = {u['map']}, wmo = {u['wmo']}, zoff = {u['zoff']:.2f}, "
            f"upper = {{ {', '.join('[' + chr(34) + n + chr(34) + '] = true' for n in u['upper'])} }} }}",
            "-- roads (the format of Data/Roads.lua)",
            f"ns.Roads[{u['id']}] = {{"]
