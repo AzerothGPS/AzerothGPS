@@ -1151,21 +1151,17 @@ end
 local function ViewCont(cont)
   return browse and browseCont or (free and free.cont) or cont
 end
--- The level whose roads and walls the map shows at (x, y), and the road tools edit there: an
--- underground city's (Undercity: 10001) over its grid when its map was opened from its icon, or
--- (`here`: the view on the player's continent) when the player is down in it; else `cont`.
--- (Not the Ruins' roads over the city's map while fixing the city's.)
-function G.ShownLevel(cont, x, y, here)
-  local lvl
-  if free and free.city then lvl = Geo.MapCont(free.city) end
-  if not (lvl and ns.CityLevels and ns.CityLevels[lvl]) and here then
-    lvl = ns.Nav and ns.Nav.PlayerLevel and ns.Nav.PlayerLevel(cont)
+-- The underground city level (Undercity: 10001) whose art the map shows: its model's inside
+-- map (`wmo`, a WMO id) or its zone map (`mapID`); nil for any other. Its roads and walls are
+-- the ones drawn over it, and the road tools edit that level there (G.shownLevel); the
+-- continent's map around it (the Ruins of Lordaeron, Tirisfal) shows the continent's.
+function G.CityArtLevel(wmo, mapID)
+  for id, l in pairs(ns.CityLevels or {}) do
+    if (wmo and l.wmo == wmo) or (mapID and l.map == mapID) then return id end
   end
-  if not lvl or lvl == cont or not (ns.CityLevels and ns.CityLevels[lvl]) or Geo.Base(lvl) ~= cont then return cont end
-  local P = ns.Passability
-  if P and P.InGrid and not P.InGrid(lvl, x, y) then return cont end -- (looking somewhere else from down there)
-  return lvl
+  return nil
 end
+G.shownLevel = nil -- (the last redraw's, with its continent: G.shownCont)
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
 local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
 local LeaveOpened -- (below: right-click out of such a map)
@@ -1753,6 +1749,7 @@ function G.Update()
   local quads
   -- Indoors inside a known building: show its interior map, like the game minimap.
   local place, wmo, room
+  local artLevel -- (an underground city's map shown: its level, G.CityArtLevel)
   -- Interiors belong to the terrain view (like the game minimap), and only while zoomed in:
   -- the world map style shows the city's world map, and zooming out shows the outside.
   -- (the player's own inside map only while the view is on them: not a city opened from its
@@ -1804,8 +1801,10 @@ function G.Update()
     end
   elseif place and not browse then
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
+    artLevel = G.CityArtLevel(place[1])
   elseif browse then
     quads = G.LayoutZone(cx, cy, browse, rot, zoom, half, browseBounds, st.style == "nospoiler")
+    artLevel = G.CityArtLevel(nil, browse)
     local bm = ns.Maps[browse]
     if bm and bm.worldFrames and browseBounds then -- (the insets: maps not on the world map's art)
       for _, it in ipairs(G.WORLD_INSETS) do
@@ -1827,6 +1826,7 @@ function G.Update()
       id, bounds = G.CoveringMap(viewCont, cx, cy, zoom)
     end
     quads = G.LayoutZone(cx, cy, id, rot, zoom, half, bounds, st.style == "nospoiler")
+    artLevel = G.CityArtLevel(nil, id)
   else
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
   end
@@ -1845,8 +1845,10 @@ function G.Update()
   G.DrawInsetFrames(cx, cy, rot, s)
   -- (the roads of the continent in view, the player's or another)
   local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
-  if (st.showRoads or forced) and not place then
-    for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or G.ShownLevel(viewCont, cx, cy, here), rot, zoom, half)) do
+  -- (an underground city's map: its level's roads; not over another inside map, a building's)
+  G.shownLevel, G.shownCont = artLevel or viewCont, viewCont
+  if (st.showRoads or forced) and (not place or artLevel) then
+    for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or artLevel or viewCont, rot, zoom, half)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
     end
   end
@@ -1882,7 +1884,7 @@ function G.Update()
       end
     end
   elseif G.ShowsWalls() then -- (inside maps too: a city's own floors and walls)
-    local wc = G.ShownLevel(viewCont, cx, cy, here) -- (the level shown: the city's down in one, or its map)
+    local wc = artLevel or viewCont -- (the level shown: an underground city's on its map)
     -- (the terrain's impassable borders thinner, drawn walls thicker)
     for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
   end
@@ -3313,7 +3315,12 @@ function G.FinishRoad(line, erase, wall)
     return
   end
   -- (down in a city: on its level only when drawn over the city, not somewhere else looked at)
-  local level = G.ShownLevel(line.cont, pts[1], pts[2], true) -- (the level the map shows there)
+  -- (the level the map shows: an underground city's over its own map, only over the city)
+  local level, shown = line.cont, G.shownLevel
+  if shown and shown ~= line.cont and G.shownCont == line.cont and Geo.Base(shown) == line.cont
+      and not (ns.Passability and ns.Passability.InGrid and not ns.Passability.InGrid(shown, pts[1], pts[2])) then
+    level = shown
+  end
   local mapID = C_Map.GetBestMapForUnit("player")
   local info = mapID and C_Map.GetMapInfo(mapID)
   -- an erase drawn as a loop (ending back near its start): the roads inside it go

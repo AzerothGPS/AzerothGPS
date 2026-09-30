@@ -1504,17 +1504,26 @@ def test_out_of_the_ruins_through_the_north_gate(nav_env):
                     assert run < 5, (offroad, stop, x1, y1, x2, y2)  # (a corner, not through a wall)
 
 
-def test_the_map_shows_undercitys_roads_down_in_it(nav_env):
-    # (reported) down in Undercity with the road tools on, the map showed the Ruins' roads up top
-    # (the continent's) over the city, while strokes went on the city's level
+def test_the_map_shows_undercitys_roads_on_its_map(nav_env):
+    # (reported) Undercity's map (its model's inside map, or its zone map) showed no roads, and
+    # zoomed out the city's roads lay over the Ruins on Tirisfal's map: the art shown decides
     lua, ns, UC = undercity_env(nav_env)
     G = ns.GPS
-    lua.execute("GetTime = function() return 10 end")
-    assert G.ShownLevel(0, 1560.0, 228.0, True) == UC  # the Trade Quarter's ring
-    assert G.ShownLevel(0, -9000.0, 400.0, True) == 0  # looking at Elwynn from down there
-    assert G.ShownLevel(0, 1560.0, 228.0, False) == 0  # the view somewhere else
-    lua.execute("AGPS_MAP = 1420 GetTime = function() return 100 end")  # back up in Tirisfal
-    assert G.ShownLevel(0, 1560.0, 228.0, True) == 0
+    wmo = ns.CityLevels[UC].wmo
+    assert G.CityArtLevel(wmo) == UC and G.CityArtLevel(None, 1458) == UC
+    assert G.CityArtLevel(None, 1420) is None and G.CityArtLevel(12345) is None  # Tirisfal, a building
+    # the road tools draw on the level shown there: the city's over its map, over the city only
+    saved = []
+    ns.Print = lambda *a: None
+    ns.Record = lua.table(Save=lambda t: saved.append(t) or len(saved))
+    lua.execute("C_Map.GetMapInfo = function() return { name = 'Undercity' } end time = os.time")
+    line = lambda x, y: lua.table(cont=0, pts=lua.table(x, y, x + 10, y, x + 20, y))
+    G.shownLevel, G.shownCont = UC, 0
+    G.FinishRoad(line(1560.0, 228.0))
+    G.FinishRoad(line(-9000.0, 400.0))
+    G.shownLevel = 0  # Tirisfal's map
+    G.FinishRoad(line(1560.0, 228.0))
+    assert [t.continent for t in saved] == [UC, 0, 0]
 
 
 def test_undercity_lift_tops_are_up_top(nav_env):
@@ -3506,6 +3515,7 @@ def test_a_stroke_drawn_elsewhere_from_down_in_a_city_is_on_the_continent(nav_en
     ns.Print = lua.eval("function() end")
     lua.execute("C_Map = C_Map or {} C_Map.GetBestMapForUnit = function() return 1458 end C_Map.GetMapInfo = function() return { name = 'Undercity' } end time = function() return 1 end")
     ns.Nav.PlayerLevel = lua.eval("function(c) return 10001 end")  # (the player is down in Undercity)
+    ns.GPS.shownLevel, ns.GPS.shownCont = 10001, 0  # (its map shown)
     ns.db = lua.eval("{ tracks = {} }")
     # looking at Duskwood from there, a road drawn
     ns.GPS.FinishRoad(lua.eval("{ cont = 0, pts = { -10900,400, -10880,450, -10860,500 } }"))
