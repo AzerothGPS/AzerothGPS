@@ -40,7 +40,8 @@ HIGH = -95.0  # local z: floors above this are arch tops and roofs (not the sewe
 STREET = -125.0  # local z of the streets
 LEDGE = 3.0  # yards: a drop this big between neighboring cells is a ledge
 RUINS_WAYS = [  # the Ruins of Lordaeron: the way in from the north gate, and the lifts
-    [(1841, 236), (1790, 236), (1761, 238), (1718, 234), (1665, 238), (1630, 232), (1612, 236), (1596, 240)],
+    # (from the road outside, down the gate's steps: their treads' edges would close the way)
+    [(1882, 236), (1841, 236), (1790, 236), (1761, 238), (1718, 234), (1665, 238), (1630, 232), (1612, 236), (1596, 240)],
     [(1596, 240), (1596, 214), (1597, 190)],  # to the east lift
     [(1596, 240), (1570, 240), (1545, 240)],  # the south lift
     [(1596, 240), (1596, 266), (1595, 291)],  # the west lift

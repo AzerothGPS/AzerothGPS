@@ -1465,6 +1465,45 @@ def test_undercity_is_its_own_level(nav_env):
     assert N.PlayerLevel(0) == 0
 
 
+def test_a_stop_by_a_ledge_down_in_undercity_stays_down_there(nav_env):
+    # (reported) down at the bottom, a stop on the First Aid trainer (at the edge of the bank's
+    # level, over the drop): "board the lift to the Ruins". A spot a yard or two off the
+    # trainer is a closed cell (the ledge), but it's the city's floors, not the Ruins up top.
+    lua, ns, UC = undercity_env(nav_env)
+    N = ns.Nav
+    assert N.PlayerLevel(0) == UC
+    ledge = (1522.7, 166.05)  # next to the First Aid trainer, over the drop
+    assert not ns.Passability.IsOpen(UC, *ledge)
+    assert N.StopLevel(0, *ledge) == UC
+    N.SetDestination(ledge[0], ledge[1], N.StopLevel(0, *ledge), "First Aid")
+    r = N.Route(1588.6, 174.8, 0)  # at the bottom, below the bank
+    assert all(not (l.ride and l.ride[8] == "lift") for l in r.legs.values())
+
+
+def test_out_of_the_ruins_through_the_north_gate(nav_env):
+    # (reported) from a lift's top to anywhere outside: out the north gate onto the road, not
+    # straight over the ruins' walls (the road outside the gate was dropped: its end crossed
+    # the gate's steps, so the ruins' roads led nowhere and routes fell back to a straight line)
+    lua, ns, UC = undercity_env(nav_env)
+    R, P = ns.Router, ns.Passability
+    for offroad in (False, True):
+        for stop in ((2250.0, 280.0), (505.0, 1570.0), (-20.0, -900.0)):  # Brill, the Sepulcher, Tarren Mill
+            r = R.Route(0, 1594.9, 290.8, stop[0], stop[1], lua.table(offroad=offroad))
+            pts = [(r.pts[i], r.pts[i + 1]) for i in range(1, len(r.pts), 2)]
+            assert len(pts) > 3, (offroad, stop)
+            # out across the gate's line (x 1866), in its opening (y 208 to 268)
+            gate = [a[1] + (b[1] - a[1]) * (1866 - a[0]) / (b[0] - a[0]) for a, b in zip(pts, pts[1:])
+                    if (a[0] - 1866) * (b[0] - 1866) < 0]
+            assert gate and 208 <= gate[0] <= 268, (offroad, stop, gate)
+            for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+                d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                n, run = max(1, int(d / 0.5)), 0
+                for k in range(1, n):
+                    v = P.OverlayRaw(0, x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n, True)
+                    run = run + 1 if v == 2 else 0
+                    assert run < 5, (offroad, stop, x1, y1, x2, y2)  # (a corner, not through a wall)
+
+
 def test_undercity_lift_tops_are_up_top(nav_env):
     # The halls at the lifts' tops report Undercity's map too, but they're up at the surface:
     # a stop in the Trade Quarter right below is down a lift, not a few yards away.
@@ -2390,7 +2429,7 @@ def test_recorded_roads_keep_the_ruins_roads_and_city_drops(nav_env):
     R = ns.Router
     R.Reset()
     # the ruins' walked way from the gate is still a road
-    found = any(abs(e[5] - 1841) < 2 and abs(e[6] - 236) < 2 or abs(e[len(e) - 1] - 1841) < 2 and abs(e[len(e)] - 236) < 2
+    found = any(abs(e[5] - 1882) < 2 and abs(e[6] - 236) < 2 or abs(e[len(e) - 1] - 1882) < 2 and abs(e[len(e)] - 236) < 2
                 for e in R.Edges(0)[0].values())
     assert found
     # the city's drops still work with a record on its level

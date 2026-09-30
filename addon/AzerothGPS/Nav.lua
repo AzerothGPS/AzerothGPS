@@ -1054,10 +1054,13 @@ function N.PlayerLevel(cont)
 end
 
 -- The level of a new stop at (x, y) on `cont`: the city's when the player is down in it and
--- the spot is on its floors, else the continent.
+-- the spot is on its floors, else the continent. (Its floors: a height there, not only open
+-- cells: a trainer at a ledge's edge or in a booth is a yard from closed ones.)
 function N.StopLevel(cont, x, y)
   local lvl = N.PlayerLevel(cont)
-  if lvl ~= cont and ns.Passability and ns.Passability.IsOpen and ns.Passability.IsOpen(lvl, x, y) then return lvl end
+  if lvl == cont then return cont end
+  local P = ns.Passability
+  if (P and P.IsOpen and P.IsOpen(lvl, x, y)) or (N.CityHeight and N.CityHeight(lvl, x, y)) then return lvl end
   return cont
 end
 
