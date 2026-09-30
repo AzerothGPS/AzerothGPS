@@ -2,7 +2,7 @@
 -- The terrain grids by blocks, for Passability.FindPath: see hpa.py.
 local _, ns = ...
 ns.TerrainHPA = ns.TerrainHPA or {}
-ns.TerrainHPA[0] = { K = 32, nx = 46, ny = 84, w = 1472, h = 2688, stamp = "cab54160ef436039", c = {
+ns.TerrainHPA[0] = { K = 32, nx = 46, ny = 84, w = 1472, h = 2688, stamp = "275367aa175c72c0", c = {
 [24]="030VFWF_472w2w", [25]="04000VFWF_2w2w47472w2w", [26]="04000VFWF_2w2w47472w2w", [27]="04000VFWF_2w2w47472w2w", [28]="04000VFWF_2w2w47472w2w", [29]="04000VFWF_2w2w47472w2w", [30]="04000VFWF_2w2w47472w2w", [31]="04000VFWF_2w2w47472w2w",
 [32]="04000VFWF_2w2w47472w2w", [33]="04000VFWF_2w2w47472w2w", [34]="04000VFWF_2w2w47472w2w", [35]="0300FWF_2w472w", [70]="04000VFWF_2w2w47472w2w", [71]="04000VFWF_2w2w47472w2w", [72]="04000VFWF_2w2w47472w2w", [73]="04000VFWF_2w2w47472w2w",
 [74]="04000VFWF_2w2w47472w2w", [75]="04000VFWF_2w2w47472w2w", [76]="04000VFWF_2w2w47472w2w", [77]="04000VFWF_2w2w47472w2w", [78]="04000VFWF_2w2w47472w2w", [79]="04000VFWF_2w2w47472w2w", [80]="04000VFWF_2w2w47472w2w", [81]="04000VFWF_2w2w47472w2w",
