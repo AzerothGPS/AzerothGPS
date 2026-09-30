@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 6) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 7) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -15,7 +15,7 @@ center, +x right and +y up.
 | `PlayerWorld()` | x, y, continent, z; nil in instances or when the game hides it |
 | `Facing()` | radians, counter-clockwise from north |
 | `BaseContinent(cont)` | the continent an underground city level is drawn on |
-| `ToContinent(from, x, y, to)` | (x, y) on continent `from` in continent `to`'s coordinates, by where both sit on the world map (a spot on one continent drawn over the other's world map); nil when either has no world frame |
+| `ToContinent(from, x, y, to)` | (x, y) on continent `from` in continent `to`'s coordinates, by where both sit on the world map (a spot on one continent drawn over the other's world map); nil when either has no world frame. A map shown as an inset on the world map (Zephras Isle, continent 2991) lands on its inset (version 7) |
 | `LocateWorld(cont, x, y)` | uiMapID, zone name, u (east), v (south) of the smallest zone there |
 | `MapToWorld(uiMapID, u, v)` | x, y, continent |
 | `Roads(cont)` | the shipped road network, read only (`Data/Roads.lua` format) |

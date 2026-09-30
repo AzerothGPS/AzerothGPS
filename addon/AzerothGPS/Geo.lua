@@ -80,12 +80,33 @@ function Geo.MapCont(mapID)
   return m and m.continent
 end
 
+-- A map not on the world map's art but shown as an inset on it (Zephras Isle: GPSFrame's
+-- WORLD_INSETS): the spot's place in the inset's rectangle, as world map fractions (u east, v
+-- south), or nil.
+local function InsetFraction(cont, x, y)
+  for _, it in ipairs(ns.GPS and ns.GPS.WORLD_INSETS or {}) do
+    local m = ns.Maps and ns.Maps[it.map]
+    local b = m and m.continent == cont and m.bounds
+    if b then
+      local u = (b[4] - y) / (b[4] - b[2])
+      local v = (b[3] - x) / (b[3] - b[1])
+      return it.u0 + u * (it.u1 - it.u0), it.v0 + v * (it.v1 - it.v0)
+    end
+  end
+end
+
 function Geo.ToContinent(from, x, y, to)
   from, to = Geo.Base(from), Geo.Base(to)
   if from == to then return x, y end
   local a, b = Geo.WorldArtBounds(from), Geo.WorldArtBounds(to)
-  if not a or not b then return nil end
-  local u = (a[4] - y) / (a[4] - a[2])
-  local v = (a[3] - x) / (a[3] - a[1])
+  if not b then return nil end
+  local u, v
+  if a then
+    u = (a[4] - y) / (a[4] - a[2])
+    v = (a[3] - x) / (a[3] - a[1])
+  else -- (an isle shown as an inset on the world map: where it's drawn there)
+    u, v = InsetFraction(from, x, y)
+    if not u then return nil end
+  end
   return b[3] - v * (b[3] - b[1]), b[4] - u * (b[4] - b[2])
 end

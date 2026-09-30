@@ -3637,6 +3637,24 @@ def api(env):
     return lua, ns, lua.globals().AzerothGPS
 
 
+def test_api_places_zephras_isle_on_its_world_map_inset(api):
+    # (StreetView asked) a spot on Zephras Isle, on the world view in another continent's
+    # coordinates: on the isle's inset there, not nil
+    lua, ns, A = api
+    load(lua, ns, "Data/Maps.lua")
+    assert A.version >= 7
+    b = ns.Maps[2521].bounds
+    cx, cy = (b[1] + b[3]) / 2, (b[2] + b[4]) / 2
+    x, y = A.ToContinent(2991, cx, cy, 0)
+    it = ns.GPS.WORLD_INSETS[1]
+    ib = ns.GPS.InsetBounds(it, ns.Geo.WorldArtBounds(0))
+    assert ib[1] < x < ib[3] and ib[2] < y < ib[4]
+    assert abs(x - (ib[1] + ib[3]) / 2) < 1 and abs(y - (ib[2] + ib[4]) / 2) < 1  # (the isle's middle: the inset's)
+    x2, _ = A.ToContinent(2991, b[3], cy, 0)  # (its north edge: the inset's top)
+    assert abs(x2 - ib[3]) < 1
+    assert A.ToContinent(0, 1600.0, 240.0, 2991) is None  # (the other way: none)
+
+
 def multi(lua, f, *args):
     """All the values a Lua function returns (lupa keeps only the first)."""
     t = lua.eval("function(f, ...) return { f(...) } end")(f, *args)
@@ -3650,7 +3668,7 @@ def test_public_api_exposes_documented_functions(api):
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
                  "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
         assert A[name] is not None, name
-    assert A.version == 6
+    assert A.version == 7
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 

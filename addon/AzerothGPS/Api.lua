@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 6 }
+local API = { version = 7 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -17,6 +17,7 @@ function API.Facing() return ns.Geo.Facing() end
 function API.BaseContinent(cont) return ns.Geo.Base(cont) end
 -- (x, y) on continent `from` in continent `to`'s coordinates, by where both sit on the world map
 -- (to draw a spot on one continent over the other's on the world map); nil when either has none.
+-- (Version 7: a map shown as an inset on the world map, Zephras Isle, lands on its inset.)
 function API.ToContinent(from, x, y, to) return ns.Geo.ToContinent(from, x, y, to) end
 -- The smallest zone on continent `cont` containing (x, y): uiMapID, name, u (east), v (south).
 -- (not `GPS() and GPS().f()`: `and` keeps only a call's first value)
