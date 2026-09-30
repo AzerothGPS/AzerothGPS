@@ -82,7 +82,12 @@ local function Save()
   cdb.stops = #list > 0 and list or nil
   cdb.loop = (N.loop and #list > 1) or nil
   cdb.dest = nil -- older single-destination save
+  -- (the zones too high the player said yes to for this route: not asked again after a /reload)
+  local ok = {}
+  for z in pairs(N.redOk or {}) do ok[#ok + 1] = z end
+  cdb.redOk = (#list > 0 and #ok > 0) and ok or nil
 end
+N.SaveStops = Save
 
 local function Changed()
   N.dest = N.stops[1]
@@ -342,6 +347,8 @@ function N.Restore()
     if d.x and d.y and d.cont then N.stops[#N.stops + 1] = Copy(d) end
   end
   N.loop = cdb.loop and #N.stops > 1 or false
+  N.redOk = {}
+  for _, z in ipairs(#N.stops > 0 and cdb.redOk or {}) do N.redOk[z] = true end
   N.dest = N.stops[1]
   N.route, N.arrivedAt = nil, nil
   version = version + 1
@@ -1443,6 +1450,7 @@ function N.CheckRedRoute(px, py, cont, now)
   if not (zones and ns.GPS and ns.GPS.ConfirmRedRoute) then return end
   ns.GPS.ConfirmRedRoute(zones, function()
     for _, z in ipairs(zones) do N.redOk[z.z] = true end
+    N.SaveStops()
   end, function()
     N.Clear()
   end)

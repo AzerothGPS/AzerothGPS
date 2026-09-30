@@ -2997,6 +2997,21 @@ def test_a_walk_still_being_searched_doesnt_decide_against_the_flight_for_good(n
     assert flies()  # the search done: the flight
 
 
+def test_a_zone_too_high_said_yes_to_isnt_asked_again_after_a_reload(nav_env):
+    # (reported) routing through a zone too high, asked and said yes to: after a /reload, with
+    # the route still on, the question came up again. The answers are saved with the stops.
+    lua, ns = nav_env
+    N = ns.Nav
+    N.redOk = lua.eval("{ [1417] = true }")  # (yes for Arathi Highlands)
+    N.SetStops(lua.eval("{ { x = -1441, y = -2332, cont = 0 } }"), False, "red")
+    N.redOk = lua.eval("{}")  # (a /reload: nothing in memory)
+    N.Restore()
+    assert N.redOk[1417] and len(N.stops) == 1
+    N.Clear()  # (a new route: asked again)
+    N.Restore()
+    assert not N.redOk[1417] and len(N.stops) == 0
+
+
 def test_debug_tells_how_the_trip_was_planned(nav_env):
     # (a flight not taken in game, taken offline: /agps debug says why) the level, the zones too
     # high, the flight masters known, the plan and the walk straight there
