@@ -1627,6 +1627,19 @@ def test_no_undercity_road_climbs_steeper_than_a_stair(nav_env):
     assert len(steep) <= 0.02 * len(e), steep[:10]  # (a few quirks of the floors: 80 when the stairs' cells were in the wrong order)
 
 
+def test_a_route_to_another_continent_is_overviewed_on_the_world_map(nav_env):
+    # (reported) routing over the sea, the overview zoomed out to the continent's map: the world
+    # map shows both ends (then back to following the player, in their own view)
+    lua, ns, UC = undercity_env(nav_env)
+    G, N = ns.GPS, ns.Nav
+    N.stops = lua.eval("{ { x = 1600, y = -4400, cont = 1 } }")  # Orgrimmar, from Eastern Kingdoms
+    assert G.TourAcrossContinents(0)
+    N.stops = lua.eval("{ { x = 2250, y = 280, cont = 0 } }")  # Brill: the same continent
+    assert not G.TourAcrossContinents(0)
+    N.stops = lua.eval("{ { x = 1590, y = 277, cont = 10001 } }")  # down in Undercity: on it too
+    assert not G.TourAcrossContinents(0)
+
+
 def test_undercity_lift_tops_are_up_top(nav_env):
     # The halls at the lifts' tops report Undercity's map too, but they're up at the surface:
     # a stop in the Trade Quarter right below is down a lift, not a few yards away.

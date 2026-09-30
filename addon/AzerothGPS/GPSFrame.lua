@@ -3002,11 +3002,36 @@ local function Overview(px, py, cont)
   return (minX + maxX) / 2, (minY + maxY) / 2, math.max(MIN_ZOOM, half * 1.35) -- margin for rotation
 end
 
+-- Whether the route's stops reach another continent than the player's (a boat or a zeppelin
+-- over): its overview is the world map's, not the continent's.
+function G.TourAcrossContinents(cont)
+  local here = Geo.Base(cont)
+  for i = 1, #ns.Nav.stops do
+    local d = ns.Nav.stops[i]
+    if d and d.cont and Geo.Base(d.cont) ~= here and not (ns.CityLevels and ns.CityLevels[d.cont] and ns.CityLevels[d.cont].instance) then
+      return true
+    end
+  end
+  return false
+end
+
 local function TourStep(now)
   if not tour then return end
   local px, py, cont = Geo.PlayerWorld()
   if not px or not ns.Nav.dest then tour = nil return end
   local dt = now - tour.t0
+  if tour.phase == "world" then -- (the world map shown: then back to the player, in their view)
+    if dt >= ROUTE_TOUR.show then G.Follow() end
+    return
+  end
+  if tour.phase == "hold" and dt >= ROUTE_TOUR.hold and G.TourAcrossContinents(cont) and WorldMapID() then
+    -- to another continent: the world map, both ends on it (G.Follow returns to the terrain
+    -- view or the zone's map, whichever the player had)
+    G.Browse(WorldMapID(), ViewCont(cont))
+    tour = { phase = "world", t0 = now }
+    elapsed = 1
+    return
+  end
   if tour.phase == "hold" and dt >= ROUTE_TOUR.hold then
     local x, y, z = Overview(px, py, cont)
     tour = { phase = "out", t0 = now, from = { free.x, free.y, browseZoom or S().zoom }, to = { x, y, z } }
