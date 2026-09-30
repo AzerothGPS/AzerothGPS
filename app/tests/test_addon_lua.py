@@ -3734,7 +3734,7 @@ def test_public_api_exposes_documented_functions(api):
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
                  "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
         assert A[name] is not None, name
-    assert A.version == 7
+    assert A.version == 8
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 
@@ -3752,6 +3752,36 @@ def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
     A.HoldMap("game", False)
     assert not G.Held()
     assert G.HeldClick(1, 2, 0) is False
+
+
+def test_api_saves_and_restores_the_whole_view(api):
+    # (StreetView asked: a game ending put a browsed continent or world map back as a zoomed-out
+    # terrain view) the view as it was: a continent's map, the world map, following the player
+    lua, ns, A = api
+    load(lua, ns, "Data/Maps.lua")
+    ns.settings = lua.eval("{ gps = { zoom = 300 } }")
+    lua.execute("time = os.time")
+    G = ns.GPS
+    browsing = lua.eval("function(G) local b = G.BrowseState() return b end")
+    following = lua.eval("function(G) local b, f = G.BrowseState() return b == nil and f == nil end")
+    kalimdor = G.ContinentMap(1)
+    world = next(k for k in ns.Maps.keys() if ns.Maps[k].worldFrames)
+    for mid in (kalimdor, world):
+        G.Browse(mid, 1)
+        state = A.SaveView()
+        A.LookAt(0, 1600.0, 240.0, 3000.0)
+        assert browsing(G) != mid
+        A.RestoreView(state)
+        assert browsing(G) == mid, mid
+    G.Follow()
+    state = A.SaveView()
+    assert state.follow
+    A.LookAt(0, 1600.0, 240.0, 3000.0)
+    A.RestoreView(state)
+    assert following(G)
+    A.RestoreView(None)  # (none: following)
+    A.RestoreView(lua.eval("{ x = 1, y = 2, instance = 99999 }"))  # (a dungeon no longer there: following)
+    assert following(G)
 
 
 def test_no_docks_or_dungeon_entrances_while_the_map_is_held(api):

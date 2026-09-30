@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 7 }
+local API = { version = 8 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -19,6 +19,21 @@ function API.BaseContinent(cont) return ns.Geo.Base(cont) end
 -- (to draw a spot on one continent over the other's on the world map); nil when either has none.
 -- (Version 7: a map shown as an inset on the world map, Zephras Isle, lands on its inset.)
 function API.ToContinent(from, x, y, to) return ns.Geo.ToContinent(from, x, y, to) end
+-- (Version 8) The whole map view, to put back later (a game on the map ending): following the
+-- player, or the map browsed (a continent's, the world's, a zone's, a dungeon's and its floor)
+-- with its zoom and middle, or the terrain view looked around. An opaque table.
+function API.SaveView()
+  local G = GPS()
+  if not G then return nil end
+  return G.SaveView() or { follow = true }
+end
+-- Put back a view from SaveView; nil, following, or one no longer valid: following the player.
+function API.RestoreView(state)
+  local G = GPS()
+  if not G then return end
+  if type(state) ~= "table" or state.follow or not state.x then return G.Follow() end
+  G.ApplyView(state)
+end
 -- The smallest zone on continent `cont` containing (x, y): uiMapID, name, u (east), v (south).
 -- (not `GPS() and GPS().f()`: `and` keeps only a call's first value)
 function API.LocateWorld(cont, x, y)

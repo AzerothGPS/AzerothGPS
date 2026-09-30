@@ -5254,13 +5254,15 @@ end
 -- The panned view (nil while following the player), to come back to after a /reload.
 -- (a view's free look, plain: no interior map tables)
 local function PlainFree(f)
-  return f and { x = f.x, y = f.y, rot = f.rot, cross = f.cross, cont = f.cont, city = f.city } or nil
+  return f and { x = f.x, y = f.y, rot = f.rot, cross = f.cross, cont = f.cont, city = f.city, instance = f.instance } or nil
 end
 
 function G.SaveView()
   if not free then return nil end
   local from = openedFrom
   return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont, city = free.city,
+    instance = free.instance, zoom = ns.settings and S().zoom or nil, -- (a dungeon's map, and its floor stepped to)
+    floor = free.instance and floorInst == free.instance and floorSel or nil,
     browse = browse, browseZoom = browseZoom, browseCont = browseCont, fromTerrain = fromTerrain,
     -- (the view a city's or dungeon's map was opened from: right-click still goes back there)
     from = from and { browse = from.browse, browseZoom = from.browseZoom, browseCont = from.browseCont,
@@ -5271,6 +5273,15 @@ end
 function G.RestoreView(v)
   if not (v and v.x and v.y) then return end
   if v.who ~= (UnitGUID and UnitGUID("player")) or not v.t or math.abs(time() - v.t) > G.VIEW_KEEP then return end
+  G.ApplyView(v)
+end
+
+-- A view saved by G.SaveView put back as it was: a map browsed (a continent's, the world's, a
+-- zone's) with its zoom and middle, a dungeon's map and floor, the terrain view looked around, and
+-- where right-click goes back to. (Api.lua's RestoreView: another addon's game ending.)
+function G.ApplyView(v)
+  if not (v and v.x and v.y) then return end
+  if v.instance and not (ns.CityLevels and ns.CityLevels[v.instance]) then return G.Follow() end
   if v.browse and ns.Maps and ns.Maps[v.browse] then
     G.Browse(v.browse, v.browseCont)
     browseZoom = v.browseZoom or browseZoom
@@ -5279,7 +5290,9 @@ function G.RestoreView(v)
     browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
   end
   free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont, city = v.city,
-    interior = v.city and G.CityInterior(v.city) or nil }
+    interior = v.city and G.CityInterior(v.city) or nil, instance = v.instance }
+  if v.zoom and ns.settings then S().zoom = v.zoom end
+  if v.instance then floorInst, floorSel = v.instance, v.floor end
   openedFrom = v.from
   if recenter then recenter:Show() end
   elapsed = 1
