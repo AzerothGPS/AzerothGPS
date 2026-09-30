@@ -2289,10 +2289,64 @@ function N.Status(px, py, cont)
   end
   local hint = N.HeightText(px, py, cont)
   if hint then head = head .. "\n" .. hint end
+  local learn = N.LearnOnRoute(r)
+  if learn then
+    head = head .. string.format("\n|cff66ccffOn the way: learn the flight path at %s|r%s", learn.name,
+      learn.off > 30 and string.format(" (%s off the route)", N.FormatDistance(learn.off)) or "")
+  end
   if d.boss and cont == d.cont and math.sqrt((d.x - px) ^ 2 + (d.y - py) ^ 2) <= N.BOSS_NEAR_YD then
     head = string.format("|cffffd100Defeat %s|r\n", d.name or "the boss") .. head
   end
   return head .. "\n" .. line
+end
+
+-- A flight master of the player's faction they haven't learned, by the route's walks still ahead
+-- (within LEARN_NEAR_YD): { name, off = yards from the route }, or nil. Learned on the way, the next
+-- trips may fly from it (Taxi.lua sees it on the flight map: the route is worked out again). Only
+-- once a flight map has been seen (else what's known isn't), and not with flights turned off.
+N.LEARN_NEAR_YD = 450 -- (Tarren Mill from the walk into Arathi: 390 yd off it)
+local mastersList
+function N.LearnOnRoute(r)
+  local st = ns.settings and ns.settings.gps
+  if not (r and r.parts) or r.flying or (st and st.useFlights == false) or N.corpse then return nil end
+  local fac = Faction()
+  local known, count = N.KnownFlightNodes()
+  if not fac or count < 1 then return nil end
+  local at = math.floor((r.consumed or 0) / 50)
+  if r.learnAt == at then return r.learnHint or nil end
+  if not mastersList then
+    mastersList = {}
+    for node, m in pairs(Masters()) do mastersList[#mastersList + 1] = { node, m } end
+  end
+  local cands = {}
+  for _, e in ipairs(mastersList) do
+    local m = e[2]
+    if not known[e[1]] and m[5] and string.find(m[5], fac, 1, true) then cands[#cands + 1] = e end
+  end
+  local best
+  local near2 = N.LEARN_NEAR_YD * N.LEARN_NEAR_YD
+  for _, part in ipairs(r.parts) do
+    local c, pts, kinds = Geo.Base(part.cont), part.pts, part.kinds
+    for _, e in ipairs(cands) do
+      local m = e[2]
+      if Geo.Base(m[1]) == c then
+        for i = 1, #pts - 3, 2 do
+          if kinds[(i + 1) / 2] ~= N.KIND_TRANSPORT then
+            local ax, ay, bx, by = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+            local vx, vy = bx - ax, by - ay
+            local L2 = vx * vx + vy * vy
+            local t = L2 > 0 and math.max(0, math.min(1, ((m[2] - ax) * vx + (m[3] - ay) * vy) / L2)) or 0
+            local d2 = (ax + vx * t - m[2]) ^ 2 + (ay + vy * t - m[3]) ^ 2
+            if d2 <= near2 and (not best or d2 < best.d2) then
+              best = { name = (m[4]:match("^([^,]+)") or m[4]), off = math.sqrt(d2), d2 = d2, node = e[1] }
+            end
+          end
+        end
+      end
+    end
+  end
+  r.learnAt, r.learnHint = at, best or false
+  return best
 end
 
 -- Called every redraw: "Arrived" goes a few seconds after reaching the last stop (the route

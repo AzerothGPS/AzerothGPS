@@ -3043,6 +3043,30 @@ def test_a_flight_master_learned_on_the_way_is_flown_to(nav_env):
     assert r.totalYards < 4000  # (via the Sepulcher: 6.4k on foot)
 
 
+def test_a_flight_master_passed_on_the_way_is_recommended(nav_env):
+    # (asked) the walk from the Sepulcher into Arathi goes by Tarren Mill's flight master, not
+    # learned yet: the directions say to learn it (the next trips may fly there); learned, not
+    lua, ns = _flight_env(nav_env, [10, 11])
+    N = ns.Nav
+    ns.CharDB().faction = "Horde"
+    N.SetDestination(-1441.0, -2332.0, 0, "Arathi")
+    r = N.Route(2254.0, 293.0, 0)
+    hint = N.LearnOnRoute(r)
+    assert hint and hint.name == "Tarren Mill"
+    assert "learn the flight path at Tarren Mill" in N.Status(2254.0, 293.0, 0)
+    ns.CharDB().faction = "Alliance"  # (not their faction's: Southshore's instead, near that walk too)
+    r.learnAt = None
+    hint = N.LearnOnRoute(r)
+    assert hint and hint.name == "Southshore"
+    ns.CharDB().faction = "Horde"
+    lua, ns = _flight_env(nav_env, [10, 11, 13])  # (learned)
+    ns.CharDB().faction = "Horde"
+    ns.Nav.SetDestination(-1441.0, -2332.0, 0, "Arathi")
+    r = ns.Nav.Route(2254.0, 293.0, 0)
+    hint = ns.Nav.LearnOnRoute(r)
+    assert not (hint and hint.name == "Tarren Mill")
+
+
 def test_a_connecting_flight_is_drawn_through_its_stops(nav_env):
     # (asked) Undercity to Hammerfall: the direct path known only its ends; with Tarren Mill known
     # the flight goes through it (faster), and the dotted line goes through it too
