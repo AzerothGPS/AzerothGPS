@@ -4556,10 +4556,7 @@ function G.Init()
         end
         if t.needs and not S()[t.needs] then return end
         S()[t.key] = not G.QuickOn(t)
-        if t.route then
-          if ns.Teleports then ns.Teleports.Changed() end
-          ns.Nav.Invalidate(true, true)
-        end
+        if t.route then ns.Nav.OptionsChanged() end
         G.RefreshQuick()
         if G.mapMenu then G.mapMenu.idle = 0 end -- (a click keeps the menu open)
         if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end

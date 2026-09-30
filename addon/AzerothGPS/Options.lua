@@ -704,10 +704,7 @@ local function BuildWindow()
       on:SetPoint("LEFT", row, "LEFT", ON_X + 1, 0)
       on:SetScript("OnClick", function(self)
         GPS()[t.key] = self:GetChecked() and true or false
-        if t.route then
-          if ns.Teleports then ns.Teleports.Changed() end
-          ns.Nav.Invalidate(true, true)
-        end
+        if t.route then ns.Nav.OptionsChanged() end
         Apply()
       end)
       on:SetScript("OnEnter", function(self)
@@ -733,11 +730,11 @@ local function BuildWindow()
   Page("Routing")
   header("Routes")
   check("Avoid zones too high for your level", "Routes go around zones whose levels are red for your character (their lowest level more than 4 above yours) when there's another way, like the other faction's towns. The zones you start and end in don't count.",
-    function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.Invalidate() end)
+    function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.OptionsChanged() end)
   check("Use flight paths", "Routes take flights (connecting ones too) between the flight masters this character knows, when that's faster. The addon learns which ones you know from the flight map: open it once at any flight master.",
     function() return GPS().useFlights ~= false end, function(v)
       GPS().useFlights = v
-      ns.Nav.FlightsChanged()
+      ns.Nav.OptionsChanged()
     end)
   check("Questing", "A stop inside a quest's area (the blue outlines, for quests in your log) is done when that quest's objectives are, not when you get there. In the area, the route waits and the arrow shows a ! and the objective counters. Leave before they're done and the route leads back; then it goes on to the next stop.",
     function() return GPS().questing ~= false end, function(v)
@@ -749,19 +746,17 @@ local function BuildWindow()
   check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The addon never uses it for you; the directions just say to.",
     function() return GPS().useHearthstone ~= false end, function(v)
       GPS().useHearthstone = v
-      if ns.Teleports then ns.Teleports.Changed() end
-      ns.Nav.Invalidate(true, true)
+      ns.Nav.OptionsChanged()
     end)
   check("Use class teleports", "Routes may start with a mage's teleport (with a Rune of Teleportation) or Teleport: Moonglade when it's known, off cooldown, and faster.",
     function() return GPS().useTeleports ~= false end, function(v)
       GPS().useTeleports = v
-      if ns.Teleports then ns.Teleports.Changed() end
-      ns.Nav.Invalidate(true, true)
+      ns.Nav.OptionsChanged()
     end)
   check("Avoid the other faction's towns", "Routes keep away from the other faction's guards (their towns and camps, and where their guards patrol), going around when there's a way. A stop inside one is still reached, the shortest way in.",
     function() return GPS().avoidHostile ~= false end, function(v)
       GPS().avoidHostile = v
-      ns.Nav.Invalidate(true, true)
+      ns.Nav.OptionsChanged()
     end)
   check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
     function() return GPS().fastestOrder end, function(v)

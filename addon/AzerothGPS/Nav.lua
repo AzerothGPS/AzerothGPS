@@ -435,6 +435,19 @@ function N.FlightsChanged()
   N.Invalidate(true, true) -- (also forgets the stop-to-stop times)
 end
 
+-- A route option the player changed (flight paths, the hearthstone, class teleports, the zones
+-- and towns avoided): the whole trip worked out again at once, not compared with the one shown
+-- (a longer one isn't held back), the stops put in the fastest order again under it (the order
+-- was chosen with the old one: a flight since turned off), and the map redrawn now.
+function N.OptionsChanged()
+  flightCache = nil
+  if ns.Teleports and ns.Teleports.Changed then ns.Teleports.Changed() end
+  N.Invalidate(true, true)
+  local st = ns.settings and ns.settings.gps
+  if st and st.fastestOrder and #N.stops > 1 and not N.loop and not N.KeepCityOrder() then N.OrderStops() end
+  if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+end
+
 -- The character's faction as in Data/Pois.lua ("A" / "H"), or nil when unknown.
 local function Faction()
   local f = ns.CharDB and ns.CharDB().faction

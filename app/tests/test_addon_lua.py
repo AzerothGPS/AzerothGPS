@@ -2859,6 +2859,57 @@ def test_the_offroad_option_is_gone(env):
     assert "if gps then gps.offroad = nil end" in core  # (a saved setting cleared)
 
 
+def test_a_route_option_changed_works_the_trip_out_again_at_once(nav_env):
+    # (asked) toggling flight paths, the hearthstone, teleports or the zones avoided: the route is
+    # worked out again right away (a longer one isn't held back while on the old), the stops put
+    # in the fastest order again, and the map redrawn now
+    lua, ns = nav_env
+    lua.globals().AGPS_ROUTER = ns.Router
+    lua.execute("""
+      AGPS_T = 0
+      GetTime = function() return AGPS_T end
+      AGPS_LONG = false
+      AGPS_ROUTER.Route = function(cont, sx, sy, tx, ty)
+        if AGPS_LONG then
+          local mx, my = (sx + tx) / 2 + 400, (sy + ty) / 2
+          local d = math.sqrt((mx - sx) ^ 2 + (my - sy) ^ 2) + math.sqrt((tx - mx) ^ 2 + (ty - my) ^ 2)
+          return { pts = { sx, sy, mx, my, tx, ty }, kinds = { 0, 0 }, length = d, road = d }
+        end
+        local d = math.sqrt((tx - sx) ^ 2 + (ty - sy) ^ 2)
+        return { pts = { sx, sy, tx, ty }, kinds = { 0 }, length = d, road = d }
+      end
+    """)
+    N = ns.Nav
+    ns.settings = lua.eval("{ gps = { fastestOrder = true } }")
+    N.SetDestination(0.0, 1000.0, 1, "There")
+    r1 = N.Route(0.0, 0.0, 1)
+    redrawn, ordered = [], []
+    ns.GPS.Redraw = lambda: redrawn.append(1)
+    lua.execute("AGPS_LONG = true; AGPS_T = 5")
+    N.Invalidate()  # (a search finished: a longer route is held back while on the old one)
+    assert lua.eval("rawequal")(N.Route(0.0, 50.0, 1), r1)
+    N.OptionsChanged()  # (the player turned something off: the new one at once)
+    r2 = N.Route(0.0, 60.0, 1)
+    assert not lua.eval("rawequal")(r2, r1) and r2.totalYards > 1100
+    assert redrawn
+    N.stops = lua.eval("{ { x = 0, y = 1000, cont = 1 }, { x = 0, y = 500, cont = 1 } }")
+    real = N.OrderStops
+    N.OrderStops = lambda *a: ordered.append(1)
+    try:
+        N.OptionsChanged()
+        assert ordered  # several stops, fastest order: put in order again
+        ns.settings.gps.fastestOrder = False
+        ordered.clear()
+        N.OptionsChanged()
+        assert not ordered
+    finally:
+        N.OrderStops = real
+    opts = (Path(__file__).parents[2] / "addon" / "AzerothGPS" / "Options.lua").read_text(encoding="utf-8")
+    for key in ("avoidHighZones", "useFlights", "useHearthstone", "useTeleports", "avoidHostile"):
+        at = opts.index(f"GPS().{key} = v")
+        assert "ns.Nav.OptionsChanged()" in opts[at:at + 120], key
+
+
 def test_collapsed_steps_show_only_the_trip_times(env):
     lua, ns = env
     C = ns.GPS.CollapsedStatus
