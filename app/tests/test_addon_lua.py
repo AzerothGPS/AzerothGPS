@@ -248,18 +248,18 @@ def test_a_city_model_s_streets_are_outside_with_the_height_known(interior_env):
     assert G.FindInterior(3050.0, 3060.0, 2.0, 0, "", True)[0] is not None
 
 
-def test_stormwind_s_streets_keep_the_terrain_map_zoomed_in(env):
-    # (reported twice: zoomed in on Stormwind's streets the map switched to the city's own art) every
-    # piece of Stormwind's model has art and a district's name, so the minimap's zone text matched:
-    # its art only where the game says indoors
+def test_stormwind_keeps_the_terrain_map(env):
+    # (reported twice: zoomed in on Stormwind's streets the map switched to the city's own art; then
+    # asked: no inside map from Stormwind's model at all, it looks worse than the terrain) every piece
+    # of its model has art and a district's name, so the minimap's zone text matched
     lua, ns = env
     load(lua, ns, "Data/Interiors.lua")
     G = ns.GPS
     street = (-8832.0, 625.0)  # (the Trade District)
     for z in (0, 97.0):  # (the height unknown, or known)
-        assert G.FindInterior(*street, z, 0, "Trade District", False)[0] is None, z
-    place, _w, _room = G.FindInterior(*street, 0, 0, "Trade District", True)
-    assert place is not None and place[1] in G.INSIDE_ONLY  # (indoors there: its inside map)
+        for indoors in (False, True):
+            place = G.FindInterior(*street, z, 0, "Trade District", indoors)[0]
+            assert place is None or place[1] not in G.NO_INSIDE_MAP, (z, indoors)
 
 
 def test_layout_interior_floor_and_rotation(interior_env):

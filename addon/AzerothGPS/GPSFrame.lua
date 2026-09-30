@@ -548,10 +548,10 @@ end
 -- Interiors (WMO minimaps; see app/azerothgps/interiors.py for the conventions)
 
 local Z_SLACK = 3 -- yards above/below a group's height range still counted as "in" it
--- City models whose art is only the inside map where the game says indoors (IsIndoors): every piece of
--- Stormwind's (streets and squares too) has art and a district's name, so on its streets the minimap's
--- zone text ("Trade District") matched and its art took over zoomed in. Outdoors there: the terrain.
-G.INSIDE_ONLY = { [7962574] = true } -- (Stormwind City's model, Data/Interiors.lua)
+-- City models whose art is never the inside map: Stormwind's (every piece of it, streets and squares
+-- too, has art and a district's name, so on its streets its art took over zoomed in; and indoors it
+-- looks worse than the terrain). There the terrain view stays the terrain.
+G.NO_INSIDE_MAP = { [7962574] = true } -- (Stormwind City's model, Data/Interiors.lua)
 G.INTERIOR_MAX_ZOOM = 500 -- zoomed out further than this, show the outside view instead (not while indoors)
 
 -- Height range of the rooms in `w` named `name` (cached): the floor the minimap names.
@@ -594,8 +594,7 @@ function G.FindInterior(px, py, pz, cont, zoneText, indoors, cityZ, cityWmo)
   local hasName = zoneText and zoneText ~= ""
   local best, bestWmo, bestGroup, bestScore
   for _, p in ipairs(list) do
-    if px >= p[6] - 5 and px <= p[8] + 5 and py >= p[7] - 5 and py <= p[9] + 5
-        and (indoors or not G.INSIDE_ONLY[p[1]]) then
+    if px >= p[6] - 5 and px <= p[8] + 5 and py >= p[7] - 5 and py <= p[9] + 5 and not G.NO_INSIDE_MAP[p[1]] then
       local w = ns.WMOs[p[1]]
       local dx, dy = px - p[2], py - p[3]
       local c, s = math.cos(p[5]), math.sin(p[5])

@@ -75,8 +75,9 @@ The addon is going public, so every change must keep it policy-safe:
   - `GPSFrame.lua`: the map window (layers, fade while moving, click-through, window
     frame, map menu, search, drawing a farming area).
     Inside maps (`G.FindInterior`): a model's indoor rooms only (or where the game says indoors;
-    down in an underground city, any of its rooms), so a city's streets (Stormwind's) keep the
-    outside map; indoors the inside map shows at any zoom, outdoors up to `INTERIOR_MAX_ZOOM`.
+    down in an underground city, any of its rooms); indoors the inside map shows at any zoom,
+    outdoors up to `INTERIOR_MAX_ZOOM`. Never from Stormwind's city model (`G.NO_INSIDE_MAP`: its
+    streets have art and district names too, and it looks worse than the terrain).
   - `Layers.lua`: quests, quest areas, herbs and ore (gathered, hovered on the minimap,
     right-clicked without the profession, imported; unconfirmed until gathered), and city
     locations guards point out (`C_GossipInfo` points of interest, saved account-wide).
