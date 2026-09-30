@@ -16,6 +16,7 @@ Data\Roads.lua
 Data\Interiors.lua
 Data\Pois.lua
 Data\Terrain.lua
+Data\Buildings.lua
 Data\TerrainHPA.lua
 Data\Transports.lua
 Data\Flights.lua

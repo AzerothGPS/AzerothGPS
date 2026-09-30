@@ -73,13 +73,37 @@ P.OPEN_YD = 6 -- an erase stroke opens the blocked ground this close to it
 P.WALL_UNDER_YD = 12 -- an erase stroke takes out the walls this close to it
 P.WALL_BUCKET = 64
 
--- Cell value at (row, col) of grid g (2 outside the grid, and on a wall).
+-- The buildings on a continent (Data/Buildings.lua, app/azerothgps/buildings.py): cells of its grid
+-- routes don't walk through, over the terrain's own. [g] = { [row * 65536 + col] = true }, made the
+-- first time the grid is read (runs along its rows: row, first column, count).
+local buildingCells = {}
+local function Buildings(g)
+  local set = buildingCells[g]
+  if set then return set end
+  set = {}
+  for cont, grid in pairs(ns.Terrain or {}) do
+    local runs = grid == g and ns.BuildingCells and ns.BuildingCells[cont]
+    if runs then
+      for i = 1, #runs - 2, 3 do
+        local base, c0 = runs[i] * 65536, runs[i + 1]
+        for c = c0, c0 + runs[i + 2] - 1 do set[base + c] = true end
+      end
+    end
+  end
+  buildingCells[g] = set
+  return set
+end
+P.Buildings = Buildings
+
+-- Cell value at (row, col) of grid g (2 outside the grid, on a wall, and in a building; a wall
+-- eraser opens a building's cells too, as the terrain's).
 local function Cell(g, row, col)
   if row < 1 or row > g.h or col < 1 or col > g.w then return 2 end
   local wc = wallCells[g]
   if wc and wc[row * 65536 + col] then return 2 end
   local oc = openCells[g]
   if oc and oc[row * 65536 + col] then return 0 end
+  if Buildings(g)[row * 65536 + col] then return 2 end
   local rc = cache[g]
   if not rc then
     rc = {}
@@ -491,24 +515,33 @@ function P.SegmentCost(cont, x1, y1, x2, y2, endSlack)
   -- (no grid laid over the continent near the line: its own cells only; and a cell's value is
   -- looked up once, not for each of the samples in it)
   local k = TILE / g.cell
-  local lastRow, lastCol, lastV
+  local lastRow, lastCol, lastV, lastB
+  -- (a building's cells: no end slack, unless that end is in a building itself: a stop at the innkeeper)
+  local bset = Buildings(g)
+  local c1, r1 = ToCell(g, x1, y1)
+  local c2, r2 = ToCell(g, x2, y2)
+  local inB1 = bset[r1 * 65536 + c1] and Cell(g, r1, c1) == 2
+  local inB2 = bset[r2 * 65536 + c2] and Cell(g, r2, c2) == 2
   for i = 0, n do
     local t = i / n
     local x, y = x1 + dx * t, y1 + dy * t
     local ov = near and Overlay(cont, x, y) or nil
     if ov == 2 and t > 0 and t < 1 then return nil end -- (a city's ruins: its walls are real, no slack)
-    local v = ov
+    local v, b = ov, false
     if not v then -- (the continent's own grid: the overlay was just asked)
       local col = math.floor(((32 - y / TILE) - g.tx0) * k) + 1
       local row = math.floor(((32 - x / TILE) - g.ty0) * k) + 1
       if row == lastRow and col == lastCol then
-        v = lastV
+        v, b = lastV, lastB
       else
         v = Cell(g, row, col)
-        lastRow, lastCol, lastV = row, col, v
+        b = v == 2 and bset[row * 65536 + col] or false
+        lastRow, lastCol, lastV, lastB = row, col, v, b
       end
     end
-    if v == 2 and t > slack and t < 1 - slack then return nil end
+    if b then
+      if not ((t <= slack and inB1) or (t >= 1 - slack and inB2)) then return nil end
+    elseif v == 2 and t > slack and t < 1 - slack then return nil end
     if v == 1 then water = water + 1 end
   end
   return len + len * (water / (n + 1)) * (P.SWIM_COST - 1)
@@ -982,6 +1015,10 @@ function P.FindPath(cont, x1, y1, x2, y2)
     return h
   end
   local wc = wallCells[g]
+  -- (a building's cells: crossed near an end only when that end is in a building itself, as SegmentCost)
+  local bset = Buildings(g)
+  local inB1 = bset[r1 * 65536 + c1] and Cell(g, r1, c1) == 2
+  local inB2 = bset[r2 * 65536 + c2] and Cell(g, r2, c2) == 2
   local function cost0(c, r)
     if wc and wc[r * 65536 + c] then return nil end -- (a wall: not even near the ends)
     local v = Cell(g, r, c)
@@ -997,7 +1034,10 @@ function P.FindPath(cont, x1, y1, x2, y2)
       end
     end
     if v == 2 then
-      if (c - c1) ^ 2 + (r - r1) ^ 2 > slack1 and (c - c2) ^ 2 + (r - r2) ^ 2 > slack2 then return nil end
+      local b = bset[r * 65536 + c]
+      local near1 = (c - c1) ^ 2 + (r - r1) ^ 2 <= slack1 and (not b or inB1)
+      local near2 = (c - c2) ^ 2 + (r - r2) ^ 2 <= slack2 and (not b or inB2)
+      if not near1 and not near2 then return nil end
       return 1
     end
     return v == 1 and P.SWIM_COST or 1

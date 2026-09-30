@@ -42,7 +42,7 @@ def _runtime():
     ns.IsSecret = lua.eval("function(v) return false end")
     ns.db = lua.eval("{}")
     loader = lua.eval("function(src, name) return assert(load(src, '@' .. name)) end")
-    for name in ("Geo.lua", "GPSFrame.lua", "Data/Maps.lua", "Data/Roads.lua", "Data/Terrain.lua", "Data/TerrainHPA.lua", "Data/Caves.lua",
+    for name in ("Geo.lua", "GPSFrame.lua", "Data/Maps.lua", "Data/Roads.lua", "Data/Terrain.lua", "Data/Buildings.lua", "Data/TerrainHPA.lua", "Data/Caves.lua",
                  "Data/Capitals.lua", "Passability.lua", "Router.lua"):
         loader((ADDON_DIR / name).read_text(encoding="utf-8"), name)("AzerothGPS", ns)
     ns.Router.SYNC_WALKS = True

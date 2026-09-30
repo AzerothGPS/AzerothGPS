@@ -141,6 +141,27 @@ def cmd_gen_addon_data(args) -> int:
     return 0
 
 
+def cmd_buildings(args) -> int:
+    """Buildings as cells routes don't walk through: --render X Y R a picture of those around a spot
+    (data/debug/buildings/), --write Data/Buildings.lua."""
+    from . import buildings as B
+
+    cd = _client(args)
+    if args.render:
+        X, Y, R = args.render
+        out = DATA / "debug" / "buildings"
+        out.mkdir(parents=True, exist_ok=True)
+        path = out / f"buildings_{args.cont}_{X:.0f}_{Y:.0f}.png"
+        print(B.render(cd, args.cont, X, Y, R, path), path)
+    if args.write:
+        t = time.time()
+        text, counts = B.buildings_lua(cd)
+        B.FILE.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {B.FILE} ({B.FILE.stat().st_size // 1024} KB, {time.time() - t:.0f} s): cells blocked "
+              + ", ".join(f"[{c}] {n}" for c, n in counts.items()))
+    return 0
+
+
 def cmd_caves(args) -> int:
     """Caves and mines: build them, render each (data/debug/caves/), list what's covered and
     what's skipped (summary.txt), and with --write, Data/Caves.lua."""
@@ -465,6 +486,14 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("gen-addon-data", help="write addon/AzerothGPS/Data/*.lua from the client")
     client_args(sp)
     sp.set_defaults(fn=cmd_gen_addon_data)
+
+    sp = sub.add_parser("buildings", help="buildings as ground routes don't walk through (Data/Buildings.lua)")
+    client_args(sp)
+    sp.add_argument("--write", action="store_true", help="write Data/Buildings.lua")
+    sp.add_argument("--render", nargs=3, type=float, metavar=("X", "Y", "R"),
+                    help="a picture of the buildings R yards around world X, Y (data/debug/buildings/)")
+    sp.add_argument("--cont", type=int, default=0, help="the continent for --render")
+    sp.set_defaults(fn=cmd_buildings)
 
     sp = sub.add_parser("caves", help="build the caves' grids and roads; renders and a summary in data/debug/caves/")
     client_args(sp)

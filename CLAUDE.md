@@ -74,6 +74,9 @@ The addon is going public, so every change must keep it policy-safe:
   - `Arrow.lua`: the direction arrow window.
   - `GPSFrame.lua`: the map window (layers, fade while moving, click-through, window
     frame, map menu, search, drawing a farming area).
+    Inside maps (`G.FindInterior`): a model's indoor rooms only (or where the game says indoors;
+    down in an underground city, any of its rooms), so a city's streets (Stormwind's) keep the
+    outside map; indoors the inside map shows at any zoom, outdoors up to `INTERIOR_MAX_ZOOM`.
   - `Layers.lua`: quests, quest areas, herbs and ore (gathered, hovered on the minimap,
     right-clicked without the profession, imported; unconfirmed until gathered), and city
     locations guards point out (`C_GossipInfo` points of interest, saved account-wide).
@@ -101,7 +104,11 @@ The addon is going public, so every change must keep it policy-safe:
     Road tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
     right-drag erases (a loop: everything inside), middle-drag pans, until toggled off;
     `G.FinishRoad`). The wall tools (Options > Wall tools, `G.wallMode`, the "Wall tools"
-    button) draw and erase walls the same way; "Show extracted walls" (`showWalls`). Walls (op
+    button) draw and erase walls the same way. The road tools on show the road network, the wall
+    tools the walls; with the tools off, the "Show Roads and Walls" map button under Undo
+    (`showMapData`, `G.ToggleMapData`: `showRoads` and `showWalls` together; also /agps roads|walls).
+    Undo takes back the last road or wall change: they're one list (`ns.db.tracks`), in the order
+    drawn. Walls (op
     "wall"/"unwall"; shipped as `ns.Walls` in Roads.lua) are handled in Passability
     (`WallLines`, `CrossesWall`, wall cells closed on the grid): nothing walks through them, and roads
     they cross are cut there (`BuildGraph`; a gate is a gap); flights ignore them. The terrain's
@@ -156,6 +163,17 @@ The addon is going public, so every change must keep it policy-safe:
     other faction's reach (road edges, off-road legs, node links, and the terrain search
     in `Passability.FindPath`), so they go around their towns; option "Avoid the other
     faction's towns" (`avoidHostile`).
+  - `Data/Buildings.lua` (`app/azerothgps/buildings.py`, `agps buildings --write`; `--render X Y R` for a
+    picture): the continents' buildings (models placed in the ADTs, not caves, capitals or anything
+    over `MAX_SIZE_YD`) as grid cells routes don't walk through. Each model's solid faces are cut at a
+    body's height over the ground (its walls and door gaps), doorways closed and the inside filled up
+    to a hall's size (a fort's yard stays open), and a cell of the continent's grid blocked where that
+    covers `BLOCK_SHARE` of it (and each building's best-covered cell); a cell a shipped road runs
+    through stays open (so run it again after road changes). `Passability`'s `Cell` adds them
+    (`ns.BuildingCells`, runs per row; `P.Buildings(g)` the set, made at first read), so legs, the
+    walk search and the prepared blocks (hpa.py stamps them) all go round. No end slack over a
+    building's cells (`SegmentCost`, `FindPath`) unless that end is in a building itself (a stop at
+    the innkeeper); a wall eraser opens them as it opens the terrain's.
   - `Data/Zones.lua` (`addon_data.zones_lua`, from the ADTs' area ids): each continent's zone
     (uiMap) per ground chunk, run-length rows (`Router.ZoneAt`, `ZoneYards`). Zones too high
     for the character (option `avoidHighZones`, on by default: lowest level more than
@@ -330,6 +348,7 @@ agps route-check        # routing on random trips in every zone; flags detours a
 agps route-sweep        # random trips routed as in game (background searches, moving): snapbacks, U-turns, spikes
 agps trip-sweep         # random trips planned and followed with the whole addon (gameharness): flights vs walks at
                         # random levels, detours, frame budget; data/debug/trip-sweep/report.json (nightly task too)
+agps buildings         # buildings as ground routes don't walk through (--write: Data/Buildings.lua; --render X Y R)
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)

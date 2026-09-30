@@ -1,6 +1,7 @@
 """Run the addon's pure Lua (layout math, generated data) under a standalone Lua."""
 
 import math
+import time
 from pathlib import Path
 
 import pytest
@@ -21,8 +22,9 @@ def load(lua, ns, *names, data=None):
     for name in names:
         src = (ADDON / name).read_text(encoding="utf-8")
         loader(src, name)("AzerothGPS", ns)
-        if name == "Data/Terrain.lua":  # (the grids by blocks with them, as the toc loads them)
-            loader((ADDON / "Data/TerrainHPA.lua").read_text(encoding="utf-8"), "Data/TerrainHPA.lua")("AzerothGPS", ns)
+        if name == "Data/Terrain.lua":  # (the buildings and the grids by blocks with them, as the toc loads them)
+            for extra in ("Data/Buildings.lua", "Data/TerrainHPA.lua"):
+                loader((ADDON / extra).read_text(encoding="utf-8"), extra)("AzerothGPS", ns)
 
 
 @pytest.fixture
@@ -223,6 +225,27 @@ def test_find_interior_uses_height_when_known(interior_env):
     lua, ns = interior_env
     place, wmo, room = ns.GPS.FindInterior(1000 - 30.0, 2000 - 30.0, 50 + 20.0, 0, "")
     assert room.n == "Upper Hall"
+
+
+def test_a_city_model_s_streets_are_outside_with_the_height_known(interior_env):
+    # (reported: Stormwind's map switched between its own art and the terrain with the zoom) with the
+    # player's height known, a model's outdoor pieces (a city's streets) aren't "inside": only its
+    # indoor rooms, or where the game says indoors
+    lua, ns = interior_env
+    loader = lua.eval("function(src) return assert(load('local _, ns = ...; ' .. src)) end")
+    loader("""
+      ns.WMOs[43] = { groups = {
+        { -100, -100, -5, 100, 100, 30, n = "", ["in"] = false, blocks = { {555, 0, 0, 400, 400} } },
+        { 20, 20, -2, 40, 40, 10, n = "The Gilded Rose", ["in"] = true, blocks = { {666, 0, 0, 40, 40} } },
+      } }
+      table.insert(ns.Interiors[0], { 43, 3000, 3000, 0, 0, 2900, 2900, 3100, 3100 })
+    """)(None, ns)
+    G = ns.GPS
+    assert G.FindInterior(3050.0, 3060.0, 2.0, 0, "Trade District", False)[0] is None  # a street
+    place, _w, room = G.FindInterior(3030.0, 3030.0, 2.0, 0, "The Gilded Rose", True)  # in the inn
+    assert place and room.n == "The Gilded Rose"
+    # (the game says indoors: its indoor rooms and, as ever, whatever it's in there)
+    assert G.FindInterior(3050.0, 3060.0, 2.0, 0, "", True)[0] is not None
 
 
 def test_layout_interior_floor_and_rotation(interior_env):
@@ -601,6 +624,52 @@ def tirisfal_env(env):
     ns.Passability.ClearCache()
     minX, minY, maxX, maxY = 825.0, -1485.4166, 3837.4998, 3033.3333  # Tirisfal Glades
     return lua, ns, lambda mx, my: (maxX - my / 100 * (maxX - minX), maxY - mx / 100 * (maxY - minY))
+
+
+def test_buildings_are_ground_routes_dont_walk_through(env):
+    # (asked: "buildings as objects we can't walk through, like Goldshire") the inn's cells are
+    # blocked (Data/Buildings.lua, buildings.py), a leg straight through it isn't taken, a route
+    # past it goes round, and a stop inside it (the innkeeper) is still reached
+    lua, ns = env
+    load(lua, ns, "Data/Roads.lua", "Data/Terrain.lua", "Passability.lua", "Router.lua")
+    R, P = ns.Router, ns.Passability
+    R.Reset()
+    R.SYNC_WALKS = True
+    P.ClearCache()
+    inn = (-9466.0, 16.0)  # Goldshire's Lion's Pride Inn
+    assert P.At(0, *inn) == 2
+    assert P.SegmentCost(0, -9466.0, -30.0, -9466.0, 70.0) is None  # straight through it
+    assert P.SegmentCost(0, -9440.0, -30.0, -9440.0, 70.0) is not None  # beside it: open ground
+    r = R.Route(0, -9466.0, -30.0, -9466.0, 70.0, lua.table())
+    pts, kinds = route_pts(r)
+    # (round it: nowhere inside the inn's walls, about X -9478..-9454, Y -8..40; its off-road legs pass
+    # the router's own check)
+    for i, ((x1, y1), (x2, y2)) in enumerate(zip(pts, pts[1:])):
+        if kinds[i] == 1:
+            assert P.SegmentCost(0, x1, y1, x2, y2) is not None
+        n = max(1, int(math.hypot(x2 - x1, y2 - y1)))
+        for k in range(n + 1):
+            x, y = x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n
+            assert not (-9475 < x < -9457 and -5 < y < 37), (x, y)
+    assert sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:])) > 110  # (100 yd straight)
+    stop = R.Route(0, -9440.0, -40.0, inn[0], inn[1], lua.table())
+    n = len(stop.pts)
+    assert stop and (stop.pts[n - 1], stop.pts[n]) == pytest.approx(inn) and not stop.unconnected
+
+
+def test_the_buildings_data_is_made_from_the_client_and_small(env):
+    # (Data/Buildings.lua: runs of cells per continent; reading them at first use stays cheap)
+    lua, ns = env
+    load(lua, ns, "Data/Terrain.lua", "Passability.lua")
+    for cont in (0, 1):
+        runs = ns.BuildingCells[cont]
+        assert len(runs) % 3 == 0 and len(runs) > 3000
+    t = time.perf_counter()
+    ns.Passability.At(0, -9466.0, 16.0)
+    assert (time.perf_counter() - t) * 1000 < 20  # (the set made at first read)
+    text = (ADDON / "Data/Buildings.lua").read_text(encoding="utf-8")
+    assert "agps buildings" in text and len(text) < 200_000
+    assert "Data\\Buildings.lua" in (ADDON / "AzerothGPS.toc").read_text(encoding="utf-8")
 
 
 def test_offroad_respects_tirisfal_mountains(env):

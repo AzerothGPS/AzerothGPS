@@ -26,8 +26,8 @@ K = 32
 RUN_SPLIT = 8  # Passability.lua's P.HPA_RUN_SPLIT
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 CONTS = (0, 1, 2991)
-FILES = ("Data/Maps.lua", "Data/Roads.lua", "Data/Transports.lua", "Data/Terrain.lua", "Data/Cities.lua", "Data/Caves.lua",
-         "Data/Capitals.lua", "Passability.lua")
+FILES = ("Data/Maps.lua", "Data/Roads.lua", "Data/Transports.lua", "Data/Terrain.lua", "Data/Buildings.lua", "Data/Cities.lua",
+         "Data/Caves.lua", "Data/Capitals.lua", "Passability.lua")
 
 
 def runtime():
@@ -78,6 +78,9 @@ def stamp(lua, ns, cont) -> str:
             h.update(str(halls[i]).encode())
             grid(o)
     points(ns.Walls[cont] if ns.Walls else None)
+    runs = ns.BuildingCells[cont] if ns.BuildingCells else None  # (the buildings' cells, Data/Buildings.lua)
+    if runs:
+        h.update(b"buildings:" + ",".join(str(int(runs[i])) for i in range(1, len(runs) + 1)).encode())
     points(ns.WallOpens[cont] if ns.WallOpens else None)
     return h.hexdigest()[:16]
 
