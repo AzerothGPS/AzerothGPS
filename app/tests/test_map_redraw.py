@@ -314,6 +314,7 @@ def test_party_members_are_dots_on_the_map(game):
         G.Update()
         dots = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
         assert len(dots) == 1 and dots[0].name == "Tester"  # (the mock's UnitName)
+        assert dots[0].dot._tex == "color:0.25,0.78,0.92"  # (the mage's class color, not the fallback)
         st.showParty = False
         lua.execute("AGPS_T = AGPS_T + 1")
         G.Update()

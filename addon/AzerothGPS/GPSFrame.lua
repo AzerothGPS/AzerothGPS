@@ -1738,7 +1738,8 @@ function G.party.io.members()
     if UnitExists and UnitExists(u) and not (UnitIsUnit and UnitIsUnit(u, "player")) then
       local ok, x, y, _, inst = pcall(UnitPosition, u)
       if ok and x and y and not ns.IsSecret(x) and not ns.IsSecret(y) then
-        local _, class = UnitClass and UnitClass(u)
+        local class
+        if UnitClass then class = select(2, UnitClass(u)) end -- (its file name: MAGE; not `a and f()`, one value)
         out[#out + 1] = { name = UnitName and UnitName(u) or u, cont = inst, x = x, y = y, class = class }
       end
     end
