@@ -373,6 +373,22 @@ def test_the_options_window_builds_with_its_performance_page(game):
     assert texts.count("Stops routed and drawn ahead") == 1
 
 
+def test_the_options_pages_in_order(game):
+    # (asked) the options' pages in this order; Help improve says a /reload saves every edit before copying
+    lua, ns = game
+    ns.Options.Show()
+    order = ["General", "Performance", "Opacity", "Routing", "Directions", "Map", "Quick buttons", "Road tools",
+             "Wall tools", "Help improve"]
+    ws = lua.eval("AGPS_WIDGETS")
+    ws = [ws[i] for i in range(1, len(ws) + 1)]  # (in the order made)
+    # (the list on the left: a button per page, its name a font string on it)
+    tabs = [str(w._text) for w in ws if w._kind == "FontString" and w._parent and w._parent._kind == "Button"
+            and str(w._text) in order]
+    assert tabs == order
+    notes = [str(w._text) for w in ws if "/reload" in str(w._text) and "Copy Map Data" in str(w._text)]
+    assert notes, "the note on Help improve"
+
+
 def test_low_end_settings_and_back(game):
     lua, ns = game
     O, st, N = ns.Options, ns.settings.gps, ns.Nav

@@ -214,7 +214,7 @@ O.SHARE_INFO = {
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
   " ",
   "|cffffd100How to share your roads and walls|r",
-  "1. Click |cffffd100Copy Map Data...|r and press |cffffd100Ctrl+C|r.",
+  "1. Type |cffffd100/reload|r (it saves all your edits, so every one is copied), then click |cffffd100Copy Map Data...|r and press |cffffd100Ctrl+C|r.",
   "2. Paste it in either place (click an address below, Ctrl+C, and open it in your browser):",
   "    |cffffd100GitHub|r: the first address opens a new \"Road data\" issue.",
   "    |cffffd100Discord|r: the second is the AzerothGPS Discord.",
@@ -287,7 +287,7 @@ local function ShowRoadsText()
   end
   if shareInfo then shareInfo:Hide() end -- (one window at a time: it was on top of this one)
   roadsCopy.text = text
-  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue or on the AzerothGPS Discord (see How to share).",
+  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue or on the AzerothGPS Discord (see How to share). Missing an edit? Type |cffffd100/reload|r and copy again.",
     n, n == 1 and "" or "s"))
   roadsCopy.edit:SetText(text)
   roadsCopy:Show()
@@ -568,6 +568,135 @@ local function BuildWindow()
   check("Minimap button", "The AzerothGPS button on the game's minimap. Without it, /agps opens this window.",
     function() return not ns.settings.minimap.hide end, function(v) ns.settings.minimap.hide = not v end)
 
+  ---------------------------------------------------------------- Performance
+  Page("Performance")
+  header("Lighter settings", "For a slower PC: the same routes, worked out and drawn less often.")
+  -- the addon's work over the last few seconds, while this page is open
+  local usage = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  place(usage, 20, 4)
+  local ticker = CreateFrame("Frame", nil, page)
+  local lastMs, lastT, wait = nil, nil, 0
+  ticker:SetScript("OnShow", function() lastMs, lastT, wait = nil, nil, 0 usage:SetText(O.UsageText()) end)
+  ticker:SetScript("OnUpdate", function(_, dt)
+    wait = wait - dt
+    if wait > 0 then return end
+    wait = 2
+    local ms, t = ns.PerfTotal(), GetTime()
+    if lastMs and ms >= lastMs then usage:SetText(O.UsageText(ms - lastMs, t - lastT)) end
+    lastMs, lastT = ms, t
+  end)
+  local lowBtn = Button(page, "Use Low-End Settings", 170, O.UseLowEnd)
+  place(lowBtn, 30, 4)
+  local defBtn = Button(page, "Restore Defaults", 140, O.PerfDefaults)
+  defBtn:SetPoint("LEFT", lowBtn, "RIGHT", 6, 0)
+  controls[#controls + 1] = function() lowBtn:SetEnabled(not O.IsLowEnd()) end
+  header("Map")
+  slider("Map redraws per second", 5, 30, 1, "%d", function() return GPS().hz or 20 end, function(v) GPS().hz = v end)
+  note("The setting that saves the most: at 10 the map needs about half the work it does at 20, and still follows you smoothly. Standing still, it only redraws when something changes.")
+  header("Routes")
+  slider("Work out a route you've left at most every", 2, 10, 1, "%d s", function() return GPS().rerouteSeconds or 2 end,
+    function(v) GPS().rerouteSeconds = v end)
+  note("Off the route (fighting, gathering, or going your own way), it's worked out again from where you are. Less often is less work; the route catches up with you a little later.")
+  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
+  note("How many of the route's stops are worked out and drawn at a time; the next come in as you reach them. Every stop is still in the fastest order and on the map, and the ones further on are listed with an estimated distance until they're routed.")
+  check("Gentle background work", "Walks around obstacles and the road data (after a /reload) are worked out in smaller slices of each frame: fewer stutters on a slow PC. The first route after a /reload, and walks off the roads, take a little longer to appear.",
+    function() return GPS().gentleBackground end, function(v) GPS().gentleBackground = v end)
+  header("Direction arrow")
+  check("Turn the arrow every frame", "On: the arrow turns with every frame, as smoothly as the game runs. Off: 20 times a second, less work at high frame rates.",
+    function() return (GPS().arrowHz or 0) == 0 end, function(v) GPS().arrowHz = v and 0 or 20 end)
+  header("Other settings to improve performance")
+  note("Fewer icons on the map (Map > Show on the map, or the round button at the map's bottom-left): herbs, ore, quests and points of interest; quest areas' outlines off; and a smaller map.")
+
+  ---------------------------------------------------------------- Opacity
+  Page("Opacity")
+  header("Map")
+  slider("Map opacity", 5, 100, 5, "%d%%",
+    function() return math.floor(GPS().alpha * 100 + 0.5) end, function(v) GPS().alpha = v / 100 end)
+  check("Fade the map while moving", "While you move, the map fades to the opacity below, leaving the route, the stop markers and your arrow as they are. It comes back a moment after you stop, or right away when you point at the map.",
+    function() return GPS().fadeMoving end, function(v) GPS().fadeMoving = v end)
+  slider("Map opacity while moving", 0, 100, 5, "%d%%",
+    function() return math.floor((GPS().movingAlpha or 0.4) * 100 + 0.5) end, function(v) GPS().movingAlpha = v / 100 end,
+    function() return GPS().fadeMoving end)
+  header("Click-through", "Clicks go to the game world (targeting, the camera), not the map or arrow.")
+  check("Click-through while moving", "While you move, the map and the direction arrow ignore the mouse, so a click there targets or turns the camera instead. They take clicks again a moment after you stop.",
+    function() return GPS().clickThroughMoving end, function(v) GPS().clickThroughMoving = v end)
+  check("Click-through in combat", "In combat, the map and the direction arrow ignore the mouse, so a click there targets or turns the camera instead.",
+    function() return GPS().clickThroughCombat end, function(v) GPS().clickThroughCombat = v end)
+  header("In combat")
+  check("Hide the map", "Hidden while you're in combat, so nothing on it gets clicked by mistake mid-fight. It comes back when combat ends.",
+    function() return GPS().combatHideMap end, function(v) GPS().combatHideMap = v end)
+  slider("Map opacity in combat", 0, 100, 5, "%d%%",
+    function() return math.floor((GPS().combatAlpha or GPS().alpha) * 100 + 0.5) end, function(v) GPS().combatAlpha = v / 100 end,
+    function() return not GPS().combatHideMap end)
+  check("Hide the direction arrow", "Hidden while you're in combat. It comes back when combat ends.",
+    function() return GPS().combatHideArrow end, function(v) GPS().combatHideArrow = v end)
+  slider("Arrow opacity in combat", 0, 100, 5, "%d%%",
+    function() return math.floor((GPS().arrowCombatAlpha or 1) * 100 + 0.5) end, function(v) GPS().arrowCombatAlpha = v / 100 end,
+    function() return not GPS().combatHideArrow end)
+
+  ---------------------------------------------------------------- Routing
+  Page("Routing")
+  header("Routes")
+  check("Avoid zones too high for your level", "Routes go around zones whose levels are red for your character (their lowest level more than 4 above yours) when there's another way, like the other faction's towns. The zones you start and end in don't count.",
+    function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.OptionsChanged() end)
+  check("Use flight paths", "Routes take flights (connecting ones too) between the flight masters this character knows, when that's faster. The addon learns which ones you know from the flight map: open it once at any flight master.",
+    function() return GPS().useFlights ~= false end, function(v)
+      GPS().useFlights = v
+      ns.Nav.OptionsChanged()
+    end)
+  check("Questing", "A stop inside a quest's area (the blue outlines, for quests in your log) is done when that quest's objectives are, not when you get there. In the area, the route waits and the arrow shows a ! and the objective counters. Leave before they're done and the route leads back; then it goes on to the next stop.",
+    function() return GPS().questing ~= false end, function(v)
+      GPS().questing = v
+      ns.Nav.Invalidate(true, true)
+    end)
+  check("Quest route: only this zone", "The Quest Route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
+    function() return GPS().questZoneOnly end, function(v) GPS().questZoneOnly = v end)
+  check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The directions say when; click the button beside them to use it.",
+    function() return GPS().useHearthstone ~= false end, function(v)
+      GPS().useHearthstone = v
+      ns.Nav.OptionsChanged()
+    end)
+  check("Use class teleports and teleport items", "Routes may start with a mage's teleport (with a Rune of Teleportation), Teleport: Moonglade, or an engineer's Dimensional Ripper - Everlook or Ultrasafe Transporter: Gadgetzan (with the specialization it needs) when it's known or in your bags, off cooldown, and faster. Click the button beside the directions to use it.",
+    function() return GPS().useTeleports ~= false end, function(v)
+      GPS().useTeleports = v
+      ns.Nav.OptionsChanged()
+    end)
+  check("Avoid the other faction's towns", "Routes keep away from the other faction's guards (their towns and camps, and where their guards patrol), going around when there's a way. A stop inside one is still reached, the shortest way in.",
+    function() return GPS().avoidHostile ~= false end, function(v)
+      GPS().avoidHostile = v
+      ns.Nav.OptionsChanged()
+    end)
+  check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
+    function() return GPS().fastestOrder end, function(v)
+      GPS().fastestOrder = v
+      if v and #ns.Nav.stops > 1 and not ns.Nav.KeepCityOrder() then ns.Nav.OrderStops() end
+    end)
+  place(Checkbox(page, "Except in cities", "Stops down in a city (Undercity) are visited in the order you placed them among themselves: how you want to go around a city is up to you. Stops outside the city still go in the fastest order. (A quest route is always put in the fastest order.)",
+    function() return GPS().cityKeepOrder ~= false end, function(v) GPS().cityKeepOrder = v end), 26, 20)
+  check("X on the route panel cancels the route", "The X at the top right of the map's route panel (the steps) cancels the whole route. Off: it only closes the panel until the route changes, and the route goes on.",
+    function() return GPS().navCloseClears end, function(v) GPS().navCloseClears = v end)
+  header("Waypoints and sharing")
+  check("Accept TomTom /way commands", "/way lines typed or pasted in chat add stops to the route (several pasted lines at once become several stops). With TomTom installed, its waypoint is set too.",
+    function() return GPS().acceptWay ~= false end, function(v) GPS().acceptWay = v end)
+  check("Accept routes shared by players", "Other AzerothGPS users can send you their route (Import and share waypoints window). You're always asked before it replaces yours.",
+    function() return GPS().acceptShared ~= false end, function(v) GPS().acceptShared = v end)
+  place(Button(page, "Import / share waypoints...", 200, function() ns.Import.Toggle() end), 30, 4)
+
+  ---------------------------------------------------------------- Directions
+  Page("Directions")
+  header("Direction arrow")
+  check("Show direction arrow", "A small window (TomTom style) with an arrow along the route, the next turn (\"Turn left 120 yd, toward Razor Hill\"), the stop's distance and ETA, and the stops after it when made taller.",
+    function() return GPS().arrow end, function(v) GPS().arrow = v end)
+  check("Lock arrow position", "Locks the direction arrow in place. Unlocked: drag it to move it and its corner to resize it (taller lists the later stops). With no route it shows a placeholder while unlocked, so you can place it. Locked, clicks pass through it to the game world.",
+    function() return GPS().arrowLocked end, function(v) GPS().arrowLocked = v end)
+  slider("Arrow background", 0, 100, 5, "%d%%",
+    function() return math.floor((GPS().arrowBg or 0.55) * 100 + 0.5) end, function(v) GPS().arrowBg = v / 100 end)
+  header("How it works")
+  note("The arrow points along the route: |cff73ff73green|r straight ahead, |cffffffffwhite|r for a turn coming up, |cffff7359red|r when the route is behind you. On a flight it shows where you land and when.")
+  note("Its lines: the next turn and its distance, the road or place you're heading toward, the stop with its distance and ETA, then the turn after that.")
+  note("To move it, untick Lock arrow position, then drag it; drag its bottom-right corner to resize it. Made taller, it lists the later stops too. Unlocked with no route, it shows a placeholder so you can place it.")
+  note("In a quest's area it shows a ! and the quest's objectives. A small Sprint icon pulsing in its top-right corner means you picked up a quest after making your quest route: click it (or the quest route button on the map) to make the route again with it.")
+
   ---------------------------------------------------------------- Map
   Page("Map")
   header("Map", "Map style and layers: the round button at the map's bottom-left.")
@@ -597,7 +726,6 @@ local function BuildWindow()
   check("Cave entrances", "The ways into caves and mines (not on a continent's map). Double-click one for a stop there.",
     function() return GPS().layerCaves ~= false end, function(v) GPS().layerCaves = v end)
 
-  ---------------------------------------------------------------- Routing
   ---------------------------------------------------------------- Quick buttons
   Page("Quick buttons")
   header("Where each one goes")
@@ -759,134 +887,6 @@ local function BuildWindow()
   col.y = col.y - #slots * 24
   controls[#controls + 1] = OrderRows
 
-  Page("Routing")
-  header("Routes")
-  check("Avoid zones too high for your level", "Routes go around zones whose levels are red for your character (their lowest level more than 4 above yours) when there's another way, like the other faction's towns. The zones you start and end in don't count.",
-    function() return GPS().avoidHighZones ~= false end, function(v) GPS().avoidHighZones = v ns.Nav.OptionsChanged() end)
-  check("Use flight paths", "Routes take flights (connecting ones too) between the flight masters this character knows, when that's faster. The addon learns which ones you know from the flight map: open it once at any flight master.",
-    function() return GPS().useFlights ~= false end, function(v)
-      GPS().useFlights = v
-      ns.Nav.OptionsChanged()
-    end)
-  check("Questing", "A stop inside a quest's area (the blue outlines, for quests in your log) is done when that quest's objectives are, not when you get there. In the area, the route waits and the arrow shows a ! and the objective counters. Leave before they're done and the route leads back; then it goes on to the next stop.",
-    function() return GPS().questing ~= false end, function(v)
-      GPS().questing = v
-      ns.Nav.Invalidate(true, true)
-    end)
-  check("Quest route: only this zone", "The Quest Route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
-    function() return GPS().questZoneOnly end, function(v) GPS().questZoneOnly = v end)
-  check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The directions say when; click the button beside them to use it.",
-    function() return GPS().useHearthstone ~= false end, function(v)
-      GPS().useHearthstone = v
-      ns.Nav.OptionsChanged()
-    end)
-  check("Use class teleports and teleport items", "Routes may start with a mage's teleport (with a Rune of Teleportation), Teleport: Moonglade, or an engineer's Dimensional Ripper - Everlook or Ultrasafe Transporter: Gadgetzan (with the specialization it needs) when it's known or in your bags, off cooldown, and faster. Click the button beside the directions to use it.",
-    function() return GPS().useTeleports ~= false end, function(v)
-      GPS().useTeleports = v
-      ns.Nav.OptionsChanged()
-    end)
-  check("Avoid the other faction's towns", "Routes keep away from the other faction's guards (their towns and camps, and where their guards patrol), going around when there's a way. A stop inside one is still reached, the shortest way in.",
-    function() return GPS().avoidHostile ~= false end, function(v)
-      GPS().avoidHostile = v
-      ns.Nav.OptionsChanged()
-    end)
-  check("Visit stops in the fastest order", "Routes with several stops visit them in the fastest order instead of the order you placed them. (Double-click the map to place stops.)",
-    function() return GPS().fastestOrder end, function(v)
-      GPS().fastestOrder = v
-      if v and #ns.Nav.stops > 1 and not ns.Nav.KeepCityOrder() then ns.Nav.OrderStops() end
-    end)
-  place(Checkbox(page, "Except in cities", "Stops down in a city (Undercity) are visited in the order you placed them among themselves: how you want to go around a city is up to you. Stops outside the city still go in the fastest order. (A quest route is always put in the fastest order.)",
-    function() return GPS().cityKeepOrder ~= false end, function(v) GPS().cityKeepOrder = v end), 26, 20)
-  check("X on the route panel cancels the route", "The X at the top right of the map's route panel (the steps) cancels the whole route. Off: it only closes the panel until the route changes, and the route goes on.",
-    function() return GPS().navCloseClears end, function(v) GPS().navCloseClears = v end)
-  header("Waypoints and sharing")
-  check("Accept TomTom /way commands", "/way lines typed or pasted in chat add stops to the route (several pasted lines at once become several stops). With TomTom installed, its waypoint is set too.",
-    function() return GPS().acceptWay ~= false end, function(v) GPS().acceptWay = v end)
-  check("Accept routes shared by players", "Other AzerothGPS users can send you their route (Import and share waypoints window). You're always asked before it replaces yours.",
-    function() return GPS().acceptShared ~= false end, function(v) GPS().acceptShared = v end)
-  place(Button(page, "Import / share waypoints...", 200, function() ns.Import.Toggle() end), 30, 4)
-
-  ---------------------------------------------------------------- Directions
-  Page("Directions")
-  header("Direction arrow")
-  check("Show direction arrow", "A small window (TomTom style) with an arrow along the route, the next turn (\"Turn left 120 yd, toward Razor Hill\"), the stop's distance and ETA, and the stops after it when made taller.",
-    function() return GPS().arrow end, function(v) GPS().arrow = v end)
-  check("Lock arrow position", "Locks the direction arrow in place. Unlocked: drag it to move it and its corner to resize it (taller lists the later stops). With no route it shows a placeholder while unlocked, so you can place it. Locked, clicks pass through it to the game world.",
-    function() return GPS().arrowLocked end, function(v) GPS().arrowLocked = v end)
-  slider("Arrow background", 0, 100, 5, "%d%%",
-    function() return math.floor((GPS().arrowBg or 0.55) * 100 + 0.5) end, function(v) GPS().arrowBg = v / 100 end)
-  header("How it works")
-  note("The arrow points along the route: |cff73ff73green|r straight ahead, |cffffffffwhite|r for a turn coming up, |cffff7359red|r when the route is behind you. On a flight it shows where you land and when.")
-  note("Its lines: the next turn and its distance, the road or place you're heading toward, the stop with its distance and ETA, then the turn after that.")
-  note("To move it, untick Lock arrow position, then drag it; drag its bottom-right corner to resize it. Made taller, it lists the later stops too. Unlocked with no route, it shows a placeholder so you can place it.")
-  note("In a quest's area it shows a ! and the quest's objectives. A small Sprint icon pulsing in its top-right corner means you picked up a quest after making your quest route: click it (or the quest route button on the map) to make the route again with it.")
-
-  ---------------------------------------------------------------- Opacity
-  Page("Opacity")
-  header("Map")
-  slider("Map opacity", 5, 100, 5, "%d%%",
-    function() return math.floor(GPS().alpha * 100 + 0.5) end, function(v) GPS().alpha = v / 100 end)
-  check("Fade the map while moving", "While you move, the map fades to the opacity below, leaving the route, the stop markers and your arrow as they are. It comes back a moment after you stop, or right away when you point at the map.",
-    function() return GPS().fadeMoving end, function(v) GPS().fadeMoving = v end)
-  slider("Map opacity while moving", 0, 100, 5, "%d%%",
-    function() return math.floor((GPS().movingAlpha or 0.4) * 100 + 0.5) end, function(v) GPS().movingAlpha = v / 100 end,
-    function() return GPS().fadeMoving end)
-  header("Click-through", "Clicks go to the game world (targeting, the camera), not the map or arrow.")
-  check("Click-through while moving", "While you move, the map and the direction arrow ignore the mouse, so a click there targets or turns the camera instead. They take clicks again a moment after you stop.",
-    function() return GPS().clickThroughMoving end, function(v) GPS().clickThroughMoving = v end)
-  check("Click-through in combat", "In combat, the map and the direction arrow ignore the mouse, so a click there targets or turns the camera instead.",
-    function() return GPS().clickThroughCombat end, function(v) GPS().clickThroughCombat = v end)
-  header("In combat")
-  check("Hide the map", "Hidden while you're in combat, so nothing on it gets clicked by mistake mid-fight. It comes back when combat ends.",
-    function() return GPS().combatHideMap end, function(v) GPS().combatHideMap = v end)
-  slider("Map opacity in combat", 0, 100, 5, "%d%%",
-    function() return math.floor((GPS().combatAlpha or GPS().alpha) * 100 + 0.5) end, function(v) GPS().combatAlpha = v / 100 end,
-    function() return not GPS().combatHideMap end)
-  check("Hide the direction arrow", "Hidden while you're in combat. It comes back when combat ends.",
-    function() return GPS().combatHideArrow end, function(v) GPS().combatHideArrow = v end)
-  slider("Arrow opacity in combat", 0, 100, 5, "%d%%",
-    function() return math.floor((GPS().arrowCombatAlpha or 1) * 100 + 0.5) end, function(v) GPS().arrowCombatAlpha = v / 100 end,
-    function() return not GPS().combatHideArrow end)
-
-  ---------------------------------------------------------------- Performance
-  Page("Performance")
-  header("Lighter settings", "For a slower PC: the same routes, worked out and drawn less often.")
-  -- the addon's work over the last few seconds, while this page is open
-  local usage = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  place(usage, 20, 4)
-  local ticker = CreateFrame("Frame", nil, page)
-  local lastMs, lastT, wait = nil, nil, 0
-  ticker:SetScript("OnShow", function() lastMs, lastT, wait = nil, nil, 0 usage:SetText(O.UsageText()) end)
-  ticker:SetScript("OnUpdate", function(_, dt)
-    wait = wait - dt
-    if wait > 0 then return end
-    wait = 2
-    local ms, t = ns.PerfTotal(), GetTime()
-    if lastMs and ms >= lastMs then usage:SetText(O.UsageText(ms - lastMs, t - lastT)) end
-    lastMs, lastT = ms, t
-  end)
-  local lowBtn = Button(page, "Use Low-End Settings", 170, O.UseLowEnd)
-  place(lowBtn, 30, 4)
-  local defBtn = Button(page, "Restore Defaults", 140, O.PerfDefaults)
-  defBtn:SetPoint("LEFT", lowBtn, "RIGHT", 6, 0)
-  controls[#controls + 1] = function() lowBtn:SetEnabled(not O.IsLowEnd()) end
-  header("Map")
-  slider("Map redraws per second", 5, 30, 1, "%d", function() return GPS().hz or 20 end, function(v) GPS().hz = v end)
-  note("The setting that saves the most: at 10 the map needs about half the work it does at 20, and still follows you smoothly. Standing still, it only redraws when something changes.")
-  header("Routes")
-  slider("Work out a route you've left at most every", 2, 10, 1, "%d s", function() return GPS().rerouteSeconds or 2 end,
-    function(v) GPS().rerouteSeconds = v end)
-  note("Off the route (fighting, gathering, or going your own way), it's worked out again from where you are. Less often is less work; the route catches up with you a little later.")
-  slider("Stops routed and drawn ahead", 1, 8, 1, "%d", function() return GPS().stopsAhead or 3 end, O.SetStopsAhead)
-  note("How many of the route's stops are worked out and drawn at a time; the next come in as you reach them. Every stop is still in the fastest order and on the map, and the ones further on are listed with an estimated distance until they're routed.")
-  check("Gentle background work", "Walks around obstacles and the road data (after a /reload) are worked out in smaller slices of each frame: fewer stutters on a slow PC. The first route after a /reload, and walks off the roads, take a little longer to appear.",
-    function() return GPS().gentleBackground end, function(v) GPS().gentleBackground = v end)
-  header("Direction arrow")
-  check("Turn the arrow every frame", "On: the arrow turns with every frame, as smoothly as the game runs. Off: 20 times a second, less work at high frame rates.",
-    function() return (GPS().arrowHz or 0) == 0 end, function(v) GPS().arrowHz = v and 0 or 20 end)
-  header("Other settings to improve performance")
-  note("Fewer icons on the map (Map > Show on the map, or the round button at the map's bottom-left): herbs, ore, quests and points of interest; quest areas' outlines off; and a smaller map.")
-
   ---------------------------------------------------------------- Road tools
   Page("Road tools")
   header("Road network", "For fixing the road data the routes use.")
@@ -948,6 +948,7 @@ local function BuildWindow()
   place(howBtn, 28, 4)
   local copyBtn = Button(page, "Copy Map Data...", 150, ShowRoadsText)
   copyBtn:SetPoint("LEFT", howBtn, "RIGHT", 6, 0)
+  note("Type |cffffd100/reload|r before |cffffd100Copy Map Data...|r: it saves all your road and wall edits, so every one of them is in the copy.")
   controls[#controls + 1] = function()
     local _, t = ns.Feedback.Counts()
     local r, w = ns.Feedback.DrawnCounts()
