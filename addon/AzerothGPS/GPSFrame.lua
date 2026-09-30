@@ -1991,10 +1991,15 @@ function G.Update()
     end)
     -- a flight master not learned yet by the route (Nav.LearnOnRoute): a brown line to it from the
     -- route, a detour (listed in the steps)
+    -- (not `x, y = learn and ToContinent(...)`: `and` keeps only a call's first value, y was nil and
+    -- the redraw failed there, the route and the panel not drawn at all)
     local learn = not questing and ns.Nav.LearnOnRoute(route)
-    local lx1, ly1 = learn and Geo.ToContinent(learn.cont, learn.rx, learn.ry, viewCont)
-    local lx2, ly2 = learn and Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
-    if lx1 and lx2 then
+    local lx1, ly1, lx2, ly2
+    if learn then
+      lx1, ly1 = Geo.ToContinent(learn.cont, learn.rx, learn.ry, viewCont)
+      lx2, ly2 = Geo.ToContinent(learn.cont, learn.x, learn.y, viewCont)
+    end
+    if lx1 and ly1 and lx2 and ly2 then
       local ax, ay = toScreen(lx1, ly1)
       local bx, by = toScreen(lx2, ly2)
       AddSeg(ax, ay, bx, by, G.DETOUR_COLOR, 3, 1, true, G.dashTexture and true or nil)

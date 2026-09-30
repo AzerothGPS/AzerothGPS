@@ -71,3 +71,61 @@ def test_the_forward_reference_check_catches_the_trap(tmp_path):
     p.write_text("local function OnClick()\n  LeaveOpened()\nend\n\nlocal function LeaveOpened()\nend\n",
                  encoding="utf-8")
     assert forward_references(p) == [("LeaveOpened", 2, 5)]
+
+
+def _top_level(expr: str) -> list[str]:
+    """`expr` split at its top-level commas (not inside brackets or a function's body)."""
+    parts, depth, cur = [], 0, ""
+    for ch in expr:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    return parts
+
+
+def truncated_and_or(path: Path) -> list[tuple[int, str]]:
+    """`local x, y = a and f()` (or `or`): `and`/`or` keep only the call's first value, so y is always
+    nil. (The flight-path detour line: every redraw failed there, no route or panel drawn.)"""
+    out = []
+    for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = _strip(raw)
+        m = re.match(r"\s*(?:local\s+)?([\w.]+(?:\s*,\s*[\w.]+)+)\s*=(?!=)\s*(.+)$", line)
+        if not m or "function" in m.group(2):
+            continue
+        names = [n for n in m.group(1).split(",") if n.strip()]
+        exprs = _top_level(m.group(2))
+        if len(names) > len(exprs):
+            last = exprs[-1]
+            depth, flat = 0, ""
+            for ch in last:  # (the last expression outside brackets: its own and / or)
+                if ch in "([{":
+                    depth += 1
+                elif ch in ")]}":
+                    depth -= 1
+                elif depth == 0:
+                    flat += ch
+            if re.search(r"\b(and|or)\b", flat):
+                out.append((i, raw.strip()))
+    return out
+
+
+def test_no_multiple_values_lost_to_and_or():
+    found = {p.name: truncated_and_or(p) for p in ADDON.rglob("*.lua") if "Data" not in p.parts}
+    found = {k: v for k, v in found.items() if v}
+    assert not found, found
+
+
+def test_the_and_or_check_catches_the_detour_bug(tmp_path):
+    f = tmp_path / "x.lua"
+    f.write_text("local lx1, ly1 = learn and Geo.ToContinent(a, b, c, d)\n"
+                 "local a, b = f(x and y)\n"
+                 "local p, q = x or 1, y or 2\n"
+                 "  n, n == 1 and '' or 's'))\n", encoding="utf-8")
+    assert [n for n, _ in truncated_and_or(f)] == [1]
