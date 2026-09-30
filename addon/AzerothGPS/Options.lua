@@ -743,12 +743,12 @@ local function BuildWindow()
     end)
   check("Quest route: only this zone", "The Quest Route button takes only the quests whose objective or turn-in is in the zone you're in (a city counts as its zone). Off: every quest in your log, anywhere.",
     function() return GPS().questZoneOnly end, function(v) GPS().questZoneOnly = v end)
-  check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The addon never uses it for you; the directions just say to.",
+  check("Use hearthstone", "Routes may start with your Hearthstone (or a shaman's Astral Recall) when it's in your bags, off cooldown, and faster. Home is your inn's town; the exact spot is learned after your first hearth. The directions say when; click the button beside them to use it.",
     function() return GPS().useHearthstone ~= false end, function(v)
       GPS().useHearthstone = v
       ns.Nav.OptionsChanged()
     end)
-  check("Use class teleports", "Routes may start with a mage's teleport (with a Rune of Teleportation) or Teleport: Moonglade when it's known, off cooldown, and faster.",
+  check("Use class teleports and teleport items", "Routes may start with a mage's teleport (with a Rune of Teleportation), Teleport: Moonglade, or an engineer's Dimensional Ripper - Everlook or Ultrasafe Transporter: Gadgetzan (with the specialization it needs) when it's known or in your bags, off cooldown, and faster. Click the button beside the directions to use it.",
     function() return GPS().useTeleports ~= false end, function(v)
       GPS().useTeleports = v
       ns.Nav.OptionsChanged()

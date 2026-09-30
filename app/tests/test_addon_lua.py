@@ -3459,6 +3459,70 @@ def test_hearthstone_ready_with_the_newer_item_api(nav_env):
     assert len(ns.Teleports.Available(1, 300.0, -4700.0)) == 0
 
 
+def test_engineers_teleporters_with_their_specialization(nav_env):
+    # (asked) more ways to travel: an engineer's Ultrasafe Transporter: Gadgetzan and Dimensional
+    # Ripper - Everlook, when in the bags, off cooldown, and with the specialization that uses it;
+    # each row says what the use button uses (item or spell)
+    lua, ns = nav_env
+    load(lua, ns, "Data/Pois.lua", "Teleports.lua")
+    lua.execute("""
+      AGPS_ITEMS = { [6948] = 1, [18986] = 1, [18984] = 1 }
+      AGPS_KNOWN = { [20219] = true } -- Gnomish Engineer (the Transporter's), not Goblin (the Ripper's)
+      GetItemCount = function(id) return AGPS_ITEMS[id] or 0 end
+      GetItemCooldown = function() return 0, 0, 1 end
+      GetBindLocation = function() return "Brill" end
+      IsPlayerSpell = function(id) return AGPS_KNOWN[id] or false end
+      GetItemInfo = nil
+    """)
+    ns.settings = lua.eval("{ gps = { useHearthstone = true, useTeleports = true } }")
+    T = ns.Teleports
+    T.Changed()
+    rows = {r[8]: r for r in T.Available(0, 2250.0, 250.0).values()}
+    assert set(rows) == {"your Hearthstone", "Ultrasafe Transporter: Gadgetzan"}
+    assert rows["your Hearthstone"].item == 6948
+    g = rows["Ultrasafe Transporter: Gadgetzan"]
+    assert g.item == 18986 and g[10] == "Gadgetzan" and g[4] == 1 and g.use
+    ns.settings.gps.useTeleports = False  # (the option: teleports and teleport items)
+    T.Changed()
+    assert [r[8] for r in T.Available(0, 2250.0, 250.0).values()] == ["your Hearthstone"]
+
+
+def test_the_use_button_uses_the_routes_first_teleport(nav_env):
+    # (asked) the route starting with a teleport: a button beside the directions uses it (the
+    # player's click, a secure button); set only out of combat
+    lua, ns = nav_env
+    G, N = ns.GPS, ns.Nav
+    hearth = lua.eval("{ 0, 1, 2, 0, 3, 4, 25, 'your Hearthstone', '', 'Brill', 'your Hearthstone', use = true, item = 6948 }")
+    N.route = lua.eval("function(t) return { legs = { { ride = t, from = 1 }, { walk = true } } } end")(hearth)
+    assert lua.eval("rawequal")(N.UseNow(), hearth)
+    N.route = lua.eval("{ legs = { { walk = true }, { ride = { use = true, item = 6948 }, from = 1 } } }")
+    assert N.UseNow() is None  # (walk first: not yet)
+    assert G.UseKey(hearth) == "item:6948"
+    assert G.UseKey(lua.eval("{ use = true, spell = 556 }")) == "spell:556"
+    lua.execute("""
+      AGPS_ATTR, AGPS_SHOWN = {}, false
+      AGPS_PANEL = { GetFrameStrata = function() return "MEDIUM" end, GetFrameLevel = function() return 5 end }
+      AGPS_BTN = { panel = AGPS_PANEL,
+        icon = { SetTexture = function() end },
+        SetAttribute = function(_, k, v) AGPS_ATTR[k] = v end,
+        Show = function() AGPS_SHOWN = true end, Hide = function() AGPS_SHOWN = false end,
+        ClearAllPoints = function() end, SetPoint = function() end,
+        SetFrameStrata = function() end, SetFrameLevel = function() end }
+      InCombatLockdown = function() return AGPS_COMBAT end
+      AGPS_COMBAT = false
+    """)
+    G.useBtn = lua.eval("AGPS_BTN")
+    G.UpdateUseButton(hearth)
+    assert lua.eval("AGPS_ATTR.type") == "item" and lua.eval("AGPS_ATTR.item") == "item:6948" and lua.eval("AGPS_SHOWN")
+    lua.execute("AGPS_COMBAT = true")
+    G.UpdateUseButton(None)  # (in combat: left as it is; hidden as combat started)
+    assert lua.eval("AGPS_SHOWN")
+    lua.execute("AGPS_COMBAT = false")
+    G.UpdateUseButton(None)
+    assert not lua.eval("AGPS_SHOWN")
+    G.useBtn = None
+
+
 def test_turning_flights_off_applies_right_away(nav_env):
     lua, ns = flights_env(nav_env, [11, 17])
     lua.execute("AGPS_T = 0 GetTime = function() return AGPS_T end")

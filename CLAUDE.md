@@ -9,6 +9,9 @@ boats, zeppelins and flight paths. It's published on CurseForge as "Azeroth GPS"
 The addon is going public, so every change must keep it policy-safe:
 
 - **Display only.** Never move the character, click, target, cast, or automate anything.
+  The one exception: a secure button the player clicks themselves (`SecureActionButtonTemplate`,
+  as action bars are) may use the item or spell the route's next step names (GPSFrame's use
+  button: the hearthstone, a teleport). Nothing is ever used without the player's click.
   No input automation, memory reading, packet inspection or DLL injection, and no
   libraries that do those things.
 - **No Blizzard assets in the repo or in any release.** Draw the game's own textures by
@@ -81,7 +84,11 @@ The addon is going public, so every change must keep it policy-safe:
     row), kept per realm in `ns.db.transports`, and `TransportTimes` gives the next arrival and
     departure at either dock. The map shows every dock with points of interest on (`G.DockTimes`:
     the countdown under the icon; double-click for a stop).
-  - `Teleports.lua`: hearthstone, Astral Recall and class teleports ready right now.
+  - `Teleports.lua`: hearthstone, Astral Recall, class teleports and the engineers' teleporters
+    (`T.ITEMS`, with the specialization each needs) ready right now. Each row carries its `item`
+    or `spell`: when the route starts with one (`Nav.UseNow`), the directions panel shows a use
+    button (`G.MakeUseButton`, `G.UpdateUseButton`): a secure button parented to UIParent (the map
+    may hide in combat), set only out of combat and hidden on PLAYER_REGEN_DISABLED.
   - `Record.lua`: the player's road fixes, drawn on the map with the road tools (Options >
     Road tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
     right-drag erases (a loop: everything inside), middle-drag pans, until toggled off;
@@ -117,8 +124,7 @@ The addon is going public, so every change must keep it policy-safe:
     (`Geo.Base`, `Geo.ToContinent`), with roads from its walkable floors, a passability
     grid, and lifts as transports. The player is on it when the game reports the city's map
     (`Nav.PlayerLevel`), except in its `upper` areas (the halls at the lifts' tops, by
-    subzone name). New stops there get it (`Nav.StopLevel`, `Geo.MapCont`). Offroad goes
-    off down there and back on after (`Nav.CityOffroad`, kept per character).
+    subzone name). New stops there get it (`Nav.StopLevel`, `Geo.MapCont`).
     The grid is each cell's top floor (heights interpolated per triangle, small floors over
     a lower one left out): walls standing on a floor close it, and so does a ledge's foot.
     Its roads are on every floor (floors over floors, `layers.py`, `cities.LAYERED`), from the
@@ -190,8 +196,8 @@ The addon is going public, so every change must keep it policy-safe:
     road from the city's road up top down onto the land's road at its foot, its length
     counting the wait and the ride (`LIFT_SECONDS`). In a
     capital, legs off the roads are straight (no terrain walk: its grid is coarser than the
-    streets and blind to levels), gap links through closed cells are shut, and offroad mode
-    goes off there (`Nav.CityOffroad`); `route-check` leaves out trips from or to a capital's
+    streets and blind to levels), gap links through closed cells are shut, and no joining the
+    roads partway (`Router`'s `JOIN_ALONG_MAX` joins skip capitals, cities and caves); `route-check` leaves out trips from or to a capital's
     own cells (its flat walk can't judge levels and lifts). `agps capitals` renders each (floors under others
     purple, their roads cyan) into `data/debug/capitals/` with `summary.txt`; `--write` writes
     the file, `--check` routes from outside the gate to every place (CityPlaces, the check's

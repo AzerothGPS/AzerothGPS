@@ -2235,6 +2235,7 @@ function G.Update()
   navPanel:SetHeight(navText:GetStringHeight() + 12 + (steps ~= "" and stepsText:GetStringHeight() + 4 or 0))
   -- closed with its X: hidden until the route changes (unless the X clears the route)
   navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version() and not G.Held())
+  G.UpdateUseButton(navPanel:IsShown() and not hidden and ns.Nav.UseNow() or nil)
   -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
   if fl.bar and fl.bar:IsShown() then G.PlaceFloorBar() end
   ns.PerfEnd("redraw: text", pt)
@@ -3547,6 +3548,90 @@ end
 function G.IsFree() return free ~= nil end
 
 function G.Redraw() elapsed = 1 end
+
+-- The use button: when the route starts with a teleport (your Hearthstone, a mage's teleport, an
+-- engineer's teleporter), a button with its icon at the directions panel's corner; clicked, it
+-- uses it (the player's own click: the addon never uses anything by itself). A secure button,
+-- the game's rule for using items and spells: it can't be changed in combat, so it's hidden as
+-- combat starts and set again after; and it's the UI's own child, not the map's (the map may
+-- hide in combat, which a secure child would block), placed on the panel out of combat.
+function G.MakeUseButton(panel)
+  if G.useBtn or not CreateFrame then return end
+  local ok, b = pcall(CreateFrame, "Button", "AzerothGPSUseButton", UIParent, "SecureActionButtonTemplate")
+  if not ok or not b then return end
+  b:SetSize(24, 24)
+  b:RegisterForClicks("AnyUp", "AnyDown") -- (either setting of "cast on key down")
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetAllPoints()
+  b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+  b.panel = panel
+  b:Hide()
+  b:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText(string.format("Use %s", self.what or "it"), 1, 1, 1)
+    if self.to then GameTooltip:AddLine("To " .. self.to .. ": the route's next step.", nil, nil, nil, true) end
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", GameTooltip_Hide)
+  local ev = CreateFrame("Frame")
+  ev:RegisterEvent("PLAYER_REGEN_DISABLED") -- (fired before combat's lockdown: still allowed)
+  ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+  ev:SetScript("OnEvent", function(_, e)
+    if e == "PLAYER_REGEN_DISABLED" then
+      b:Hide()
+      b.key = nil
+    else
+      elapsed = 1 -- (set again on the next redraw)
+    end
+  end)
+  panel:HookScript("OnHide", function()
+    if not (InCombatLockdown and InCombatLockdown()) then
+      b:Hide()
+      b.key = nil
+    end
+  end)
+  G.useBtn = b
+end
+
+-- What the use button uses: `t`, a teleport row with item or spell (Nav.UseNow), or nil (hidden).
+-- The key it's set for: "item:6948", "spell:556", or nil.
+function G.UseKey(t)
+  if not t then return nil end
+  if t.item then return "item:" .. t.item end
+  if t.spell then return "spell:" .. t.spell end
+  return nil
+end
+
+function G.UpdateUseButton(t)
+  local b = G.useBtn
+  if not b or (InCombatLockdown and InCombatLockdown()) then return end
+  local key = G.UseKey(t)
+  if key == b.key then return end
+  b.key = key
+  if not key then
+    b:Hide()
+    return
+  end
+  local tex
+  if t.item then
+    b:SetAttribute("type", "item")
+    b:SetAttribute("item", key)
+    b:SetAttribute("spell", nil)
+    tex = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(t.item)) or (GetItemIcon and GetItemIcon(t.item))
+  else
+    b:SetAttribute("type", "spell")
+    b:SetAttribute("spell", ns.SpellName and ns.SpellName(t.spell) or t.spell)
+    b:SetAttribute("item", nil)
+    tex = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(t.spell)) or (GetSpellTexture and GetSpellTexture(t.spell))
+  end
+  b.icon:SetTexture(tex or 134400)
+  b.what, b.to = t[8], t[10]
+  b:ClearAllPoints()
+  b:SetPoint("BOTTOMRIGHT", b.panel, "BOTTOMRIGHT", -5, 5)
+  b:SetFrameStrata(b.panel:GetFrameStrata())
+  b:SetFrameLevel(b.panel:GetFrameLevel() + 20)
+  b:Show()
+end
 
 -- Near the next stop (option): the map zooms in smoothly for the last yards, and back out
 -- once you're there (or move away, or zoom yourself). Only while following the player.
@@ -4873,7 +4958,8 @@ function G.Init()
   -- The route's steps (several stops, zeppelins, boats): the first three, then "... more".
   stepsText = navPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   stepsText:SetPoint("TOPLEFT", navText, "BOTTOMLEFT", 0, -4)
-  stepsText:SetPoint("RIGHT", -6, 0)
+  stepsText:SetPoint("RIGHT", -32, 0) -- (clear of the use button)
+  G.MakeUseButton(navPanel)
   stepsText:SetJustifyH("LEFT")
   stepsText:SetSpacing(2)
   local cancel = CreateFrame("Button", nil, navPanel, "UIPanelCloseButton")

@@ -1607,6 +1607,14 @@ local function NextRide(route, px, py)
   end
 end
 
+-- The teleport to use now: the route's first step (the hearthstone, a teleport, an engineer's
+-- teleporter), from where the player stands; else nil. What GPSFrame's use button uses.
+function N.UseNow()
+  local r = N.route
+  local leg = r and not r.flying and r.legs and r.legs[1]
+  if leg and leg.ride and leg.ride.use and (leg.ride.item or leg.ride.spell) then return leg.ride end
+end
+
 ---------------------------------------------------------------------------
 -- Speeds
 ---------------------------------------------------------------------------

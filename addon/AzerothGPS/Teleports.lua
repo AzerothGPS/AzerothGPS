@@ -1,7 +1,8 @@
--- Teleports the route may start with (option "Use hearthstone and teleports"): the
--- Hearthstone, Astral Recall, the mage's own teleports and Teleport: Moonglade, when the
--- character has them ready right now. Read-only: the addon never casts or uses anything;
--- the directions just say "Use your Hearthstone".
+-- Teleports the route may start with (options "Use hearthstone", "Use class teleports and
+-- teleport items"): the Hearthstone, Astral Recall, the mage's own teleports, Teleport:
+-- Moonglade and the engineers' teleporters, when the character has them ready right now. The
+-- directions say "Use your Hearthstone", with a button beside them that uses it (the player's
+-- click: GPSFrame's use button); the addon never casts or uses anything by itself.
 local _, ns = ...
 local Geo = ns.Geo
 
@@ -22,6 +23,13 @@ T.SPELLS = {
   { 3565, 1, 9660.8, 2513.6, "Darnassus", true }, -- Teleport: Darnassus
   { 18960, 1, 7980.0, -2501.0, "Moonglade", false }, -- Teleport: Moonglade (druid)
 }
+
+-- Teleport items: { item, cont, x, y, name, the engineering specialization it needs (spell), item name }
+T.ITEMS = {
+  { 18984, 1, 6723.5, -4662.5, "Everlook", 20222, "Dimensional Ripper - Everlook" }, -- Goblin Engineer
+  { 18986, 1, -7139.1, -3752.1, "Gadgetzan", 20219, "Ultrasafe Transporter: Gadgetzan" }, -- Gnomish Engineer
+}
+T.HEARTHSTONE_ITEM, T.ASTRAL_RECALL = HEARTHSTONE_ITEM, ASTRAL_RECALL
 
 local function S() return ns.settings and ns.settings.gps end
 
@@ -91,9 +99,12 @@ function T.Home()
 end
 
 -- A teleport as a transport row (Nav's format, used from where the player stands):
--- { cont, x, y, cont2, x2, y2, seconds, what, "", to, what, use = true }.
-local function Row(what, cont, px, py, dest)
-  return { cont, px, py, dest.cont, dest.x, dest.y, T.CAST_SECONDS, what, "", dest.name, what, use = true }
+-- { cont, x, y, cont2, x2, y2, seconds, what, "", to, what, use = true, item = id | spell = id }
+-- (item or spell: what the use button uses).
+local function Row(c, cont, px, py)
+  local dest = c[2]
+  return { cont, px, py, dest.cont, dest.x, dest.y, T.CAST_SECONDS, c[1], "", dest.name, c[1], use = true,
+    item = c.item, spell = c.spell }
 end
 
 local cache, cacheAt = nil, -100
@@ -111,19 +122,25 @@ function T.Available(cont, px, py)
     cache = {}
     local home = hearth and T.Home()
     if home then
-      if ItemReady(HEARTHSTONE_ITEM) then cache[#cache + 1] = { "your Hearthstone", home } end
-      if SpellKnown(ASTRAL_RECALL) and SpellReady(ASTRAL_RECALL) then cache[#cache + 1] = { "Astral Recall", home } end
+      if ItemReady(HEARTHSTONE_ITEM) then cache[#cache + 1] = { "your Hearthstone", home, item = HEARTHSTONE_ITEM } end
+      if SpellKnown(ASTRAL_RECALL) and SpellReady(ASTRAL_RECALL) then cache[#cache + 1] = { "Astral Recall", home, spell = ASTRAL_RECALL } end
+    end
+    for _, it in ipairs(teleports and T.ITEMS or {}) do -- (an engineer's teleporter: its specialization to use it)
+      if SpellKnown(it[6]) and ItemReady(it[1]) then
+        local name = GetItemInfo and GetItemInfo(it[1]) or it[7]
+        cache[#cache + 1] = { name, { cont = it[2], x = it[3], y = it[4], name = it[5] }, item = it[1] }
+      end
     end
     local rune = ItemCount(RUNE_OF_TELEPORTATION) > 0
     for _, s in ipairs(teleports and T.SPELLS or {}) do
       if SpellKnown(s[1]) and (rune or not s[6]) and SpellReady(s[1]) then
         local name = ns.SpellName(s[1]) or ("Teleport: " .. s[5])
-        cache[#cache + 1] = { name, { cont = s[2], x = s[3], y = s[4], name = s[5] } }
+        cache[#cache + 1] = { name, { cont = s[2], x = s[3], y = s[4], name = s[5] }, spell = s[1] }
       end
     end
   end
   local out = {}
-  for _, c in ipairs(cache) do out[#out + 1] = Row(c[1], cont, px, py, c[2]) end
+  for _, c in ipairs(cache) do out[#out + 1] = Row(c, cont, px, py) end
   return out
 end
 
