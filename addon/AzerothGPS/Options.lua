@@ -584,7 +584,7 @@ local function BuildWindow()
     function() return GPS().poiLabels end, function(v) GPS().poiLabels = v end)
   check("Quests", "Your quests' objectives and turn-ins.",
     function() return GPS().layerQuests end, function(v) GPS().layerQuests = v end)
-  check("Party members", "Your party's or raid's members, as dots in their class's color (their name when you point at one), where the game gives their position.",
+  check("Party members", "Your party's or raid's members, as round icons of their class in their class's color (their name when you point at one), where the game gives their position. They don't need AzerothGPS themselves.",
     function() return GPS().showParty ~= false end, function(v) GPS().showParty = v end)
   check("Quest areas", "Outlines of your quests' objective areas, like on the minimap. Hover one to see the quest's objectives.",
     function() return GPS().layerQuestAreas end, function(v) GPS().layerQuestAreas = v end)
