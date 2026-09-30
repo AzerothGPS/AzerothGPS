@@ -4051,6 +4051,16 @@ end
 G.WARM_MS = 5
 G.WARM_SHARE = 0.25 -- ... and at most this share of the last frame's time (a fast frame rate isn't eaten up)
 local lastPump
+-- Options > Performance, "Gentle background work": smaller slices (smoother frames on a slow PC; routes
+-- and the road data after a /reload take longer to work out)
+G.GENTLE_MS, G.GENTLE_WARM_MS, G.GENTLE_WARM_SHARE = 0.5, 2, 0.1
+function G.PumpBudget(frameMs, warming)
+  local gentle = S().gentleBackground
+  local base = gentle and G.GENTLE_MS or 1
+  if not warming then return base end
+  local cap, share = gentle and G.GENTLE_WARM_MS or G.WARM_MS, gentle and G.GENTLE_WARM_SHARE or G.WARM_SHARE
+  return math.max(base, math.min(cap, frameMs * share)) -- (ms of this frame)
+end
 function G.PumpSearches()
   if not ns.Router.HasWork() then
     lastPump = nil
@@ -4060,8 +4070,7 @@ function G.PumpSearches()
   local now = debugprofilestop()
   local frameMs = lastPump and now - lastPump or 16
   lastPump = now
-  local budget = ns.Router.Warming and ns.Router.Warming()
-    and math.max(1, math.min(G.WARM_MS, frameMs * G.WARM_SHARE)) or 1 -- (ms of this frame)
+  local budget = G.PumpBudget(frameMs, ns.Router.Warming and ns.Router.Warming())
   local done, fixed = ns.Router.Pump(debugprofilestop() + budget, debugprofilestop)
   if done then ns.Nav.SearchDone(fixed) end
   ns.PerfEnd("terrain search", t0)

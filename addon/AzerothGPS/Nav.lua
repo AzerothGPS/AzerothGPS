@@ -8,14 +8,22 @@ ns.Nav = N
 
 local DEFAULT_RUN = 7 -- yd/s, normal run speed
 local ARRIVED_YD = 10
-local REROUTE_SECONDS = 2 -- at most this often while moving
-local REROUTE_MOVED_YD = 15 -- ...and only after moving this far
+local REROUTE_SECONDS = 2 -- at most this often while moving (option rerouteSeconds, Performance)
+local REROUTE_MOVED_YD = 15 -- ...and only after moving this far (scaled with it)
 local REROUTE_STALE = 30 -- standing still: refresh this often anyway
 local OFF_ROUTE_YD = 30 -- further than this from the route: recalculate it
 -- A terrain search from the player's position finished: the route is recalculated to use
 -- it, but at most this often: each recalculation starts searches from the new position,
 -- and recalculating on each of those would loop (a recalculation a few times a second).
-local SEARCH_RECALC_SECONDS = 3
+local SEARCH_RECALC_SECONDS = 3 -- (scaled with rerouteSeconds too)
+-- How often a route off the player's way is recalculated (Options > Performance): seconds, and the
+-- yards moved and seconds between recalculations for finished searches, scaled with it.
+function N.RerouteTiming()
+  local st = ns.settings and ns.settings.gps
+  local secs = math.max(REROUTE_SECONDS, st and st.rerouteSeconds or REROUTE_SECONDS)
+  local k = secs / REROUTE_SECONDS
+  return secs, REROUTE_MOVED_YD * k, SEARCH_RECALC_SECONDS * k
+end
 local searchDirty, searchRecalcAt = false, -math.huge
 local FOLLOW_MAX_AGE = 20 -- following the route: recalculate this often anyway
 -- The walked part behind the player is trimmed off as they go (every TRIM_MOVED_YD), apart
@@ -1538,14 +1546,15 @@ function N.Route(px, py, cont)
     N.route, kept, r = nr, nr, nr
     if t0 then ns.PerfEnd("route calculation: stops", t0) end
   end
-  if searchDirty and r and now - searchRecalcAt >= SEARCH_RECALC_SECONDS then
+  local rerouteSecs, rerouteYd, searchSecs = N.RerouteTiming()
+  if searchDirty and r and now - searchRecalcAt >= searchSecs then
     r, N.route = nil, nil
     moved = math.huge
     searchDirty, searchRecalcAt = false, now
   end
   local age = r and now - N.routeTime or math.huge
   local same = r and N.routeOffroad == offroad and N.routeCont == cont
-  if same and age < REROUTE_STALE and (age < REROUTE_SECONDS or moved <= REROUTE_MOVED_YD ^ 2) then
+  if same and age < REROUTE_STALE and (age < rerouteSecs or moved <= rerouteYd ^ 2) then
     -- (not recalculated yet: the walked part behind the player trimmed off meanwhile)
     local tx, ty = N.trimX or N.routeX, N.trimY or N.routeY
     if age < FOLLOW_MAX_AGE and (px - tx) ^ 2 + (py - ty) ^ 2 >= N.TRIM_MOVED_YD ^ 2

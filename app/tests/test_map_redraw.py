@@ -353,3 +353,173 @@ def test_party_members_show_their_class_icon(game):
             assert part._masks and part._masks[1]._tex == G.ROUND_MASK
     finally:
         lua.execute("AGPS_PARTY = {} UnitPosition = AGPS_POS_REAL CLASS_ICON_TCOORDS = nil")
+
+
+def _texts(lua):
+    return [str(w._text) for w in lua.eval("AGPS_WIDGETS").values() if w._text]
+
+
+def test_the_options_window_builds_with_its_performance_page(game):
+    # (asked) a Performance page in the options: lighter settings for low-end PCs, a preset for them
+    # and back; the whole window built under the game's Lua 5.1 (a failure there: no options window)
+    lua, ns = game
+    ns.Options.Show()
+    texts = _texts(lua)
+    for label in ("Performance", "Use Low-End Settings", "Restore Defaults", "Map redraws per second",
+                  "Work out a route you've left at most every", "Gentle background work", "Turn the arrow every frame"):
+        assert label in texts, label
+    assert texts.count("Stops routed and drawn ahead") == 2  # (Routing's, and Performance's: the same setting)
+
+
+def test_low_end_settings_and_back(game):
+    lua, ns = game
+    O, st, N = ns.Options, ns.settings.gps, ns.Nav
+    try:
+        O.UseLowEnd()
+        for k in ("hz", "rerouteSeconds", "stopsAhead", "gentleBackground", "arrowHz"):
+            assert st[k] == O.LOW_END[k], k
+        assert O.IsLowEnd()
+        assert st.hz < 20 and st.stopsAhead < 3 and st.gentleBackground and st.arrowHz > 0
+        O.PerfDefaults()
+        for k in ("hz", "rerouteSeconds", "stopsAhead", "gentleBackground", "arrowHz"):
+            assert st[k] == ns.DEFAULTS.gps[k], k
+        assert not O.IsLowEnd()
+    finally:
+        O.PerfDefaults()
+
+
+def _frames(lua, seconds, fps=60, move=None):
+    """The game's frames: every OnUpdate script run, `seconds` of them at `fps`."""
+    lua.execute("""
+      AGPS_TICK = function(dt)
+        for _, w in pairs(AGPS_WIDGETS) do
+          local f = w._scripts and w._scripts.OnUpdate
+          if f then f(w, dt) end
+        end
+      end
+    """)
+    tick = lua.eval("AGPS_TICK")
+    t = float(lua.eval("AGPS_T"))
+    for i in range(int(seconds * fps)):
+        t += 1 / fps
+        lua.execute(f"AGPS_T = {t}")
+        if move:
+            move(i)
+        tick(1 / fps)
+
+
+def test_the_map_redraws_at_most_as_often_as_set(game):
+    # (Performance: "Map redraws per second") moving, the map redraws that many times a second, no more
+    lua, ns = game
+    st = ns.settings.gps
+    lua.execute("""
+      AGPS_REDRAWS = 0
+      local update = AGPS_NS.GPS.Update
+      AGPS_NS.GPS.Update = function(...) AGPS_REDRAWS = AGPS_REDRAWS + 1 return update(...) end
+    """)
+    x = [2254.0]
+
+    def run(i):
+        x[0] -= 0.12
+        lua.execute(f"AGPS_POS[1] = {x[0]}")
+    try:
+        counts = {}
+        for hz in (20, 10, 5):
+            st.hz = hz
+            _frames(lua, 0.2, move=run)  # (settled)
+            lua.execute("AGPS_REDRAWS = 0")
+            _frames(lua, 3, move=run)
+            counts[hz] = int(lua.eval("AGPS_REDRAWS"))
+        for hz, n in counts.items():
+            assert hz * 3 * 0.8 <= n <= hz * 3 + 1, (hz, n)
+    finally:
+        st.hz = ns.DEFAULTS.gps.hz
+        lua.execute("AGPS_POS[1], AGPS_POS[2] = 2254.0, 293.0")
+
+
+def test_the_arrow_turns_every_frame_or_as_often_as_set(game):
+    # (Performance: "Turn the arrow every frame") off: 20 times a second, whatever the frame rate
+    lua, ns = game
+    st = ns.settings.gps
+
+    def turns(seconds):
+        p = ns.perf["arrow window"]
+        n0 = p.n if p else 0
+        _frames(lua, seconds, fps=100)
+        return ns.perf["arrow window"].n - n0
+    try:
+        st.arrowHz = 0
+        assert turns(1) >= 95
+        st.arrowHz = 20
+        n = turns(2)
+        assert 36 <= n <= 41, n
+    finally:
+        st.arrowHz = ns.DEFAULTS.gps.arrowHz
+
+
+def test_gentle_background_work_takes_smaller_slices(game):
+    # (Performance: "Gentle background work") smaller slices of each frame for the searches and the
+    # road data being built (smoother on a slow PC, done a little later)
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    try:
+        st.gentleBackground = False
+        assert G.PumpBudget(16, False) == 1
+        assert G.PumpBudget(40, True) == G.WARM_MS  # (the road data: up to 5 ms, a quarter of the frame)
+        assert G.PumpBudget(8, True) == 2
+        st.gentleBackground = True
+        assert G.PumpBudget(16, False) == G.GENTLE_MS < 1
+        assert G.PumpBudget(40, True) == G.GENTLE_WARM_MS < G.WARM_MS
+        assert G.PumpBudget(4, True) == G.GENTLE_MS  # (a tenth of a fast frame is less than the least)
+    finally:
+        st.gentleBackground = False
+
+
+def test_a_route_left_is_worked_out_again_as_often_as_set(game):
+    # (Performance: "Work out a route you've left at most every") off the route, it's worked out
+    # again from the player at most that often (less work; it catches up a little later)
+    lua, ns = game
+    N, st = ns.Nav, ns.settings.gps
+
+    def recalcs(secs):
+        st.rerouteSeconds = secs
+        N.SetStops(lua.eval("{ { x = 1600, y = 240, cont = 0, name = 'Ruins' } }"), False, "red")
+        t = float(lua.eval("AGPS_T")) + 60
+        lua.execute(f"AGPS_T = {t}")
+        x, y = 2254.0, 293.0
+        assert N.Route(x, y, 0)
+        n0 = ns.perf["route calculation"].n
+        for k in range(24):  # (12 s drifting sideways off the route, 40 yd every half second)
+            t += 0.5
+            y += 40
+            lua.execute(f"AGPS_T = {t}; AGPS_POS[1], AGPS_POS[2] = {x}, {y}")
+            N.Route(x, y, 0)
+        return ns.perf["route calculation"].n - n0
+    try:
+        often, seldom = recalcs(2), recalcs(6)
+        assert 5 <= often <= 7, often
+        assert 1 <= seldom <= 2, seldom
+    finally:
+        st.rerouteSeconds = ns.DEFAULTS.gps.rerouteSeconds
+        N.Clear()
+        lua.execute("AGPS_POS[1], AGPS_POS[2] = 2254.0, 293.0")
+
+
+def test_the_performance_page_tells_the_addons_share_of_the_time(game):
+    lua, ns = game
+    O = ns.Options
+    assert O.UsageText() == "AzerothGPS's work: measuring..."
+    assert O.UsageText(200, 10) == "AzerothGPS's work: 20.0 ms a second, 2.0% of the time"
+    # (only the timings that don't overlap: a redraw's parts are in it already)
+    lua.execute("""
+      local p = AGPS_NS.perf
+      AGPS_SAVED = p
+      AGPS_NS.perf = {
+        redraw = { total = 10 }, ["redraw: icons"] = { total = 4 }, ["arrow window"] = { total = 2 },
+        ["terrain search"] = { total = 3 }, ["router: build roads"] = { total = 3 }, ["route calculation"] = { total = 5 },
+      }
+    """)
+    try:
+        assert ns.PerfTotal() == 15
+    finally:
+        lua.execute("AGPS_NS.perf = AGPS_SAVED")

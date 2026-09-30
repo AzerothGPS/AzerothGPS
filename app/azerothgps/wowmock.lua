@@ -112,8 +112,13 @@ WMT = { __index = function(_, k)
 end }
 
 function CreateFrame(kind, name, parent, template)
-  return NewWidget(kind, name, parent)
+  local w = NewWidget(kind, name, parent)
+  -- (a template's parts the addon reaches for)
+  if template and template:find("ScrollFrame") then w.ScrollBar = NewWidget("Slider", nil, w) end
+  return w
 end
+M.SetScrollChild = function(s, c) s._child = c end
+M.GetScrollChild = function(s) return s._child end
 
 -- Every script of `event` on every frame registered for it.
 function AGPS_FIRE(event, ...)
