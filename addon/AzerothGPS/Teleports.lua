@@ -122,8 +122,10 @@ function T.Available(cont, px, py)
     cache = {}
     local home = hearth and T.Home()
     if home then
-      if ItemReady(HEARTHSTONE_ITEM) then cache[#cache + 1] = { "your Hearthstone", home, item = HEARTHSTONE_ITEM } end
+      -- (a shaman's Astral Recall first: it goes home as fast, and keeps the hearthstone for later; the
+      -- route takes the first of equals. Asked, 2026-10-01)
       if SpellKnown(ASTRAL_RECALL) and SpellReady(ASTRAL_RECALL) then cache[#cache + 1] = { "Astral Recall", home, spell = ASTRAL_RECALL } end
+      if ItemReady(HEARTHSTONE_ITEM) then cache[#cache + 1] = { "your Hearthstone", home, item = HEARTHSTONE_ITEM } end
     end
     for _, it in ipairs(teleports and T.ITEMS or {}) do -- (an engineer's teleporter: its specialization to use it)
       if SpellKnown(it[6]) and ItemReady(it[1]) then

@@ -3985,6 +3985,35 @@ def test_hearthstone_ready_with_the_newer_item_api(nav_env):
     assert len(ns.Teleports.Available(1, 300.0, -4700.0)) == 0
 
 
+def test_astral_recall_goes_before_the_hearthstone(nav_env):
+    # (asked) a shaman with Astral Recall ready: the route takes it (first of equals), the hearthstone kept;
+    # on cooldown, the hearthstone
+    lua, ns = nav_env
+    load(lua, ns, "Data/Pois.lua", "Teleports.lua")
+    lua.execute("""
+      GetItemCount = nil
+      C_Item = { GetItemCount = function(id) return id == 6948 and 1 or 0 end }
+      C_Container = { GetItemCooldown = function() return 0, 0, 1 end }
+      GetBindLocation = function() return "Brill" end
+      IsPlayerSpell = function(id) return id == 556 end
+      AGPS_RECALL_CD = 0
+      C_Spell = { GetSpellCooldown = function() return { startTime = AGPS_RECALL_CD > 0 and 1 or 0, duration = AGPS_RECALL_CD } end }
+    """)
+    ns.settings = lua.eval("{ gps = { useHearthstone = true, useTeleports = true } }")
+    T = ns.Teleports
+    T.Changed()
+    rows = T.Available(1, 300.0, -4700.0)
+    assert [rows[i][8] for i in range(1, len(rows) + 1)] == ["Astral Recall", "your Hearthstone"]
+    stop = lua.eval("{ x = 2250.0, y = 250.0, cont = 0 }")  # (Brill, home: across the sea)
+    legs, _ = ns.Nav.Plan(1, 300.0, -4700.0, 7.0, stop, rows)
+    first = legs[1].ride
+    assert first and first.spell == 556 and first[8] == "Astral Recall"
+    lua.execute("AGPS_RECALL_CD = 3600")  # (on its cooldown)
+    T.Changed()
+    rows = T.Available(1, 300.0, -4700.0)
+    assert [rows[i][8] for i in range(1, len(rows) + 1)] == ["your Hearthstone"]
+
+
 def test_engineers_teleporters_with_their_specialization(nav_env):
     # (asked) more ways to travel: an engineer's Ultrasafe Transporter: Gadgetzan and Dimensional
     # Ripper - Everlook, when in the bags, off cooldown, and with the specialization that uses it;
