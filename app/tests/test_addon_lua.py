@@ -5522,7 +5522,10 @@ def test_working_out_the_route_now_and_then_in_murloc(nav_env):
         N.Status(-450.0, -4700.0, 1)
         lua.execute("AGPS_ROLLS = { 0.15, 3 }; AGPS_I = 0")
         assert N.WorkingText() == "Spinning up the Route-o-Tron 3000..."
-        assert [f.share for f in N.WORKING_FLAVORS.values()] == [0.05, 0.2]  # (asked: Murloc 5%, gnomes 20%)
+        assert [f.share for f in N.WORKING_FLAVORS.values()] == [0.05, 0.2, 0.2]  # (asked: Murloc 5%, gnomes 20%, goblins 20%)
+        N.Status(-450.0, -4700.0, 1)
+        lua.execute("AGPS_ROLLS = { 0.3, 1 }; AGPS_I = 0")
+        assert N.WorkingText() == "Time is money, friend! Routing..."
     finally:
         N.FUN = False
         N.Random = lua.eval("math.random")
