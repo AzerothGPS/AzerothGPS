@@ -294,12 +294,19 @@ def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
     arrowWin = lua.globals().AzerothGPSArrow
     try:
         st.stepsCollapsed = False
+        st.arrowLocked = True  # (asked: clickable with the arrow locked too, its window click-through)
         lua.execute("AGPS_T = 801")
         G.Update()
         assert G.useBtn._shown
-        arrowWin._scripts.OnUpdate(arrowWin, 1)
         btn = lua.globals().AzerothGPSArrowUseButton
+        # (anchored to the arrow window itself, as the map's to its panel: on a texture there it wasn't
+        # over the icon in the game, 2026-10-01; its own frame, so the window's click-through leaves it)
+        lua.execute("""AGPS_ANCHOR = nil
+          AzerothGPSArrowUseButton.SetPoint = function(self, p, rel) AGPS_ANCHOR = rel end""")
+        btn.key = None
+        arrowWin._scripts.OnUpdate(arrowWin, 1)
         assert btn._shown and btn._attr["item"] == "item:6948"
+        assert lua.eval("AGPS_ANCHOR")._name == "AzerothGPSArrow" and btn._parent._name == "UIParent"
         # (asked: the item's icon where the arrow was, glowing like the quest route's remake button; the
         # window's own texture, the clear button over it)
         tex = G.UseTexture(hearth)
@@ -314,7 +321,7 @@ def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
         assert not G.useBtn._shown and btn._shown
     finally:
         N.UseNow = real
-        st.stepsCollapsed = False
+        st.stepsCollapsed, st.arrowLocked = False, False
         lua.execute("AGPS_T = 803")
         G.Update()
         arrowWin._scripts.OnUpdate(arrowWin, 1)

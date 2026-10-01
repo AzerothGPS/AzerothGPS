@@ -132,8 +132,13 @@ function RenderLines(lines)
   return true
 end
 
--- (the arrow's use button, in the arrow's place)
-local function PlaceUse(b) b:SetPoint("CENTER", slot, "CENTER") end
+-- (the arrow's use button, in the arrow's place: anchored to the window itself, as the map's to its panel,
+-- not to the texture there: in the game it wasn't over the icon to click, 2026-10-01)
+A.USE_PX = 28
+local function PlaceUse(b)
+  b:SetSize(A.USE_PX, A.USE_PX)
+  b:SetPoint("CENTER", frame, "LEFT", 8 + 29, 0) -- (the slot's middle: 8 in, 58 wide)
+end
 local function SetUse(t)
   local G = ns.GPS
   if useBtn and G and G.SetUseButton then G.SetUseButton(useBtn, t, PlaceUse) end
@@ -476,18 +481,18 @@ function A.Init()
   -- (the route's first step a hearthstone or teleport: its icon in the arrow's place, glowing, and its
   -- button over it: the window's own texture shows it whatever the secure button does)
   useIcon = frame:CreateTexture(nil, "ARTWORK")
-  useIcon:SetSize(40, 40)
+  useIcon:SetSize(A.USE_PX, A.USE_PX)
   useIcon:SetPoint("CENTER", slot, "CENTER")
   useIcon:Hide()
   useGlow = frame:CreateTexture(nil, "OVERLAY")
   useGlow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
   useGlow:SetBlendMode("ADD")
   useGlow:SetVertexColor(1, 0.85, 0.3)
-  useGlow:SetSize(78, 78)
+  useGlow:SetSize(A.USE_PX * 1.9, A.USE_PX * 1.9)
   useGlow:SetPoint("CENTER", useIcon, "CENTER")
   useGlow:Hide()
   if ns.GPS and ns.GPS.NewUseButton then
-    useBtn = ns.GPS.NewUseButton("AzerothGPSArrowUseButton", frame, 40)
+    useBtn = ns.GPS.NewUseButton("AzerothGPSArrowUseButton", frame, A.USE_PX)
     if useBtn then useBtn.icon:SetAlpha(0) end -- (clear: the icon under it is the window's)
   end
   bang = frame:CreateTexture(nil, "ARTWORK")
