@@ -2880,14 +2880,16 @@ def test_recorded_roads_keep_the_ruins_roads_and_the_citys(nav_env):
 
 # ---- Opt-in feedback (Feedback.lua) ------------------------------------------------------------
 
-def test_faster_trip_is_kept_only_when_opted_in(nav_env):
+def test_a_faster_trip_is_kept(nav_env):
+    # (the option to keep them was removed, asked 2026-10-01: always kept, on the player's PC; Copy Map
+    # Data's Routes checkbox says whether they're shared)
     lua, ns = nav_env
     lua.execute("""
       now = 0; GetTime = function() return now end; time = function() return 1790000000 end
       GetBuildInfo = function() return "1.60.1", "70009" end
       pos = { 0, 0, 1 }
     """)
-    ns.settings = lua.eval("{ gps = { shareTrips = false, offroad = false } }")
+    ns.settings = lua.eval("{ gps = { offroad = false } }")
     load(lua, ns, "Feedback.lua")
     F = ns.Feedback
     ns.Geo.PlayerWorld = lua.eval("function() return pos[1], pos[2], pos[3] end")
@@ -2903,12 +2905,7 @@ def test_faster_trip_is_kept_only_when_opted_in(nav_env):
             lua.execute(f"now = {seconds * k / 10}; pos = {{ {-800 + 20 * k}, {-4400 + 22 * k}, 1 }}")
             TICK()
         F.Arrived(ns.Nav.dest)
-    walk_there(30)  # way faster than the estimate, but sharing is off
-    assert F.Counts() == (0, 0)
-    ns.settings.gps.shareTrips = True
-    ns.Nav.SetDestination(-600.0, -4180.0, 1, "Target")
-    ns.Nav.Route(-800.0, -4400.0, 1)
-    walk_there(30)
+    walk_there(30)  # way faster than the estimate
     roads, trips = F.Counts()
     assert trips == 1
     t = ns.db.feedback.trips[1]

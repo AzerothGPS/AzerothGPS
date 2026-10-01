@@ -5288,9 +5288,9 @@ function G.Init()
   end
   G.QUICK = QUICK
   -- Where each goes: always shown or in the menu, going up or right from the map button,
-  -- or hidden. (The defaults fit a 400 map: 2 going right, 9 going up.)
+  -- or hidden. (The defaults, asked 2026-10-01: the menu up and right, the tools always shown.)
   G.QUICK_PLACES = { "barUp", "barRight", "menuUp", "menuRight", "hidden" }
-  G.QUICK_DEFAULT = { search = "menuUp", questRoute = "barRight", hearth = "barRight",
+  G.QUICK_DEFAULT = { search = "menuUp", questRoute = "menuRight", hearth = "menuRight",
     city = "hidden", dungeonsG = "menuUp", styles = "menuUp", gather = "menuUp", questsG = "menuUp", roadTools = "barUp", roadUndo = "barUp", wallTools = "barUp", showMapData = "barUp" }
   -- Groups: one button in the bar or menu; clicked, its buttons slide out beside it (to the
   -- right from a column going up, upward from a row going right).

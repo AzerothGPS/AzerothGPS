@@ -1,8 +1,8 @@
--- Opt-in feedback for improving the road network (both off by default):
---  * shareRoads: roads the player draws or erases (Record.lua) are kept for sharing.
---  * shareTrips: when the player reaches a stop clearly faster than the addon estimated,
---    the way they went (a GPS trace) is kept: it likely found a road or shortcut the
---    network doesn't know.
+-- Feedback for improving the road network: when the player reaches a stop clearly faster than the
+-- addon estimated, the way they went (a GPS trace) is kept: it likely found a road or shortcut the
+-- network doesn't know. (The roads they draw or erase are Record.lua's, kept until the data has them.
+-- The options "Share drawn roads and walls" and "Share faster trips" were removed, 2026-10-01: what's
+-- shared is what "Copy Map Data..." includes, its checkboxes.)
 -- Addons can't send anything over the network: this only stores the data in the saved
 -- variables (AzerothGPSDB.feedback, account-wide, no character or realm names). Sharing it
 -- is a separate step outside the game (`agps feedback` exports it for upload).
@@ -19,8 +19,6 @@ F.MAX_POINTS = 3000 -- per trip
 F.MAX_TRIPS, F.MAX_ROADS = 100, 200 -- oldest dropped beyond these
 
 local trip -- the leg being traced: { dest, t0, cont, estimate, mounted, pts }
-
-local function S() return ns.settings.gps end
 
 local function Store()
   local db = ns.db
@@ -42,15 +40,9 @@ end
 
 local function Round(v) return math.floor(v * 10 + 0.5) / 10 end
 
--- Record.lua saved a drawn (or erased) road.
-function F.RoadRecorded(track)
-  if not S().shareRoads then return end
-  local pts = {}
-  for i, v in ipairs(track.pts) do pts[i] = v end
-  Push(Store().roads, { op = track.op, continent = track.continent, zone = track.zone, pts = pts,
-    time = track.time, area = track.area, z = track.z, indoors = track.indoors, down = track.down, build = Build(),
-    addon = ns.VERSION }, F.MAX_ROADS)
-end
+-- Record.lua saved a drawn (or erased) road: nothing to keep here (the tracks themselves are copied; an
+-- older version kept a second copy in feedback.roads, which is still read and pruned).
+function F.RoadRecorded() end
 
 -- ... and took one back: not shared either.
 function F.RoadRemoved(track)
@@ -65,7 +57,7 @@ end
 function F.Arrived(d)
   local t = trip
   trip = nil
-  if not t or t.dest ~= d or not S().shareTrips then return end
+  if not t or t.dest ~= d then return end
   local actual = GetTime() - t.t0
   if actual < F.MIN_SECONDS or actual > t.estimate * F.FASTER or #t.pts < 10 then return end
   local x, y, cont = Geo.PlayerWorld()
@@ -79,10 +71,6 @@ end
 
 -- Once a second: start tracing a leg when a route is set, add points as the player moves.
 local function Tick()
-  if not S().shareTrips then
-    trip = nil
-    return
-  end
   local N = ns.Nav
   local d, r = N.dest, N.route
   local px, py, cont = Geo.PlayerWorld()
@@ -131,7 +119,7 @@ F.KINDS = {
   { kind = "roads", key = "copyRoads", label = "Roads", tip = "Roads you drew or erased with the road tools." },
   { kind = "walls", key = "copyWalls", label = "Walls", tip = "Walls you drew or erased with the wall tools." },
   { kind = "routes", key = "copyRoutes", label = "Routes",
-    tip = "The ways you went when you reached a stop clearly faster than estimated (kept with Share faster trips on)." },
+    tip = "The ways you went when you reached a stop clearly faster than estimated (kept as you play, on your PC)." },
   { kind = "pins", key = "copyPins", label = "Pins", tip = "Your pins, and the shared ones you removed." },
 }
 F.TRIP_SIMPLIFY_YD = 4 -- a trip's trace: points within this of the line the others make are left out

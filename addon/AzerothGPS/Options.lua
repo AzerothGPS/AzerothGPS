@@ -208,7 +208,7 @@ O.SHARE_URL = "https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road
 O.DISCORD_URL = "https://discord.gg/gktYHzs2c"
 O.SHARE_INFO = {
   "|cffffd100What is kept|r",
-  "Roads and walls you draw or erase with the road tools, and your pins (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions, and your pins' names and icons: no character or realm names.",
+  "Roads and walls you draw or erase with the road tools, your pins, and the way you went when you reached a stop clearly faster than estimated. Positions, and your pins' names and icons: no character or realm names. Copy Map Data... includes what you tick there.",
   " ",
   "|cffffd100Where it is kept|r",
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
@@ -933,10 +933,6 @@ local function BuildWindow()
   ---------------------------------------------------------------- Help improve
   Page("Help improve")
   header("Help improve AzerothGPS", "Kept on your PC only; sharing it is a separate step.")
-  check("Share drawn roads and walls", "Roads and walls you draw or erase are kept for a future road-network update. Addons can't send anything from the game: the data waits in your saved variables until it's uploaded outside the game.",
-    function() return GPS().shareRoads end, function(v) GPS().shareRoads = v end)
-  check("Share faster trips", "When you reach a stop clearly faster than the estimate (85% of it or less), the way you went is kept (a trace of positions, the estimate and your time), so shortcuts and missing roads can be added. No character or realm names. Kept on your PC until uploaded outside the game.",
-    function() return GPS().shareTrips end, function(v) GPS().shareTrips = v end)
   local counts = page:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
   place(counts, 18, 4)
   local howBtn = Button(page, "How to share...", 150, ShowShareInfo)

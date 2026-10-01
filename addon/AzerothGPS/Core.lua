@@ -70,13 +70,11 @@ ns.DEFAULTS = {
     combatAlpha = 1, -- map opacity in combat (unset: the map's usual opacity)
     arrowCombatAlpha = 1, -- arrow opacity in combat
     -- help improve AzerothGPS (opt-in: off unless the player turns them on)
-    shareRoads = false, -- keep the roads the player draws or erases for sharing
     devTools = false, -- the road tools on the map's buttons (Draw a road, Erase a road)
     wallTools = false, -- the wall tools on the map's buttons
     pinning = true, -- Shift + left-click on the map: "Create Pin" (Pins.lua)
     showCustomPins = true, -- the pins on the map (the player's and the shared ones)
     showWalls = false, -- draw the walls routes don't walk through (blood red)
-    shareTrips = false, -- keep traces of trips clearly faster than estimated
     -- what "Copy Map Data..." puts in the text (Feedback.KINDS)
     copyRoads = true, copyWalls = true, copyRoutes = true, copyPins = true,
   },
@@ -218,6 +216,9 @@ local function InitDB()
   end
   if gps and gps.frameAlways ~= nil then gps.frameAlways = nil end -- replaced by windowFrame
   if gps and gps.roundLogo ~= nil then gps.roundLogo = nil end -- (the round portrait option: removed, 2026-10-01)
+  -- (Share drawn roads and walls, Share faster trips: removed, 2026-10-01; drawn roads are kept anyway,
+  -- faster trips always, and Copy Map Data's checkboxes say what's shared)
+  if gps then gps.shareRoads, gps.shareTrips = nil, nil end
   if gps then gps.layerAvailable, gps.layerLowLevel = nil, nil end -- quests to pick up: removed
   if gps and gps.hz == 30 then gps.hz = nil end -- the old default: now 20 (less CPU)
   if gps and gps.layerNodes ~= nil then -- split into Herbs and Ore
