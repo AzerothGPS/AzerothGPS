@@ -971,11 +971,16 @@ local function Bridges(nodes, adj, short, nearOverlay, skip, zs)
     while joined[a] and joined[a] ~= a do a = joined[a] end
     return a
   end
+  -- (every joining link kept, a short one too: as one of the nearest few per node it was dropped
+  -- where a node had BRIDGE_MAX_PER_NODE shorter ones, a cave mouth's, and the pieces it alone
+  -- joined were cut off: the Wetlands from Dun Algaz once a road drawn there was shipped, 2026-10-01)
+  local kept = {}
   local function join(p)
     local a, b = jfind(p[4]), jfind(p[5])
     if a ~= b then
       joined[a] = b
-      if p[1] > short then links[#links + 1] = { p[1], p[2], p[3], keep = true } end
+      links[#links + 1] = { p[1], p[2], p[3], keep = true }
+      kept[math.min(p[2], p[3]) * 1048576 + math.max(p[2], p[3])] = true
     end
   end
   for _, p in ipairs(pairsByDist) do join(p) end
@@ -1046,7 +1051,8 @@ local function Bridges(nodes, adj, short, nearOverlay, skip, zs)
   local out, count = {}, {}
   for _, l in ipairs(links) do
     local d, a, b = l[1], l[2], l[3]
-    if l.keep or ((count[a] or 0) < R.BRIDGE_MAX_PER_NODE and (count[b] or 0) < R.BRIDGE_MAX_PER_NODE) then
+    if l.keep or (not kept[math.min(a, b) * 1048576 + math.max(a, b)] -- (that pair's kept copy instead)
+        and (count[a] or 0) < R.BRIDGE_MAX_PER_NODE and (count[b] or 0) < R.BRIDGE_MAX_PER_NODE) then
       count[a], count[b] = (count[a] or 0) + 1, (count[b] or 0) + 1
       out[a] = out[a] or {}
       out[b] = out[b] or {}
@@ -1085,6 +1091,106 @@ local function Unpacked(e, n, base)
     c[#c + 1], c[#c + 2] = x, y
   end
   return c
+end
+
+-- Roads drawn in game and shipped (source 2, Data/Roads.lua): a loose end (no other road there) joins the
+-- nearest road within TRACK_SNAP, split there, as it did in game before it was in the data (WithTracks);
+-- a cave's roads only at a mouth (`mouth[n]`, its "short" nodes: not the cave's roads under the hill),
+-- never a drop or a lift. The data's build joins drawn roads to the land's roads only, not to the caves'
+-- and capitals' merged in here (Dun Algaz's, drawn between two cave mouths' roads, was a piece of its
+-- own, 2026-10-01). `nodes`, `edges` are changed in place; `caveOf`, `dropOf` by edge. Returns the joins.
+function R.JoinDrawnEnds(nodes, edges, caveOf, dropOf, mouth)
+  local deg, own = {}, {}
+  for _, e in ipairs(edges) do
+    deg[e[1]] = (deg[e[1]] or 0) + 1
+    deg[e[2]] = (deg[e[2]] or 0) + 1
+  end
+  local B, snap = 64, R.TRACK_SNAP
+  local want, ends = {}, {}
+  for _, e in ipairs(edges) do
+    if e[4] == 2 then
+      for k = 1, 2 do
+        local j = e[k]
+        if deg[j] == 1 and not own[j] then
+          own[j] = e
+          ends[#ends + 1] = j
+          local key = math.floor(nodes[j * 2 - 1] / B) * 65536 + math.floor(nodes[j * 2] / B)
+          want[key] = want[key] or {}
+          table.insert(want[key], j)
+        end
+      end
+    end
+  end
+  if #ends == 0 then return 0 end
+  local function each(x0, x1, y0, y1, fn)
+    for kx = math.floor((x0 - snap) / B), math.floor((x1 + snap) / B) do
+      for ky = math.floor((y0 - snap) / B), math.floor((y1 + snap) / B) do
+        for _, j in ipairs(want[kx * 65536 + ky] or {}) do fn(j) end
+      end
+    end
+  end
+  local best = {} -- [end] = { d2, node } or { d2, edge }
+  for m, v in pairs(mouth or {}) do
+    if v == "short" then
+      local mx, my = nodes[m * 2 - 1], nodes[m * 2]
+      each(mx, mx, my, my, function(j)
+        local d2 = (nodes[j * 2 - 1] - mx) ^ 2 + (nodes[j * 2] - my) ^ 2
+        if d2 <= snap * snap and (not best[j] or d2 < best[j][1]) then best[j] = { d2, m } end
+      end)
+    end
+  end
+  for ei, ed in ipairs(edges) do
+    Breathe(ei, 400)
+    if not (caveOf and caveOf[ed]) and not (dropOf and dropOf[ed]) and ed[4] ~= 3 and ed[4] ~= 5 then
+      local bb = EdgeBox(ed)
+      each(bb[1], bb[2], bb[3], bb[4], function(j)
+        if own[j] ~= ed and ed[1] ~= j and ed[2] ~= j then
+          local d2 = Closest(ed, nodes[j * 2 - 1], nodes[j * 2])
+          if d2 and d2 <= snap * snap and (not best[j] or d2 < best[j][1]) then best[j] = { d2, ed } end
+        end
+      end)
+    end
+  end
+  -- (one at a time, in node order: a road split for one end may be split again for the next, in its part)
+  local index, parts, done = {}, {}, 0
+  for i, ed in ipairs(edges) do index[ed] = i end
+  table.sort(ends)
+  for _, j in ipairs(ends) do
+    local b = best[j]
+    if b then
+      local jx, jy = nodes[j * 2 - 1], nodes[j * 2]
+      local to = b[2]
+      if type(to) == "table" then
+        local pick, bd, bAlong
+        for _, p in ipairs(parts[to] or { to }) do
+          local d2, along = Closest(p, jx, jy)
+          if d2 and (not bd or d2 < bd) then pick, bd, bAlong = p, d2, along end
+        end
+        if bAlong < 3 then to = pick[1]
+        elseif bAlong > pick[3] - 3 then to = pick[2]
+        else
+          local p1, p2 = SplitPolyline(pick, bAlong)
+          nodes[#nodes + 1], nodes[#nodes + 2] = p1[#p1 - 1], p1[#p1]
+          local q = #nodes / 2
+          local ea, eb = MakeEdge(pick[1], q, p1, pick[4]), MakeEdge(q, pick[2], p2, pick[4])
+          local pi = index[pick]
+          edges[pi], index[ea], index[pick] = ea, pi, nil
+          edges[#edges + 1] = eb
+          index[eb] = #edges
+          local list = parts[to] or { to }
+          for k, p in ipairs(list) do
+            if p == pick then table.remove(list, k) break end
+          end
+          list[#list + 1], list[#list + 2] = ea, eb
+          parts[to] = list
+          to = q
+        end
+      end
+      edges[#edges + 1] = MakeEdge(j, to, { jx, jy, nodes[to * 2 - 1], nodes[to * 2] }, 2)
+      done = done + 1
+    end
+  end
+  return done
 end
 
 local BuildGraph
@@ -1194,7 +1300,14 @@ function BuildGraph(cont)
     if extra.joins then R.JoinOnto(n2, e2, roadsEnd, base, extra.joins) end
     nodes, edges = n2, e2
   end
-  local keep = { roads = roads, overlays = overlays, nOverlays = overlays and #overlays or 0,
+  if nodes == roads.n then -- (no overlays: copies, as the data's own lists aren't changed)
+    local n2, e2 = {}, {}
+    for i = 1, #nodes do n2[i] = nodes[i] end
+    for i = 1, #edges do e2[i] = edges[i] end
+    nodes, edges = n2, e2
+  end
+  if not roads.z then R.JoinDrawnEnds(nodes, edges, caveOf, dropOf, noBridge) end -- (not a level with heights: by floor there)
+  local keep ={ roads = roads, overlays = overlays, nOverlays = overlays and #overlays or 0,
     nodes = {}, edges = {}, dropOf = {}, caveOf = {}, noBridge = noBridge, nodeZ = nodeZ }
   for i = 1, #nodes do keep.nodes[i] = nodes[i] end
   for i = 1, #edges do keep.edges[i] = edges[i] end
@@ -3031,6 +3144,11 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   if not gscore[GOAL] then -- not connected
     local res = Straight(g, sx, sy, tx, ty)
     res.pending, res.unconnected = pending, true -- (no way there on foot found: a line across)
+    -- (and that line through a wall or over ground the terrain blocks: no way at all, `noWay`, which
+    -- Nav doesn't draw; asked 2026-10-01, a broken road network drew one over the mountains from
+    -- Ironforge. Over open ground or water, a swim to an island, it's still the way. Not while a
+    -- search is running: provisional)
+    if not pending and Pass and not (direct or Pass.SegmentCost(cont, sx, sy, tx, ty)) then res.noWay = true end
     return res
   end
 

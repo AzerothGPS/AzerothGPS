@@ -143,6 +143,9 @@ The addon is going public, so every change must keep it policy-safe:
     addon then drops (`Record.Prune`). Drawn roads draw like any road, before and after
     they're in the data. The offline rules match the addon's
     (`graph.DRAWN`, `DRAWN_CITY`); keep them in step.
+    Shipped, a drawn road's loose end (source 2, no other road there) joins the nearest road within
+    `TRACK_SNAP` in game, a capital's or a cave's mouth's too (`Router.JoinDrawnEnds`: the data's build joins
+    them to the land's roads only; Dun Algaz's, drawn between two cave mouths' roads, was left a piece of its own).
     **Floors over floors** (Undercity's level with heights; on a continent, a cave's or a capital's
     floor under walkable ground, their grids' 3): the game gives no player height, so the floor edited
     is picked (`G.editFloor`, Shift + mouse wheel with the tools on: `G.StepEditFloor` over
@@ -504,6 +507,11 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
     Lua 5.1 with a stand-in for the game's UI (`app/azerothgps/gameharness.py` + `wowmock.lua`: add what a new game call needs there). In the game a redraw
     failing is caught and nothing after the failing line is drawn (no route, no panel).
   - `test_lua_lint.py`'s `truncated_and_or`: `x, y = a and f()` (only f's first value).
+  - Gap links: every link joining two pieces of road is kept (`Bridges`' `keep`), a short one too: as one of a
+    node's nearest few it was pushed out by a cave mouth's shorter ones and the Wetlands were cut off
+    (`test_ironforge_to_the_wetlands_by_the_roads`). No way on foot and the line straight there blocked (a wall,
+    the terrain): the Router's `noWay`, which Nav shows as "No way there found", never as a line over the
+    mountains (`test_no_straight_line_through_a_wall_when_the_roads_dont_join`).
   - Gap links between far-apart road pieces are picked from samples by place (`Bridges`,
     `BRIDGE_SAMPLE_YD`), not node number: roads edited in one city once changed a route across
     the continent (`test_offroad_joins_the_road_partway_along`).

@@ -5575,3 +5575,52 @@ def test_working_out_the_route_now_and_then_in_murloc(nav_env):
     finally:
         N.FUN = False
         N.Random = lua.eval("math.random")
+
+
+def test_no_straight_line_through_a_wall_when_the_roads_dont_join(router):
+    # (asked, 2026-10-01: a broken road network drew a straight line over the mountains from Ironforge)
+    # no way by the roads (a wall cuts the L's second leg, and gap links don't cross walls), and the line
+    # straight there through the wall: `noWay`, which Nav doesn't draw
+    lua, ns = router
+    load(lua, ns, "Passability.lua")
+    P, R = ns.Passability, ns.Router
+    R.OFFROAD_WALK_AROUND = 0  # (no terrain grid here to walk round on: it would walk through)
+    try:
+        # (a short wall: no way by the roads either, but the line straight there is open: that's the way)
+        for wall, no_way in (("{ 500,-3000, 500,3000 }", True), ("{ 500,-1100, 500,-900 }", False)):
+            ns.db = lua.eval("{ tracks = { { op = 'wall', drawn = true, continent = 1, time = 1, pts = %s } } }" % wall)
+            P.RefreshWalls()
+            R.Reset()
+            r = R.Route(1, 0.0, 30.0, 1030.0, -1000.0, lua.table(offroad=False))
+            assert r.unconnected and bool(r.noWay) == no_way, wall
+    finally:
+        R.OFFROAD_WALK_AROUND = 3000
+        ns.db = lua.eval("{}")
+        P.RefreshWalls()
+        R.Reset()
+
+
+def test_nav_draws_no_line_when_there_is_no_way(nav_env):
+    # (asked, 2026-10-01) the Router's `noWay` walk (no roads, the line straight there blocked): no route
+    # drawn, "No way there found"; an unconnected walk over open ground (a swim to an island) still is one
+    lua, ns = nav_env
+    R, N = ns.Router, ns.Nav
+    real = R.Route
+    try:
+        for no_way in (True, False):
+            R.Route = lua.eval("""function(real, noWay) return function(...)
+                local r = real(...)
+                r.unconnected, r.noWay = true, noWay
+                return r
+              end end""")(real, no_way)
+            N.SetDestination(-600.0, -4180.0, 1, "Valley of Trials")
+            r = N.Route(-450.0, -4700.0, 1)
+            status = N.Status(-450.0, -4700.0, 1)
+            if no_way:
+                assert r is None and status == "No way there found"
+            else:
+                assert r is not None and status != "No way there found"
+            N.Clear()
+    finally:
+        R.Route = real
+        N.Clear()

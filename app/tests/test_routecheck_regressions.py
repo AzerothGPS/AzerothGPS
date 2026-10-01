@@ -121,3 +121,48 @@ def test_blocked_legs_to_the_roads_are_walked_around(world, cont, start, stop):
         assert blocked_run(ns, cont, pts, kinds, start, stop) < BLOCKED_RUN_YD
     finally:
         ns.Router.ROAD_DIRECT_PENALTY = 2
+
+
+@pytest.fixture(scope="module")
+def caves_world():
+    # (route-check's: the caves', capitals' and buildings' grids and roads too)
+    from azerothgps.routecheck import _runtime
+
+    return _runtime()
+
+
+def test_dun_algaz_goes_round_by_the_road_not_through_the_mountain(caves_world):
+    # (reported, a screenshot) from the Dun Algaz road north: a 276 yd straight link through the mountain
+    # from one cave mouth's road to another's (a gap link joining road pieces nothing else joined); the road
+    # round, drawn in game, joins them now, and the route takes it
+    lua, ns = caves_world
+    ns.Router.Reset()
+    r = ns.Router.Route(0, -4325.0, -2395.0, -4055.0, -2449.0, lua.table(offroad=False))
+    pts, kinds = route_pts(r)
+    assert r.length < 450
+    assert max(math.dist(pts[i], pts[i + 1]) for i, k in enumerate(kinds) if k == 1) < 60
+
+
+def test_ironforge_to_the_wetlands_by_the_roads(caves_world):
+    # (reported, a screenshot: a straight line over the mountains, "Walk 2.2k yd") a road drawn by Dun
+    # Algaz's cave mouths, once shipped, was a piece of its own nearer the Wetlands' roads than Dun Algaz's;
+    # the gap link joining them, under BRIDGE_SHORT, was one of the nearest few per node, and the cave
+    # mouth's shorter ones pushed it out: the Wetlands cut off from the south (every joining link kept now)
+    lua, ns = caves_world
+    for start in ((-5010.0, -800.0), (-8900.0, 600.0)):  # Ironforge's gate, Stormwind
+        ns.Router.Reset()
+        r = ns.Router.Route(0, *start, -3900.0, -2700.0, lua.table(offroad=False))
+        assert not r.unconnected and r.road > 0.8 * r.length, start
+
+
+def test_a_shipped_drawn_road_joins_the_cave_mouths_roads(caves_world):
+    # (the same road: drawn in game from one cave mouth's road to another's, its ends joined them there;
+    # shipped, the data's build joins drawn roads to the land's roads only) a loose end within TRACK_SNAP
+    # of a cave's mouth joins it (Router.JoinDrawnEnds)
+    lua, ns = caves_world
+    ns.Router.Reset()
+    ns.Router.Route(0, -4325.0, -2395.0, -4055.0, -2449.0, lua.table(offroad=False))
+    g = ns.Router.DebugGraph(0)
+    for end in ((-4097.1, -2465.9), (-4092.7, -2435.7)):
+        n = min(range(1, int(g.count) + 1), key=lambda i: math.dist((g.n[2 * i - 1], g.n[2 * i]), end))
+        assert math.dist((g.n[2 * n - 1], g.n[2 * n]), end) < 1 and len(g.adj[n]) >= 2, end

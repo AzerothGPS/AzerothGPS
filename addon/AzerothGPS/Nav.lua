@@ -1007,6 +1007,12 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
     end
   end
   routes = routes or WalkRoutes(legs, sx, sy, d, opts, sz)
+  -- (a walk with no way there, the Router's `noWay`: a line through a wall or over blocked ground with
+  -- no roads or walk round: none, "No way there found", rather than that line drawn; a broken road
+  -- network drew one over the mountains from Ironforge, 2026-10-01)
+  for li, leg in ipairs(legs) do
+    if not leg.ride and routes[li] and routes[li].noWay then return nil end
+  end
   local st = { parts = {}, legs = legs, first = 0, walk = 0, ride = 0, road = 0 }
   local rode = false
   for li, leg in ipairs(legs) do
