@@ -4,95 +4,107 @@ Each version's section is its release notes (GitHub and CurseForge).
 
 ## 1.1.0
 
-For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so fully restart the game after updating, rather than just /reload.
+For WoW Forever client 1.60.1 (interface 16001). This one brings new data files, so restart the game fully after updating instead of just doing a /reload.
 
 ### New
 
-- **Joining the roads where they're heading:** off the road, a route now joins it where it's going (across open ground, around fences and buildings), not back at its nearest point and round. Walk off the way drawn to the road and it's worked out again from where you are, so the join point moves with you. A short walk over open ground goes straight. This replaces the experimental off-road shortcuts, and their option is gone.
-- **Buildings are in the way:** routes go around buildings (Goldshire's inn, farmhouses, towers), not through them. A stop inside one, like an innkeeper, is still reached.
-- **Flight paths to learn on the way:** when your walk passes a flight master of your faction you haven't learned, a brown line shows the detour to it and the steps list it where the walk passes ("Detour 388 yd to learn the flight path at Tarren Mill", or "Learn the flight path at … (on the way)"). Right-click the flight master's icon, **Remove?**, to skip it for this route.
-- **Pins:** Shift + left-click on the map, **Create Pin**, then name it and pick any icon the game has (the same list a macro uses). Where floors lie over each other (a dungeon, Undercity, a cave), pick its floor too; one on another floor than the map shows is drawn faint. Double-click a pin for a stop there, like a city location; right-click it to remove it. Kept for all your characters, and shared with your map data (**Copy Map Data...**) like roads and walls. Options → Tools: **Pinning** (on by default); Options → Map: **Pins**.
-- **Pick what Copy Map Data... includes:** Roads, Walls, Routes and Pins, each with how many you have, all ticked unless you untick one (in the copy window, or on the Help improve page). **Routes** are the ways you went when you beat the estimate, kept as you play (on your PC). Dungeon entrances you found always go along. The **Share drawn roads and walls** and **Share faster trips** options are gone: these checkboxes decide what's shared.
-- While the route is being worked out, now and then it's said in Murloc (one time in twenty: Mrglglglgl), one time in five the gnome engineers are at it ("Spinning up the Route-o-Tron 3000..."), and another one in five the goblins ("Time is money, friend! Routing...").
-- **New defaults:** the map is 450 wide, Quest Route and Use Hearthstone are in the map button's menu, and in combat the map stays shown, fully opaque, and clickable (Options → Opacity; your own settings stay as they are, Reset to defaults takes these).
-- **Stairs in the directions:** in the capitals, Undercity and dungeons, the directions say the stairs and ramps between levels, with the turn after them: "Stairs up in 10 yd, then turn left". The bends of a spiral stair aren't called out as turns.
-- **Leave a ride out of a route:** every flight, boat, zeppelin, tram and teleport a route takes has its icon where you board it. Right-click it, **Remove?**, and the route is worked out again without it, and it stays out while you follow this route (rerouting and /reload too) until you set a new one. For a flight, each flight master it flies over has its own icon, and removing one leaves out just that connection; any other flight over it can't be taken on this route either.
-- **Use your hearthstone or a teleport from the directions:** when a route starts with one, a button with its icon sits in the directions panel's corner; your click uses it (nothing is ever used without it, and it hides in combat). New teleports: the engineers' **Dimensional Ripper - Everlook** and **Ultrasafe Transporter: Gadgetzan**. A hearthstone or teleport is only suggested when it saves more than 800 yd.
-- **Performance options** (Options → Performance) for slower PCs, with how much of the time AzerothGPS is using shown live:
-  - **Map redraws per second** (5 to 30, default 20): the biggest saving; at 10 the map needs about half the work.
-  - **Work out a route you've left at most every** 2 to 10 seconds.
-  - **Stops routed and drawn ahead** (1 to 8, default 3): how many stops are worked out and drawn at a time. Every stop keeps its marker and its place in the fastest order; the ones further on are listed with an estimated distance until they're routed.
-  - **Gentle background work:** fewer stutters, while routes take a moment longer to appear.
-  - **Turn the arrow every frame,** or 20 times a second.
-  - **Use Low-End Settings** sets them all lighter at once; **Restore Defaults** puts them back.
-- **Party and raid members on the map,** as round class icons in their class's color (Options → Map, Party members). They don't need AzerothGPS themselves.
-- **Movement abilities in travel times:** Ghost Wolf, Travel Form, Cat Form with Feline Swiftness, and Aspect of the Cheetah or the Pack show their time beside walking, and become the walking time while on.
+**Getting there**
+
+- **Joining the road where it's heading.** Off the road, a route now joins it where you're going (across open ground, around fences and buildings), not back at the closest bit and round. Wander off the line and it's worked out again from where you are, so the join point moves with you. A short hop over open ground just goes straight. This replaces the old experimental off-road shortcuts, and their option is gone.
+- **Buildings are in the way now.** Routes go around buildings (Goldshire's inn, farmhouses, towers) instead of through them. A stop inside one, like an innkeeper, is still reached.
+- **Lifts.** Routes ride the Great Lift between the Barrens and Thousand Needles, Freewind Post's lift and Gnomeregan's, and the directions say "Take the lift down" (or up), like Thunder Bluff's and Undercity's.
+- **Stairs in the directions.** In the capitals, Undercity and dungeons, the directions call out the stairs and ramps between levels, with the turn after them: "Stairs up in 10 yd, then turn left". The bends of a spiral stair don't count as turns.
+- **Flight paths to pick up on the way.** When your walk passes a flight master of your faction you haven't learned, a brown line shows the little detour and the steps mention it ("Detour 388 yd to learn the flight path at Tarren Mill"). Right-click the flight master's icon, **Remove?**, to skip it.
+- **Leave a ride out.** Every flight, boat, zeppelin, tram and teleport a route takes has its icon where you board it. Right-click it, **Remove?**, and the route is worked out without it, and stays that way for this route (rerouting and /reload too). For a flight, each flight master it passes over has its own icon, so you can drop just one hop. If leaving rides out means there's no way there at all, you'll see **Route not possible without** that ride, with the option to put it back.
+- **Hearth or teleport from the directions.** When a route starts with your hearthstone or a teleport, a button with its icon sits in the directions panel and glows in the arrow window, right where the arrow usually is. Your click uses it; nothing ever gets used without one, and it hides in combat. New teleports: the engineers' **Dimensional Ripper - Everlook** and **Ultrasafe Transporter: Gadgetzan**. One is only suggested when it saves more than 800 yd.
 - **The Deeprun Tram** between Stormwind and Ironforge, for Alliance characters.
-- **Undercity, floor by floor:** routes follow every floor (walkways over the bank's level, the canal walks under the bridges, the Magic Quarter's rooms), picked by your height and the stop's. Trips across the city are shorter, and no longer go through floors, over the canals' rims, or out over the Ruins' walls.
-- **Cave and mine entrances on the map** (double-click one for a stop), in the map menu's new **Caves/Dungeons/Raids** group.
-- **Blackwing Lair** (through Upper Blackrock Spire) and **WoW Forever's own dungeons and raids:** their maps, bosses and entrances. Entrances not known yet are learned when you go in; share them with **Copy Map Data...**.
-- **Zephras Isle on the world map:** a framed picture at the top; click it to open the island. On a continent's map, the zone under the pointer lights up.
+- **Movement abilities in travel times.** Ghost Wolf, Travel Form, Cat Form with Feline Swiftness, and Aspect of the Cheetah or the Pack show their time next to walking, and become the walking time while they're on.
+- **Undercity, floor by floor.** Routes follow every floor (walkways over the bank's level, the canal walks under the bridges, the Magic Quarter's rooms), picked by your height and the stop's. Trips across town are shorter and no longer cut through floors, over the canals' rims or out over the Ruins' walls.
 - **A route to another continent** is shown on the world map first, then the map follows you again.
-- **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the way ahead shows.
-- **Right-click inside a building** shows the outside view first; the next right-click, the continent's map.
-- **Capitals' districts named on the map** when zoomed in, as Undercity's are: Stormwind's Trade District and Old Town, Orgrimmar's Valleys and The Drag, Ironforge's Wards, Thunder Bluff's Rises, Darnassus's Terraces.
 - **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
 - **More roads** on Eastern Kingdoms, drawn in game.
-- **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
-- **Editing floors over floors** (Undercity, the floors under Orgrimmar's Drag and Stormwind's bridges, caves and mines): with the road or wall tools on, **Shift + mouse wheel** picks the floor you edit, from the floors where the map is centered (the game doesn't tell addons your height). The hint under the map says which ("Editing: floor 2 of 3 here", or all floors), its roads and walls draw bright and the others faint, and what you draw or erase changes that floor only. Turning the tools off goes back to all floors.
-- **For other addons:** API versions 3 to 11 (HoldMap, with a map style held while it's on; icons in overlays; popup windows in AzerothGPS's style; LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
+- While a route is being worked out, now and then a Murloc does the thinking (Mrglglglgl), or the gnome engineers ("Spinning up the Route-o-Tron 3000...") or a goblin ("Time is money, friend! Routing...").
+
+**Dungeons and raids**
+
+- **Wings get their own icons.** Scarlet Monastery's Graveyard, Library, Armory and Cathedral, Dire Maul's East, West and North, Stratholme's Main Gate and Service Entrance, and Maraudon's Orange and Purple each have an icon, named so you know which door is which. A wing's map shows just its bosses, its usual way through from its own door, and its own boss route; inside, the map goes with the wing you walked in through. Maraudon's inner bosses belong to both sides. Uldaman's back way in and Gnomeregan's Train Depot get named icons too, and show the whole dungeon.
+- **A stop picked in a dungeon's map** (a spot, a boss or a pin) goes on the dungeon's entrance out in the world, since that's where you're actually heading.
+- **Blackwing Lair** (through Upper Blackrock Spire) and **WoW Forever's own dungeons and raids**: their maps, bosses and entrances. Entrances we don't know yet are learned when you go in; share them with **Copy Map Data...**.
+- **Cave and mine entrances on the map** (double-click one for a stop), in the map menu's new **Caves/Dungeons/Raids** group.
+
+**The map**
+
+- **Pins.** Shift + left-click the map, **Create Pin**, give it a name and any icon in the game (the same list a macro uses). Where floors stack up (a dungeon, Undercity, a cave), pick its floor too. Double-click a pin for a stop, right-click to remove it. Pins are kept for all your characters and can go out with your map data. Options → Tools: **Pinning**; Options → Map: **Pins**.
+- **A bigger map shows more.** Resizing the window keeps the scale, so you see more of the world instead of the same bit bigger, and past 450 wide you can zoom out further too.
+- **Your group on the map,** as round class icons in their class color (Options → Map, Party members). They don't need AzerothGPS themselves.
+- **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the road ahead shows.
+- **Right-click inside a building** shows the outside first; the next right-click, the continent's map.
+- **The capitals' districts** are named on the map when zoomed in, like Undercity's: Stormwind's Trade District and Old Town, Orgrimmar's Valleys and The Drag, Ironforge's Wards, Thunder Bluff's Rises, Darnassus's Terraces.
+- **Zephras Isle on the world map,** as a framed picture at the top; click it to open the island. On a continent's map, the zone under your pointer lights up.
+
+**Settings and sharing**
+
+- **Performance options** (Options → Performance) for older PCs, with a live readout of how much time AzerothGPS is taking:
+  - **Map redraws per second** (5 to 30, default 20), the biggest saving: at 10 the map needs about half the work.
+  - **Work out a route you've left at most every** 2 to 10 seconds.
+  - **Stops routed and drawn ahead** (1 to 8, default 3). Every stop keeps its marker and its place in the fastest order; the ones further on show an estimated distance until they're routed.
+  - **Gentle background work:** fewer stutters, routes take a moment longer to appear.
+  - **Turn the arrow every frame,** or 20 times a second.
+  - **Use Low-End Settings** turns them all down at once; **Restore Defaults** puts them back.
+- **Pick what Copy Map Data... includes:** Roads, Walls, Routes and Pins, each with how many you've got, all ticked unless you untick one. **Routes** are the ways you went when you beat the estimate, kept as you play (on your PC). Dungeon entrances you found always go along. The old **Share drawn roads and walls** and **Share faster trips** options are gone; these checkboxes decide now.
+- **New defaults:** the map is 450 wide, Quest Route and Use Hearthstone live in the map button's menu, and in combat the map stays shown, fully opaque and clickable (Options → Opacity). Your own settings stay as they are; Reset to defaults takes these.
+- **Road and wall tools:** the road tools show the road network while they're on, "Show extracted roads" and "Show extracted walls" are one button now (**Show Roads and Walls**, under Undo), and Undo takes back your last road or wall change, whichever came last.
+- **Fixing floors over floors** (Undercity, under Orgrimmar's Drag and Stormwind's bridges, caves and mines): with the road or wall tools on, **Shift + mouse wheel** picks the floor you're editing. The hint under the map says which one ("Editing: floor 2 of 3 here"), and what you draw or erase changes only that floor.
+- **For other addons:** API versions 3 to 11 (HoldMap with a map style held while it's on, icons in overlays, popup windows in AzerothGPS's style, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
 
-- **Flights at a low level:** a flight is weighed against the walk as it's actually routed, not a straight line, so a route flies when walking would go the long way round zones too high for you (e.g. from Brill into Arathi Highlands at level 14).
-- With the window frame on, the place's name ("Undercity") is in its title bar, in place of "AzerothGPS"; the coordinates stay at the bottom of the map. Without the frame, both are at the bottom as before.
-- The directions say what to do now, then the next turn: "Continue straight, then slight right in 13 yd" ("Slight right now" at the turn).
-- Changing a route option (flight paths, the hearthstone, teleports, the zones or towns avoided) works the trip out again at once.
-- "Route there anyway?" is remembered for the route, also after a /reload.
+- **Zones way above your level:** "Keep this route?" now comes before the route is drawn or followed, and it's asked again if you leave a ride out and the new way runs through one. A quicker safe way, like the tram, always comes first.
+- **No more straight lines over mountains.** When there's genuinely no way to walk somewhere (no roads join up and a wall or a mountain's in the way), you get "No way there found" instead of a line over the top. Across open ground or water, a straight line still counts.
+- **Flights at a low level** are weighed against the walk as it's really routed, so you'll fly when walking would go the long way round zones too high for you (like Brill into Arathi Highlands at level 14).
+- **The directions** say what to do now and then the next turn: "Continue straight, then slight right in 13 yd" ("Slight right now" at the turn).
+- **In Ironforge and Undercity** the city's own map stays up while you're in town, wherever you pan or drag, and zooming out stops at the city. Right-click for the outside. Coming into town zoomed way out, the map zooms in to it.
+- With the window frame on, the place you're in ("Undercity") is in the title bar instead of "AzerothGPS"; the coordinates stay at the bottom.
+- Every popup (Create Pin, Your Map Data, the waypoint windows) has the map window's frame now, and the yes/no questions have it without a title bar.
+- Changing a route option (flight paths, the hearthstone, teleports, the zones or towns avoided) works the trip out again right away.
+- A shaman with Astral Recall ready gets that instead of the hearthstone (same trip home), so the hearthstone stays ready for later.
+- "Route there anyway?" is remembered for the route, even after a /reload.
 - The last stop clears as soon as you reach it.
-- With a stop down in Undercity, only the city's stops keep the order you placed them; the others go in the fastest order.
+- With a stop down in Undercity, only the city's stops keep the order you placed them; the rest go in the fastest order.
 - The map window sits under other windows.
 
 ### Fixed
 
-- **Lag:**
-  - the first route after a /reload, and very long walks, are worked out in the background (no freeze);
-  - recalculating a route with a flight in it (up to 200 ms in game);
-  - riding a zeppelin or a boat no longer works the route out again all the way;
-  - the first road display after a /reload, and each road or wall edit.
-- Talking to a guard in Stormwind, Ironforge or Darnassus showed only the place you asked for: now all of that city's places show (trainers, the bank, the inn, the flight master and more), as in the Horde capitals.
-- **The capitals' roads are their streets:** Stormwind's (and Ironforge's, Orgrimmar's, Thunder Bluff's and Darnassus's) roads were a jumble over every floor, some running out over the water; they now follow the streets the city guards walk, with ways to every trainer, bank, inn and flight master. Undercity's are as they were.
-- Stormwind's map switched between the city's own map and the terrain as you zoomed: Stormwind now keeps the terrain map. Elsewhere, a building's inside map shows only indoors (at any zoom).
-- The map window's title is centered (it sat a little right of the middle).
-- The logo at the top left of the map and options windows stands on its own, without the circle, and is sharp: drawn at the size your screen shows it, not shrunk by the graphics card.
-- Routes out of Stormwind went straight out through the city's wall (and after a moment by the Deeprun Tram and a long walk): a road drawn in through its gate was dropped once it was in the data. Drawn roads are always kept now.
-- In Ironforge, routes cut straight across the Great Forge and the Forlorn Cavern's pool instead of along its halls: the game can report its halls as outdoors, and that took you to be up on the mountain over the city. Your height tells now.
-- In a city with its own inside map (Ironforge, Undercity), zooming out stops at the city's map instead of turning to the land around it; right-click for the outside. Coming into the city zoomed far out, the map zooms in to it.
-- The map's title says the city you're in (Ironforge, not Dun Morogh).
-- The Deeprun Tram has its map (it was blank), with its name in the title.
-- A zeppelin to Zephras Isle had no line on the map (on a trip hopping two zeppelins by the isle, only one ride showed).
-- **On a road, routes keep to it** unless a way across country onto another road saves a fair bit (riding Mulgore's road, the route kept swapping between the road and a shortcut over the fields).
-- In the capitals, routes no longer climb onto a ledge or balcony and jump back down to a trainer under it (Ironforge's Mystic Ward and Hall of Mysteries: its Mage and Priest trainers): a city place is reached by the roads on its own floor.
-- When a route starts with your hearthstone (or a teleport), the direction arrow gave the turns of the walk after it instead. It now says "Use your Hearthstone (to …)" like the route's first step, with the item's button where the arrow is: click it there too. With the map's steps collapsed, the map's button hides.
-- Every popup (Create Pin, Your Map Data, the waypoint import and sharing windows) has the map window's frame, without its logo; the questions ("Route there anyway?", a route someone shares) have it without a title bar too.
-- A shaman with Astral Recall ready gets it in the route rather than the hearthstone (the same trip home), so the hearthstone stays ready for later.
-- Panning the map in Ironforge flipped between the city's map and the snow outside: its map stays while you look over the city.
-- A route out of Ironforge: its overview zoomed out over the city's map into the black; it shows the land around now, and the city's map again when it comes back to you.
-- In Ironforge (or any building whose outside you right-clicked to), the map stayed on the outside after making a route out of the city, or cancelling one: it's back on the city's inside map once the map follows you again.
-- **Thunder Bluff's lifts:** routes into and out of the city take them (they weren't joined to Mulgore's road), and the directions say "Take the lift up" (or down), as in Undercity. By the east lifts, two of the city's ways out ran straight up and down the mesa's cliff: they're gone, so the lifts are the way.
-- While riding (or walking) past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...": it stays shown now while it's worked out again.
-- A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
+- **Lag:** the first route after a /reload and very long walks are worked out in the background (no more freeze); recalculating a route with a flight in it; riding a zeppelin or boat no longer reworks the whole route; the first road display after a /reload, and each road or wall edit.
+- **The capitals' roads are their streets now.** Stormwind's (and Ironforge's, Orgrimmar's, Thunder Bluff's and Darnassus's) roads were a jumble over every floor, some running out over the water. They now follow the streets the guards walk, with ways to every trainer, bank, inn and flight master.
+- In the capitals, routes no longer climb onto a ledge or balcony and jump back down to a trainer underneath (Ironforge's Mystic Ward and Hall of Mysteries).
+- Talking to a guard in Stormwind, Ironforge or Darnassus only showed the place you asked for; now all of that city's places show, like in the Horde capitals.
+- In Ironforge, routes cut straight across the Great Forge and the Forlorn Cavern's pool instead of following the halls.
+- **Thunder Bluff's lifts:** routes into and out of the city take them now, and two ways out that ran straight down the mesa's cliff are gone.
+- Routes out of Stormwind went straight through the city wall: a road drawn in through its gate went missing once it was in the data. Drawn roads always stay now.
+- **Dungeon routes** jump between floors much less: 16 of the boss routes that used to are fixed.
+- **On a road, routes keep to it** unless a cross-country way onto another road saves a fair bit (on Mulgore's road the route kept flipping between the road and a shortcut).
+- While riding or walking past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...". It stays up now while it's reworked.
+- When a route started with your hearthstone, the direction arrow gave the turns of the walk after it. It now says "Use your Hearthstone" like the route's first step, with the button.
+- Stormwind's map flipped between the city's own map and the terrain as you zoomed; Stormwind keeps the terrain map now.
+- A route out of Ironforge zoomed its overview out over the city's map into the black; it shows the land around now.
+- The map stayed on Ironforge's outside after making or cancelling a route out of the city.
+- The map's title says the city you're in (Ironforge, not Dun Morogh), and it's centered.
+- The corner logo stands on its own without the circle, and it's sharp.
+- The Deeprun Tram's map was blank.
+- A zeppelin to Zephras Isle had no line on the map.
+- A dock that was a stop lost its countdown.
 - A straight line over the hills could replace the roads after standing still for a while.
-- A flight could stop being suggested after a stop was added elsewhere and taken back.
+- A flight could stop being suggested after adding a stop elsewhere and taking it back.
 - Roads vanished from the map when zoomed out (road and wall tools).
-- Ironforge's roads, and road tool edits there, didn't show on the city's inside map (only on the mountain above it).
+- Ironforge's roads, and road tool edits there, didn't show on the city's map.
 - Clicking the open sea on a continent's map opened a black terrain view.
 
 ### Known limits
 
-- Party members show where the game gives their position: not inside dungeons.
-- In some dungeons with floors over floors (Blackrock Spire and Depths, Temple of Ahn'Qiraj) the gold line can still jump between floors in places.
-- Zeppelin and boat countdowns start once you've ridden that one (the game doesn't tell addons where they are).
+- Party members show only where the game gives their position, so not inside dungeons.
+- In some dungeons with floors stacked on floors (Blackrock Spire and Depths, Temple of Ahn'Qiraj, Scholomance) the gold line can still jump between floors in places.
+- Zeppelin and boat countdowns start once you've ridden that one, since the game doesn't tell addons where they are.
 
 ## 1.0.7
 

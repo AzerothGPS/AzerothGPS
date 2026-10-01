@@ -22,7 +22,7 @@ Quest areas show up on the map just like on your minimap. One click and it route
 
 ## Stays out of your way
 
-- **Size and opacity:** make it as big or as see-through as you want.
+- **Size and opacity:** make it as big or as see-through as you want. A bigger map shows more of the world, not just the same bit blown up.
 - **Moving and fighting:** it can fade while you run, go click-through, or dim or hide in combat.
 - **Show/hide key:** bind whatever key you like.
 - **Older PC?** Options → Performance lets you turn down how often the map redraws and the route gets recalculated. There's a one-click low-end preset, and it shows you live how much time AzerothGPS is actually taking.
@@ -41,10 +41,10 @@ If a route misses a trail or walks you into a wall, draw the fix right on the ma
 
 ## Also in there
 
-- **Every way to get around:** flight paths (plus a detour to pick up ones you pass but haven't learned), boats and zeppelins with countdowns to their next arrival, the Deeprun Tram, your hearthstone, class teleports and engineer teleporters. You can hearth or teleport with one click right from the directions. Don't fancy a certain flight or boat? Right-click it and the route skips it.
-- **Cities and caves:** every capital's streets, Undercity's floors and lifts, and 351 caves and mines.
-- **Dungeons and raids:** floor-by-floor maps, bosses in order, and a boss route.
-- **Keeping you alive:** routes steer around the other faction's towns and zones way above your level.
+- **Every way to get around:** flight paths (plus a detour to pick up ones you pass but haven't learned), boats and zeppelins with countdowns to their next arrival, the Deeprun Tram, your hearthstone, class teleports and engineer teleporters. You can hearth or teleport with one click right from the directions. Don't fancy a certain flight or boat? Right-click it and the route skips it. If that leaves no way there, it tells you and offers to put it back.
+- **Cities and caves:** every capital's streets (stairs called out), Undercity's floors, 351 caves and mines, and the lifts: Thunder Bluff's, Undercity's, the Great Lift down to Thousand Needles and Freewind Post's.
+- **Dungeons and raids:** floor-by-floor maps, bosses in order, and a boss route. Dungeons with wings get an icon per wing, each with its own bosses and route: Scarlet Monastery's Graveyard, Library, Armory and Cathedral, Dire Maul's East, West and North, Stratholme's two gates, Maraudon's Orange and Purple.
+- **Keeping you alive:** routes steer around the other faction's towns and zones way above your level. If the only way there runs through one, it asks before it shows you that route.
 - **Your own pins:** Shift-click the map to drop a pin with any icon from the game and a name. Double-click it later to route there, even on the right floor of a dungeon.
 - **Your group on the map:** party and raid members show up as round class icons in their class color. They don't need the addon.
 - **Turn-by-turn directions** with ETAs at your actual speed, on foot, mounted or in travel form.
