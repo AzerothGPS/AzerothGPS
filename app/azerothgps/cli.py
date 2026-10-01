@@ -237,7 +237,7 @@ def cmd_media(args) -> int:
     from .paths import REPO
 
     files = make(ADDON_DIR / "Media", REPO / "assets")
-    print(f"wrote {len(files)} portraits in {ADDON_DIR / 'Media'} (new files: a full game restart)")
+    print(f"wrote {len(files)} corner logos in {ADDON_DIR / 'Media'} (new files: a full game restart)")
     return 0
 
 

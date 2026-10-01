@@ -5,7 +5,7 @@ ns.DEFAULTS = {
   gps = {
     -- map window
     shown = true,
-    size = 400, -- frame edge in UI units
+    size = 450, -- frame edge in UI units (asked, 2026-10-01: 450 by default)
     alpha = 1, -- whole-frame opacity
     stepsCollapsed = true, -- the map's top panel: only the whole trip's times (the -/+ button)
     stepsAll = false, -- the map's top panel: all the steps, not just the next few (its + button)
@@ -13,7 +13,6 @@ ns.DEFAULTS = {
     movingAlpha = 1, -- ... to this opacity
     locked = false, -- the map; unlocked: drag the window frame's title bar (or the Move tab) to move it
     windowFrame = true, -- the game-style window frame around the map (title bar, logo, close)
-    roundLogo = false, -- the windows' logo in the round portrait (else on its plate, no circle: ns.ApplyLogoLook)
     arrowLocked = true, -- the direction arrow; unlocked: drag to move, corner to resize
     point = { "BOTTOM", "UIParent", "BOTTOM", 495, 191 },
     hz = 20, -- redraws per second (at most; skipped when nothing changed; Options > Performance)
@@ -64,11 +63,11 @@ ns.DEFAULTS = {
     arrowBg = 0, -- background opacity of the arrow window
     -- click-through: the map and the arrow ignore the mouse (clicks go to the game world)
     clickThroughMoving = false, -- while moving
-    clickThroughCombat = true, -- in combat
+    clickThroughCombat = false, -- in combat (off by default: asked, 2026-10-01)
     -- in combat
-    combatHideMap = true, -- hide the map (nothing to click by mistake)
+    combatHideMap = false, -- hide the map (nothing to click by mistake; off by default, asked 2026-10-01)
     combatHideArrow = false, -- hide the direction arrow
-    combatAlpha = 0.8, -- map opacity in combat (unset: the map's usual opacity)
+    combatAlpha = 1, -- map opacity in combat (unset: the map's usual opacity)
     arrowCombatAlpha = 1, -- arrow opacity in combat
     -- help improve AzerothGPS (opt-in: off unless the player turns them on)
     shareRoads = false, -- keep the roads the player draws or erases for sharing
@@ -218,6 +217,7 @@ local function InitDB()
     if gps.combatAlpha == 1 then gps.combatAlpha = nil end
   end
   if gps and gps.frameAlways ~= nil then gps.frameAlways = nil end -- replaced by windowFrame
+  if gps and gps.roundLogo ~= nil then gps.roundLogo = nil end -- (the round portrait option: removed, 2026-10-01)
   if gps then gps.layerAvailable, gps.layerLowLevel = nil, nil end -- quests to pick up: removed
   if gps and gps.hz == 30 then gps.hz = nil end -- the old default: now 20 (less CPU)
   if gps and gps.layerNodes ~= nil then -- split into Herbs and Ore
@@ -522,17 +522,14 @@ function ns.SpellIcon(id)
   return nil
 end
 
--- The AzerothGPS logo in the round portrait of a frame made from the game's
--- PortraitFrameTemplate (the map, the options window). `file`: another image in Media.
 -- The windows' corner logo (the map's and the options' PortraitFrameTemplate), pre-scaled
 -- (`agps media`, app/azerothgps/media.py): the size nearest the pixels it covers on this screen, shown
 -- 1:1 (one picture shrunk by the graphics card looked soft). Fitted again when the window shows and
--- when the UI's scale or the screen changes. Two looks (option `roundLogo`, ns.ApplyLogoLook):
--- - without the circle (the default): the logo on a plate of the title bar's brown cut to its outline
---   (Media/CornerLogo<px>.tga), the window's border without the portrait's ring
---   ("ButtonFrameTemplateNoPortrait"), in the top-left corner half above the title bar, over every part
---   of the window's frame; dragging it moves the window as the title bar does;
--- - in the round portrait (Media/Portrait<px>.tga), its size and place the template's.
+-- when the UI's scale or the screen changes. Without the circle (the round portrait's option was
+-- removed, 2026-10-01): the logo on a plate of the title bar's brown cut to its outline
+-- (Media/CornerLogo<px>.tga), the window's border without the portrait's ring
+-- ("ButtonFrameTemplateNoPortrait"), in the top-left corner half above the title bar, over every part
+-- of the window's frame; dragging it moves the window as the title bar does.
 ns.PORTRAIT_PX = { 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 256, 288 } -- (media.py's)
 ns.CORNER_LOGO_UNITS = 62 -- (the portrait's size)
 ns.TITLE_MID = 11 -- the title bar's middle, under the window's top (its TitleContainer: 1 down, 20 high)
@@ -558,12 +555,6 @@ local function Show1to1(tex, file, px)
   tex:SetTexCoord(0, px / pot, 0, px / pot)
   if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(true) end
 end
-function ns.FitPortrait(p)
-  local w = p.GetWidth and p:GetWidth() or 0
-  local px = ns.PortraitPx(w and w > 0 and w or ns.CORNER_LOGO_UNITS, p.GetEffectiveScale and p:GetEffectiveScale() or 1)
-  Show1to1(p, "Portrait", px)
-  return px
-end
 -- The plate logo's picture and place on window `w` (its size: exactly the picture's pixels).
 local function FitCorner(w)
   local px, ppu = ns.PortraitPx(ns.CORNER_LOGO_UNITS, w.chrome:GetEffectiveScale())
@@ -583,25 +574,19 @@ local function TopLevel(f, skip, best)
   end
   return best
 end
-local function RoundLogo()
-  return ns.settings and ns.settings.gps and ns.settings.gps.roundLogo or false
-end
 local function Fit(w)
-  if RoundLogo() then ns.FitPortrait(w.portrait) elseif w.plate then FitCorner(w) end
+  if w.plate then FitCorner(w) end
 end
 function ns.FitPortraits()
   for _, w in ipairs(windows) do Fit(w) end
 end
--- Each window's logo as the option says: the round portrait, or the plate without the circle.
+-- Each window's logo: the plate without the circle, the border without the portrait's ring.
 function ns.ApplyLogoLook()
-  local round = RoundLogo()
   for _, w in ipairs(windows) do
     local c = w.chrome
-    if c.SetBorder then pcall(c.SetBorder, c, round and "PortraitFrameTemplate" or "ButtonFrameTemplateNoPortrait") end
-    w.portrait:SetShown(round)
-    if round then
-      if w.plate then w.plate:Hide() end
-    else
+    if c.SetBorder then pcall(c.SetBorder, c, "ButtonFrameTemplateNoPortrait") end
+    w.portrait:SetShown(false)
+    do
       if not w.plate then
         local plate = CreateFrame("Frame", nil, c)
         plate.tex = plate:CreateTexture(nil, "ARTWORK")
@@ -619,9 +604,9 @@ function ns.ApplyLogoLook()
     Fit(w)
   end
 end
--- `f`'s logo (a PortraitFrameTemplate window), as the option says; `move(starting)` moves the window
--- (dragging the plate logo). `file`: another picture in its round portrait, as it is. Returns its
--- record ({ chrome, portrait, move, plate }).
+-- `f`'s logo (a PortraitFrameTemplate window); `move(starting)` moves the window (dragging the plate
+-- logo). `file`: another picture in its round portrait, as it is. Returns its record ({ chrome,
+-- portrait, move, plate }).
 function ns.SetLogoPortrait(f, file, move)
   local p = f.GetPortrait and f:GetPortrait() or (f.PortraitContainer and f.PortraitContainer.portrait)
   if not p then return end

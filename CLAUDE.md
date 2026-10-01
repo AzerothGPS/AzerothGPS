@@ -415,9 +415,9 @@ The addon is going public, so every change must keep it policy-safe:
     `CityLevels[10001].zoff`; the player's own height (`Nav.PlayerCityZ`) tells their floor.
   - `Media/*.tga`: our own art: the windows' corner logo, pre-scaled by `agps media`
     (`app/azerothgps/media.py`, from `assets/logo.png`), the size nearest its pixels on the screen
-    shown 1:1 (Core.lua `ns.PortraitPx`): `CornerLogo<px>` (the default: on a plate cut to its outline,
-    no circle, the border without the portrait's ring; dragging it moves the window) or `Portrait<px>`
-    (option `roundLogo`: in the round portrait); `ns.SetLogoPortrait`, `ns.ApplyLogoLook`. `Device` (minimap button and the
+    shown 1:1 (Core.lua `ns.PortraitPx`): `CornerLogo<px>`, on a plate cut to its outline, no circle, the
+    border without the portrait's ring; dragging it moves the window (the round portrait's option and
+    art were removed, 2026-10-01); `ns.SetLogoPortrait`, `ns.ApplyLogoLook`. `Device` (minimap button and the
     addon list icon), `MapMenu` (the eye button), `Dash` (dotted route lines).
 - `app/`: Python developer tools (not shipped). They include a CASC/DB2 reader, road
   extraction, `gen-addon-data`, `route-check` (`routecheck.py`) and the tests.

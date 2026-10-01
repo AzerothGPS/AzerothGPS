@@ -1084,7 +1084,7 @@ def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     import numpy as np
     from PIL import Image
 
-    from azerothgps.media import PORTRAIT_PX, corner_master, on_canvas, portrait, scaled
+    from azerothgps.media import PORTRAIT_PX, corner_master, on_canvas, scaled
 
     lua, ns = game
     assert list(ns.PORTRAIT_PX.values()) == list(PORTRAIT_PX)
@@ -1093,40 +1093,24 @@ def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
         assert ns.PortraitPx(62, scale)[0] == want
     lua.execute("GetPhysicalScreenSize = nil")
     assert ns.PortraitPx(62, 1.0) == (64, 1)  # (unknown: a pixel a unit)
-    tex = lua.eval("""(function()
-      local t = {}
-      function t:GetWidth() return 62 end
-      function t:GetEffectiveScale() return 0.64 end
-      function t:SetTexture(f) self.file = f end
-      function t:SetTexCoord(...) self.coords = { ... } end
-      function t:SetSnapToPixelGrid(v) self.snap = v end
-      return t
-    end)()""")
-    lua.execute("GetPhysicalScreenSize = function() return 2560, 1440 end")
-    try:
-        assert ns.FitPortrait(tex) == 72
-    finally:
-        lua.execute("GetPhysicalScreenSize = nil")
-    assert str(tex.file).endswith("Portrait72") and tex.snap
-    assert [tex.coords[i] for i in range(1, 5)] == [0, 72 / 128, 0, 72 / 128]
-    # the files: each size as made from assets/logo.png (`agps media`), at 128 the look of before
+    # the files: each size as made from assets/logo.png (`agps media`); the round portrait's gone (asked)
     media, logo = ADDON / "Media", ADDON.parents[1] / "assets" / "logo.png"
     corner = corner_master(logo)
     for px in PORTRAIT_PX:
-        for f, want in ((media / f"Portrait{px}.tga", lambda: on_canvas(portrait(logo, px))),
-                        (media / f"CornerLogo{px}.tga", lambda: on_canvas(scaled(corner, px)))):
-            assert f.exists(), f"{f.name} missing: run `agps media`"
-            same = np.array_equal(np.asarray(Image.open(f).convert("RGBA")), np.asarray(want()))
-            assert same, f"{f.name} is stale: run `agps media`"
+        f = media / f"CornerLogo{px}.tga"
+        assert f.exists(), f"{f.name} missing: run `agps media`"
+        same = np.array_equal(np.asarray(Image.open(f).convert("RGBA")), np.asarray(on_canvas(scaled(corner, px))))
+        assert same, f"{f.name} is stale: run `agps media`"
+    assert not list(media.glob("Portrait*.tga")) and ns.FitPortrait is None
 
 
-def test_the_corner_logo_without_the_circle_and_back(game):
-    # (asked: try the logo without the circle, as StreetView's viewer has it; keep the round one a click
-    # away) the plate logo by default, the window's border without the portrait's ring; the option
-    # brings the round portrait back at once; dragging the plate moves the window
+def test_the_corner_logo_without_the_circle(game):
+    # (asked: the logo without the circle, as StreetView's viewer has it; later the round portrait's option
+    # removed) the plate logo, the window's border without the portrait's ring; dragging the plate moves
+    # the window
     lua, ns = game
     st = ns.settings.gps
-    assert st.roundLogo is False  # (the default)
+    assert st.roundLogo is None
     lua.execute("""
       GetPhysicalScreenSize = function() return 2560, 1440 end
       AGPS_W = CreateFrame("Frame", nil, UIParent)
@@ -1145,15 +1129,11 @@ def test_the_corner_logo_without_the_circle_and_back(game):
         w.plate._scripts.OnDragStart(w.plate)
         w.plate._scripts.OnDragStop(w.plate)
         assert list(lua.eval("AGPS_MOVES").values()) == [True, False]
-        st.roundLogo = True
+        st.roundLogo = True  # (an old saved setting: no round portrait any more)
         ns.ApplyLogoLook()
-        assert str(win.border) == "PortraitFrameTemplate" and portrait._shown and not w.plate._shown
-        assert str(portrait._tex).endswith("Portrait112")
-        st.roundLogo = False
-        ns.ApplyLogoLook()
-        assert str(win.border) == "ButtonFrameTemplateNoPortrait" and w.plate._shown
+        assert str(win.border) == "ButtonFrameTemplateNoPortrait" and w.plate._shown and not portrait._shown
     finally:
-        st.roundLogo = False
+        st.roundLogo = None
         lua.execute("GetPhysicalScreenSize = nil AGPS_W:Hide()")
 
 

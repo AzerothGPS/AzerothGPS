@@ -548,11 +548,6 @@ local function BuildWindow()
     function() return GPS().locked end, function(v) GPS().locked = v end)
   check("Window frame", "The game-style window frame around the map: title bar, logo and close button. Off: just the map.",
     function() return GPS().windowFrame ~= false end, function(v) GPS().windowFrame = v end)
-  check("Logo in a round portrait", "The AzerothGPS logo at the top left of the map and this window in the round portrait, as the game's windows have it. Off: the logo on its own, without the circle.",
-    function() return GPS().roundLogo end, function(v)
-      GPS().roundLogo = v
-      if ns.ApplyLogoLook then ns.ApplyLogoLook() end
-    end)
   check("Reopen following me", "With a route set: if you hid the map while looking around it (dragged or zoomed out to the world map), it opens again centered on you, following your position. Off: it opens where you left it (the button at the bottom right brings it back to you).",
     function() return GPS().reopenFollow end, function(v) GPS().reopenFollow = v end)
   check("Zoom in near a stop", "Within 50 yards of your next stop, the map zooms in smoothly so you can see exactly where it is, and back out to your zoom once you're there. Zooming yourself keeps your zoom for that stop.",

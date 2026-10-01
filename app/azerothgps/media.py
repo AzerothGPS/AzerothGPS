@@ -1,11 +1,12 @@
-"""The addon's own art from assets/ (`agps media`): the windows' corner logo, pre-scaled: in the round
-portrait (Portrait<px>.tga) and without the circle, on a plate cut to its outline (CornerLogo<px>.tga).
+"""The addon's own art from assets/ (`agps media`): the windows' corner logo, pre-scaled, without the
+circle, on a plate cut to its outline (CornerLogo<px>.tga; the round portrait's option and art were
+removed, 2026-10-01).
 
-A 128-pixel logo shrunk by the graphics card to the portrait's 62 UI units looked soft. The portrait is
-written in sizes (Media/Portrait<px>.tga), each made at that size from the high-resolution logo
-(Lanczos, premultiplied alpha), in the top-left corner of the smallest power-of-two canvas that holds it; the
-addon shows the size nearest the pixels the portrait covers on the player's screen, 1:1
-(Core.lua ns.FitPortrait). Uncompressed 32-bit TGAs, like the addon's other art."""
+A 128-pixel logo shrunk by the graphics card to the corner's 62 UI units looked soft. It's written in
+sizes (Media/CornerLogo<px>.tga), each made at that size from the high-resolution logo (Lanczos,
+premultiplied alpha), in the top-left corner of the smallest power-of-two canvas that holds it; the addon
+shows the size nearest the pixels the logo covers on the player's screen, 1:1 (Core.lua ns.PortraitPx).
+Uncompressed 32-bit TGAs, like the addon's other art."""
 
 from __future__ import annotations
 
@@ -75,17 +76,14 @@ def on_canvas(img: Image.Image) -> Image.Image:
 
 
 def make(media: Path, assets: Path) -> list[Path]:
-    """Media/Portrait<px>.tga and CornerLogo<px>.tga for every PORTRAIT_PX, from assets/logo.png.
-    Returns the files written."""
+    """Media/CornerLogo<px>.tga for every PORTRAIT_PX, from assets/logo.png. Returns the files written."""
     out = []
     master = corner_master(assets / "logo.png")
     for px in PORTRAIT_PX:
-        f = media / f"Portrait{px}.tga"
-        on_canvas(portrait(assets / "logo.png", px)).save(f)
         g = media / f"CornerLogo{px}.tga"
         on_canvas(scaled(master, px)).save(g)
-        out += [f, g]
-    old = media / "Logo.tga"  # (the one size of before)
-    if old.exists():
-        old.unlink()
+        out.append(g)
+    for old in [media / "Logo.tga", *media.glob("Portrait*.tga")]:  # (the one size of before; the round portrait's)
+        if old.exists():
+            old.unlink()
     return out
