@@ -4342,6 +4342,20 @@ function G.SetZoom(z)
   elapsed = 1
 end
 
+-- The window frame's title centered on the window: the client's PortraitFrameTemplate centers it
+-- between the portrait and the close button (its TitleContainer 58 in from the left, 24 from the
+-- right), a little right of the middle. The same margin both sides, the same height and top.
+G.TITLE_MARGIN = 24
+function G.CenterTitle(chrome)
+  local tc = chrome and chrome.TitleContainer
+  if not (tc and tc.ClearAllPoints and tc.GetPoint) then return false end
+  local _, _, _, _, y = tc:GetPoint(1)
+  tc:ClearAllPoints()
+  tc:SetPoint("TOPLEFT", chrome, "TOPLEFT", G.TITLE_MARGIN, y or -1)
+  tc:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -G.TITLE_MARGIN, y or -1)
+  return true
+end
+
 function G.Init()
   if frame then return end
   frame = CreateFrame("Frame", "AzerothGPSFrame", UIParent, "BackdropTemplate")
@@ -4492,6 +4506,7 @@ function G.Init()
     strip:SetColorTexture(0.06, 0.06, 0.07, 1)
     if chrome.SetTitle then chrome:SetTitle("AzerothGPS")
     elseif chrome.TitleContainer and chrome.TitleContainer.TitleText then chrome.TitleContainer.TitleText:SetText("AzerothGPS") end
+    G.CenterTitle(chrome)
     -- the AzerothGPS logo in the round portrait (top left); the map's top panel moves
     -- right of it while unlocked (ApplySettings)
     ns.SetLogoPortrait(chrome)

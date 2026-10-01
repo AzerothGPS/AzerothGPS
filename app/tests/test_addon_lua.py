@@ -5035,3 +5035,20 @@ def test_the_stops_not_routed_yet_are_listed_too(nav_env):
     assert "not routed yet" not in steps[0]
     later = [t for t in steps if "not routed yet" in t]
     assert len(later) == 2 and "stop 3" in later[0] and "Last" in later[1] and later[0].startswith("|cff9d9d9dAbout ")
+
+
+def test_the_map_windows_title_is_centered(env):
+    # (reported: "AzerothGPS" sat right of the window's middle) the client's PortraitFrameTemplate puts
+    # its TitleContainer 58 in from the left (past the portrait) and 24 from the right
+    lua, ns = env
+    chrome = lua.eval("""(function()
+      local tc = { pts = { { "TOPLEFT", nil, "TOPLEFT", 58, -1 }, { "TOPRIGHT", nil, "TOPRIGHT", -24, -1 } } }
+      function tc:GetPoint(i) local p = self.pts[i] return p[1], p[2], p[3], p[4], p[5] end
+      function tc:ClearAllPoints() self.pts = {} end
+      function tc:SetPoint(a, rel, b, x, y) self.pts[#self.pts + 1] = { a, rel, b, x, y } end
+      return { TitleContainer = tc }
+    end)()""")
+    assert ns.GPS.CenterTitle(chrome)
+    pts = chrome.TitleContainer.pts
+    (a1, x1, y1), (a2, x2, y2) = [(pts[i][1], pts[i][4], pts[i][5]) for i in (1, 2)]
+    assert (a1, a2) == ("TOPLEFT", "TOPRIGHT") and x1 == -x2 and y1 == y2 == -1
