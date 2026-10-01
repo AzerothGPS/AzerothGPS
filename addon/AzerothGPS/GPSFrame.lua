@@ -1488,6 +1488,15 @@ function G.DownInCityAt(cont, x, y)
   if P and P.InGrid and not P.InGrid(lvl, x, y) then return nil end
   return lvl
 end
+-- Whether the view's middle (cx, cy) is over the capital the player is in (px, py): its own cells, the
+-- player within CITY_VIEW_YD (a capital is smaller than that; none lies that close to another).
+G.CITY_VIEW_YD = 900
+function G.OverCity(cont, px, py, cx, cy)
+  local R = ns.Router
+  if not (R and R.CapitalAt) then return false end
+  if (cx - px) ^ 2 + (cy - py) ^ 2 > G.CITY_VIEW_YD ^ 2 then return false end
+  return R.CapitalAt(cont, px, py) and R.CapitalAt(cont, cx, cy) or false
+end
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
 local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
 local LeaveOpened -- (below: right-click out of such a map)
@@ -2300,7 +2309,10 @@ function G.Update()
   -- (in a city: down in an underground one, or in a capital's own cells)
   local inCity = here and (ns.Nav.PlayerLevel(cont) ~= cont
     or (ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(cont, px, py)) or false)
-  if st.interiors and not inst and not G.IsMapStyle(G.Style()) and not browse and here and (onMe or downCity)
+  -- (in a capital with an inside map, Ironforge: its map while looking over the city, not only round the
+  -- player: panning there flipped to the outside, a video 2026-10-01)
+  local overCity = here and not onMe and inCity and G.OverCity(cont, px, py, cx, cy)
+  if st.interiors and not inst and not G.IsMapStyle(G.Style()) and not browse and here and (onMe or downCity or overCity)
       and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]

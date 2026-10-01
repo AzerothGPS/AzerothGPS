@@ -1212,6 +1212,39 @@ def test_in_a_city_the_wheel_doesnt_zoom_out_past_its_map(game):
         G.Follow()
 
 
+def test_panning_in_a_city_keeps_its_map(game):
+    # (reported, a video: panning in Ironforge flipped between the city's map and the snow outside) in a
+    # capital with an inside map, its map while the view is over the city, wherever in it; off the city,
+    # the land around
+    lua, ns = game
+    G, st, R = ns.GPS, ns.settings.gps, ns.Router
+    zoom = st.zoom
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4840.0, -1100.0, 0, 501.7 "
+                "AGPS_ZONE_REAL = GetMinimapZoneText GetMinimapZoneText = function() return 'The Great Forge' end")
+    try:
+        G.Follow()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is not None
+        spots = [(-4840.0 + dx, -1100.0 + dy) for dx, dy in ((0, 160), (-150, 120), (120, -80), (-180, -60))]
+        spots = [s for s in spots if R.CapitalAt(0, s[0], s[1])]
+        assert len(spots) >= 2
+        for x, y in spots:  # (looked at from the player: the view's middle there, further than its 1.5 zooms)
+            G.LookAt(0, x, y, 60.0)
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+            assert G.inside is not None, (x, y)
+        G.LookAt(0, -5600.0, -400.0, 60.0)  # (Dun Morogh's snow, far off the city: the land)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is None
+    finally:
+        st.zoom = zoom
+        lua.execute("GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
 def test_the_deeprun_tram_has_its_map(game):
     # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
     # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features
