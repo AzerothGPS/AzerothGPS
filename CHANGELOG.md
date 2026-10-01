@@ -37,6 +37,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 ### Changed
 
 - **Flights at a low level:** a flight is weighed against the walk as it's actually routed, not a straight line, so a route flies when walking would go the long way round zones too high for you (e.g. from Brill into Arathi Highlands at level 14).
+- The directions say what to do now, then the next turn: "Continue straight, then slight right in 13 yd" ("Slight right now" at the turn).
 - Changing a route option (flight paths, the hearthstone, teleports, the zones or towns avoided) works the trip out again at once.
 - "Route there anyway?" is remembered for the route, also after a /reload.
 - The last stop clears as soon as you reach it.
@@ -56,6 +57,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.
 - Roads vanished from the map when zoomed out (road and wall tools).
+- Ironforge's roads, and road tool edits there, didn't show on the city's inside map (only on the mountain above it).
 - Clicking the open sea on a continent's map opened a black terrain view.
 
 ### Known limits

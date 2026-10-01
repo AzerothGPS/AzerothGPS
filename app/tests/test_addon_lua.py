@@ -2499,6 +2499,22 @@ def test_turn_left_at_a_corner(turns):
     assert got == [("turn", 500, "Turn left"), ("arrive", 1000, "Arrive at stop 1")]
 
 
+def test_the_next_turn_reads_what_to_do_now_first(turns):
+    # (asked) "Continue straight, then slight right in 13 yd": what to do now, then the next maneuver;
+    # at the turn, "Slight right now"
+    lua, ns = turns
+    T = ns.Turns
+    yd = lua.eval("function(v) return string.format('%d yd', v) end")
+    m = lambda kind, dist, text: lua.table(kind=kind, dist=dist, text=text)
+    assert T.NowText(m("turn", 13, "Slight right"), yd) == "Continue straight, then slight right in 13 yd"
+    assert T.NowText(m("turn", 13, "Slight right"), yd, True) == "Straight, then slight right in 13 yd"
+    assert T.NowText(m("turn", 5, "Turn left onto the road"), yd) == "Turn left onto the road now"
+    assert T.NowText(m("arrive", 52, "Arrive at Stormwind Mage Trainer"), yd) == \
+        "Continue straight, then arrive at Stormwind Mage Trainer in 52 yd"
+    assert T.NowText(m("arrive", 4, "Arrive at Stormwind Mage Trainer"), yd) == "Arrive at Stormwind Mage Trainer"
+    assert T.NowText(m("drop", 20, "Jump down here"), yd) == "Continue straight, then jump down in 20 yd"
+
+
 def test_turn_words_and_curves(turns):
     lua, ns = turns
     T = ns.Turns

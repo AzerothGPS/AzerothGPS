@@ -2010,7 +2010,10 @@ function G.Update()
   -- (an underground city's map: its level's roads; not over another inside map, a building's)
   G.shownLevel, G.shownCont = artLevel or viewCont, viewCont
   -- (the road network: the option, the Show Roads and Walls button, or the road tools on)
-  if (st.showRoads or G.roadMode or forced) and (not place or artLevel) then
+  -- (not over a building's inside map, an inn's; but a capital's inside, Ironforge's, is its streets:
+  -- its roads, and the road tools' edits, show there)
+  local capitalInside = place and not artLevel and ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(viewCont, cx, cy)
+  if (st.showRoads or G.roadMode or forced) and (not place or artLevel or capitalInside) then
     for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or artLevel or viewCont, rot, zoom, half)) do
       AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
     end
@@ -2373,7 +2376,7 @@ function G.Update()
     local ok = ms ~= nil
     local m = ok and ms and ms[1]
     if m then
-      steps = string.format("|cffffffff%s  %s|r", m.text, ns.Nav.FormatDistance(m.dist))
+      steps = "|cffffffff" .. ns.Turns.NowText(m, ns.Nav.FormatDistance) .. "|r"
       local nxt = ms[2]
       if nxt then
         steps = steps .. string.format("\n|cffb0b0b0Then: %s in %s|r", nxt.text, ns.Nav.FormatDistance(nxt.dist - m.dist))

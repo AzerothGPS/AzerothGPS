@@ -595,3 +595,28 @@ def test_undo_takes_back_roads_and_walls_in_the_order_drawn(game):
         assert len(ns.db.tracks) == 0
     finally:
         ns.db.tracks = lua.eval("{}")
+
+
+def test_ironforge_s_roads_show_on_its_inside_map(game):
+    # (reported: drawn roads over Ironforge showed on the mountain in the outside view, and went once
+    # the map showed the city's inside) a capital's inside map is its streets: its roads show there
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    lua.execute("""
+      AGPS_ROADS = 0
+      local lay = AGPS_NS.GPS.LayoutRoads
+      AGPS_NS.GPS.LayoutRoads = function(...) AGPS_ROADS = AGPS_ROADS + 1 return lay(...) end
+      AGPS_INDOORS_REAL = IsIndoors
+      IsIndoors = function() return true end
+      AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = -4840.0, -1100.0, 0
+    """)
+    zoom = st.zoom
+    try:
+        st.showRoads, st.zoom = True, 200.0
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is not None  # (the city's inside map shown)
+        assert lua.eval("AGPS_ROADS") > 0
+    finally:
+        st.showRoads, st.zoom = False, zoom
+        lua.execute("IsIndoors = AGPS_INDOORS_REAL AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = 2254.0, 293.0, 0")

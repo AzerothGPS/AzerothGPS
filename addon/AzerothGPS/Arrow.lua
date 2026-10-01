@@ -183,7 +183,11 @@ local function UpdateText(px, py, cont)
     arrow:SetRotation(0)
     arrow:SetVertexColor(0.6, 0.8, 1)
   elseif m then
-    line1:SetText(string.format("%s  |cffffffff%s|r", m.text, N.FormatDistance(m.dist)))
+    -- what to do now, then the maneuver: "Continue straight, then slight right in 13 yd" (shorter when
+    -- the window is too narrow for it on one line)
+    local function yd(v) return "|cffffffff" .. N.FormatDistance(v) .. "|r" end
+    line1:SetText(ns.Turns.NowText(m, yd))
+    if line1:GetStringWidth() > line1:GetWidth() + 1 then line1:SetText(ns.Turns.NowText(m, yd, true)) end
     -- (and the stop's height against yours, in a city: "Below you, 12 yd down")
     local hint = N.HeightText(px, py, cont)
     local toward = m.toward and ("toward " .. m.toward) or ""

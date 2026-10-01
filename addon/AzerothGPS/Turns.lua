@@ -102,6 +102,20 @@ function T.TurnText(angle)
   return "Slight " .. side
 end
 
+-- The next maneuver as what to do now, then it: "Continue straight, then slight right in 13 yd"
+-- ("Straight, then ..." with `short`); within NOW_YD of it, "Slight right now" (a turn, joining or
+-- leaving the road), or as it is ("Arrive at ..."). `fmt(yards)` formats the distance (its color).
+T.NOW_YD = 8
+function T.NowText(m, fmt, short)
+  local d = m.dist or 0
+  if d <= T.NOW_YD then
+    if m.kind == "turn" or m.kind == "join" or m.kind == "leave" then return m.text .. " now" end
+    return m.text
+  end
+  local what = m.kind == "drop" and "jump down" or (m.text:sub(1, 1):lower() .. m.text:sub(2))
+  return string.format(short and "Straight, then %s in %s" or "Continue straight, then %s in %s", what, fmt(d))
+end
+
 local COMPASS = { "north", "north-west", "west", "south-west", "south", "south-east", "east", "north-east" }
 -- Compass direction of a heading (X north, Y west).
 function T.Compass(dx, dy)
