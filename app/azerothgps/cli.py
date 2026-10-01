@@ -100,11 +100,8 @@ def cmd_watch_roads(args) -> int:
                 per: dict = {}
                 before = _override_keys(RESOURCES / "overrides")
                 n = import_tracks(wtf, RESOURCES / "overrides", per)
-                np_ = _import_saved_pins(wtf)  # (pins made or removed in game: overrides/pins.json, Data/Pins.lua)
+                # (not the player's own pins: they're theirs until shared, `agps pins` or import-shared)
                 last = cur
-                if np_ and not n:
-                    cmd_install_addon(args)
-                    print(f"{time.strftime('%H:%M:%S')} {np_} pin change(s) in the pin data: /reload in game to load it")
                 if n:
                     stamp = time.strftime("%H:%M:%S")
                     print(f"{stamp} {n} new drawn road(s): {per}")
@@ -518,6 +515,11 @@ def cmd_import_shared(args) -> int:
     if npins:
         write_pins_lua()
         print(f"{npins} pin change(s): in Data/Pins.lua")
+    from .sharedtrips import merge_trips, parse_shared_trips
+
+    ntrips = merge_trips(parse_shared_trips(text))
+    if ntrips:
+        print(f"{ntrips} new faster trip(s) (routes): in data/feedback/shared_trips.json")
     if n:
         reapply_overrides(DATA, [c for c in per if c in CONTINENTS])
         write_roads_lua(DATA, ADDON_DIR)

@@ -78,6 +78,8 @@ ns.DEFAULTS = {
     showCustomPins = true, -- the pins on the map (the player's and the shared ones)
     showWalls = false, -- draw the walls routes don't walk through (blood red)
     shareTrips = false, -- keep traces of trips clearly faster than estimated
+    -- what "Copy Map Data..." puts in the text (Feedback.KINDS)
+    copyRoads = true, copyWalls = true, copyRoutes = true, copyPins = true,
   },
   minimap = { hide = false, angle = 128 }, -- minimap button (degrees around the minimap)
   combatProbe = false,

@@ -5407,3 +5407,39 @@ def test_shared_pins_text_is_data_only():
                                  "P add 0 nope 1,2 icon=1 name=z\nP add 0 7 1 icon=1 name=z")
     assert [(p["time"], p["icon"], p["name"]) for p in added] == [
         (5, r"Interface\Icons\INV_Misc_QuestionMark", "ab c"), (6, "Interface/Icons/Spell_Fire_Fire", "x name=y")]
+
+
+def test_copy_map_data_includes_only_the_kinds_picked(env):
+    # (asked) Copy Map Data: roads, walls, routes (the faster trips kept) and pins, all in by default; an
+    # unticked one is left out; the routes' traces simplified; `agps import-shared` reads the routes back
+    from azerothgps.sharedtrips import parse_shared_trips
+
+    lua, ns = env
+    ns.db = lua.eval("""{ tracks = {
+        { op = "add", continent = 0, time = 11, pts = { 1, 2, 30, 40 } },
+        { op = "wall", continent = 0, time = 12, pts = { 5, 6, 7, 8 } } },
+      feedback = { trips = { { continent = 1, time = 13, estimate = 300, actual = 200, mounted = true,
+        to = { 50, 60, 1 }, pts = { 0, 0, 10, 0.5, 20, 0, 30, 0, 40, 25 } } } } }""")
+    ns.settings = lua.eval("{ gps = {} }")
+    lua.execute("time = function() return 1790000000 end")
+    load(lua, ns, "Pins.lua", "Feedback.lua")
+    ns.Pins.Add(lua.eval('{ level = 0, x = 1, y = 2, name = "Spot" }'))
+    F, gps = ns.Feedback, ns.settings.gps
+
+    def text():
+        return F.RoadsText()[0]
+
+    lines = text().splitlines()
+    assert lines[0].startswith("AzerothGPS roads 1")
+    assert lines[1:] == ["R add 0 11 1.0,2.0 30.0,40.0", "R wall 0 12 5.0,6.0 7.0,8.0",
+                         "T 1 13 300 200 1 to=50.0,60.0,1 0,0 30,0 40,25",  # (the trace simplified)
+                         r"P add 0 1790000000 1.0,2.0 icon=Interface\Icons\INV_Misc_QuestionMark name=Spot"]
+    for key, gone in (("copyWalls", "R wall"), ("copyRoutes", "T "), ("copyPins", "P "), ("copyRoads", "R add")):
+        gps[key] = False
+        assert not any(l.startswith(gone) for l in text().splitlines()), key
+    assert F.RoadsText()[0] == "" and F.RoadsText()[1] == 0  # (nothing picked)
+    counts = F.KindCounts()
+    assert (counts.roads, counts.walls, counts.routes, counts.pins) == (1, 1, 1, 1)  # (there all the same)
+    trips = parse_shared_trips("T 1 13 300 200 1 to=50.0,60.0,1 0,0 30,0 40,25\nT 1 nope\nR add 0 11 1,2 3,4")
+    assert trips == [{"continent": 1, "time": 13, "estimate": 300, "actual": 200, "mounted": True, "from": [0.0, 0.0],
+                      "to": [50.0, 60.0, 1], "pts": [0.0, 0.0, 30.0, 0.0, 40.0, 25.0], "source": "shared"}]

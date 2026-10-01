@@ -170,11 +170,16 @@ The addon is going public, so every change must keep it policy-safe:
     `G.Update`, option `showCustomPins`; faint on another floor, `G.PinOffFloor`): double-click for a stop
     (`G.AddStopAt(..., exact)`: on the pin's level, with its height), right-click "Remove?". Shared like roads:
     "P add|remove" lines in Feedback.RoadsText (`P.ShareLines`); offline `app/azerothgps/pins.py`
-    (`agps import-shared`, the road watcher, `agps pins`) into `overrides/pins.json` and `Data/Pins.lua`
+    (`agps import-shared`, `agps pins`; not the road watcher: the player's own pins stay theirs) into
+    `overrides/pins.json` and `Data/Pins.lua`
     (`ns.SharedPins`, `shipped`; `ns.PinsIn`: the player's own copies pruned at login, `P.Prune`). A shared
     pin removed is hidden (`ns.db.pinsRemoved`) and its removal shared. Names are cleaned (`P.CleanName`, no
     "|" codes) and icons only file ids or icon paths (pins.py `clean_icon`): the data is never run.
-  - `Feedback.lua`: opt-in road and trip data.
+  - `Feedback.lua`: opt-in road and trip data, and "Copy Map Data..." (`F.RoadsText`): the kinds picked
+    (`F.KINDS`: roads, walls, routes = the faster trips' simplified traces as "T" lines, pins; settings
+    `copyRoads`/`copyWalls`/`copyRoutes`/`copyPins`, all on by default; checkboxes in the copy window and on
+    the Help improve page) plus the dungeons' ways in ("E", always). `agps import-shared` reads every kind
+    back (routes into `data/feedback/shared_trips.json`, `sharedtrips.py`).
   - `Options.lua`: the paged options window and the minimap button.
   - `Config.lua`: slash commands.
   - `Api.lua`: the public `AzerothGPS` table for companion addons such as
@@ -447,7 +452,7 @@ agps watch-roads       # on every /reload: roads drawn in game go into overrides
 agps terrain-hpa        # prepare the terrain's blocks for the walk search (install-addon does it when stale)
 agps city-places       # the capitals' service locations' heights from their NPCs (after adding places)
 agps import-shared <file>  # roads, walls and pins players copied from the share page ("Copy map data...") into the data
-agps pins              # pins made in game (SavedVariables) into overrides/pins.json and Data/Pins.lua (the watcher does it too)
+agps pins              # pins made in game (SavedVariables) into overrides/pins.json and Data/Pins.lua (not the watcher)
 cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
 ```
 

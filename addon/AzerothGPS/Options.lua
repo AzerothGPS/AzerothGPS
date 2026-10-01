@@ -226,15 +226,36 @@ O.SHARE_INFO = {
 local shareInfo
 -- Your drawn roads as text, selected, to copy (Ctrl+C) and send.
 local roadsCopy
-local function ShowRoadsText()
+-- (the text again, with the kinds picked: a checkbox in the window changed)
+local function FillRoadsText()
+  local f = roadsCopy
   local text, n = ns.Feedback.RoadsText()
+  local counts = ns.Feedback.KindCounts()
+  for _, cb in ipairs(f.kinds) do
+    cb:SetChecked(ns.Feedback.Included(cb.kind))
+    cb.text:SetText(string.format("%s (%d)", cb.label, counts[cb.kind] or 0))
+  end
+  f.text = text
   if n == 0 then
-    ns.Print("no drawn or erased roads to share yet (Road Tools: left-drag draws, right-drag erases)")
+    f.hint:SetText("Nothing picked to copy: tick what to include above.")
+  else
+    f.hint:SetText(string.format("%d line%s of map data. Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue or on the AzerothGPS Discord (see How to share). Missing an edit? Type |cffffd100/reload|r and copy again.",
+      n, n == 1 and "" or "s"))
+  end
+  f.edit:SetText(text)
+  f.edit:SetFocus()
+  f.edit:HighlightText()
+end
+local function ShowRoadsText()
+  local total = 0
+  for _, c in pairs(ns.Feedback.KindCounts()) do total = total + c end
+  if total == 0 then
+    ns.Print("no map data to share yet: roads or walls you drew or erased, faster trips, pins")
     return
   end
   if not roadsCopy then
     local f = CreateFrame("Frame", "AzerothGPSRoadsCopy", UIParent, "BackdropTemplate")
-    f:SetSize(460, 320)
+    f:SetSize(460, 350)
     f:SetPoint("CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetToplevel(true)
@@ -259,8 +280,32 @@ local function ShowRoadsText()
     hint:SetPoint("RIGHT", -14, 0)
     hint:SetJustifyH("LEFT")
     f.hint = hint
+    -- what goes in the text (Feedback.KINDS: all ticked unless the player unticked one; saved)
+    f.kinds = {}
+    for i, k in ipairs(ns.Feedback.KINDS) do
+      local cb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+      cb:SetSize(22, 22)
+      cb:SetPoint("TOPLEFT", 10 + (i - 1) * 110, -66)
+      cb.text = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+      cb.text:SetPoint("LEFT", cb, "RIGHT", 1, 0)
+      cb.kind, cb.label = k.kind, k.label
+      cb:SetScript("OnClick", function(self)
+        ns.settings.gps[k.key] = self:GetChecked() and true or false
+        FillRoadsText()
+        O.Refresh()
+      end)
+      cb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(k.label, 1, 1, 1)
+        GameTooltip:AddLine(k.tip, nil, nil, nil, true)
+        GameTooltip:AddLine("Unticked: left out of the copy.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+      end)
+      cb:SetScript("OnLeave", GameTooltip_Hide)
+      f.kinds[#f.kinds + 1] = cb
+    end
     local scroll = CreateFrame("ScrollFrame", "AzerothGPSRoadsCopyScroll", f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 14, -64)
+    scroll:SetPoint("TOPLEFT", 14, -94)
     scroll:SetPoint("BOTTOMRIGHT", -34, 14)
     local bg = f:CreateTexture(nil, "BACKGROUND", nil, 1)
     bg:SetPoint("TOPLEFT", scroll, -4, 4)
@@ -286,14 +331,9 @@ local function ShowRoadsText()
     roadsCopy = f
   end
   if shareInfo then shareInfo:Hide() end -- (one window at a time: it was on top of this one)
-  roadsCopy.text = text
-  roadsCopy.hint:SetText(string.format("%d change%s you drew (roads, walls, erasures). Press |cffffd100Ctrl+C|r to copy (it's all selected), then paste it in a \"Road data\" GitHub issue or on the AzerothGPS Discord (see How to share). Missing an edit? Type |cffffd100/reload|r and copy again.",
-    n, n == 1 and "" or "s"))
-  roadsCopy.edit:SetText(text)
   roadsCopy:Show()
   roadsCopy:Raise()
-  roadsCopy.edit:SetFocus()
-  roadsCopy.edit:HighlightText()
+  FillRoadsText()
 end
 O.ShowRoadsText = ShowRoadsText
 
@@ -947,6 +987,11 @@ local function BuildWindow()
   local copyBtn = Button(page, "Copy Map Data...", 150, ShowRoadsText)
   copyBtn:SetPoint("LEFT", howBtn, "RIGHT", 6, 0)
   note("Type |cffffd100/reload|r before |cffffd100Copy Map Data...|r: it saves all your road and wall edits and pins, so every one of them is in the copy.")
+  header("What Copy Map Data... includes", "Untick what you'd rather keep to yourself: it's left out of the copy.")
+  for _, k in ipairs(ns.Feedback.KINDS) do
+    check(k.label, k.tip .. " Unticked: left out of the copy.",
+      function() return GPS()[k.key] ~= false end, function(v) GPS()[k.key] = v end)
+  end
   controls[#controls + 1] = function()
     local _, t = ns.Feedback.Counts()
     local r, w = ns.Feedback.DrawnCounts()

@@ -115,15 +115,71 @@ function F.Init()
   F.ticker = C_Timer.NewTicker(1, Tick)
 end
 
--- The player's drawn and erased roads as text to copy and send (the share page's "Copy
--- road data"): a header line, then a road per line:
---   R <op add|remove|area|wall|unwall|unwallarea> <continent> <time> <x,y> <x,y> ...
--- then their pins ("P" lines: Pins.ShareLines) and the dungeons' ways in they learned ("E").
--- Both the roads kept for sharing and the ones not in the road data yet, each once.
--- (`agps import-shared` reads it back.) Numbers only: no character or realm names.
+-- The player's map data as text to copy and send ("Copy Map Data..."): a header line, then a line each.
+-- The kinds the player picked (F.KINDS, the copy window's and the Help improve page's checkboxes, all on
+-- by default) and the dungeons' ways in they learned:
+--   roads:  R <add|remove|area> <continent> <time> [z=..] [indoors=1|0] [down=1] <x,y> <x,y> ...
+--   walls:  R <wall|unwall|unwallarea> ... (as roads)
+--   routes: T <continent> <time> <estimate s> <actual s> <mounted 1|0> to=<x>,<y>,<continent> <x,y> ...
+--           (the faster trips "Share faster trips" kept, their traces simplified: TRIP_SIMPLIFY_YD)
+--   pins:   P add|remove ... (Pins.ShareLines)
+--   E <map id> <continent> <x,y> (a dungeon's way in; always)
+-- Drawn roads both kept for sharing and not in the road data yet, each once. (`agps import-shared` reads
+-- it back.) Positions and the player's pin names only: no character or realm names.
 F.TEXT_HEADER = "AzerothGPS roads 1"
-function F.RoadsText()
-  local seen, lines = {}, {}
+F.KINDS = {
+  { kind = "roads", key = "copyRoads", label = "Roads", tip = "Roads you drew or erased with the road tools." },
+  { kind = "walls", key = "copyWalls", label = "Walls", tip = "Walls you drew or erased with the wall tools." },
+  { kind = "routes", key = "copyRoutes", label = "Routes",
+    tip = "The ways you went when you reached a stop clearly faster than estimated (kept with Share faster trips on)." },
+  { kind = "pins", key = "copyPins", label = "Pins", tip = "Your pins, and the shared ones you removed." },
+}
+F.TRIP_SIMPLIFY_YD = 4 -- a trip's trace: points within this of the line the others make are left out
+function F.Included(kind)
+  local st = ns.settings and ns.settings.gps
+  for _, k in ipairs(F.KINDS) do
+    if k.kind == kind then return not st or st[k.key] ~= false end
+  end
+  return true
+end
+
+-- A trace (flat x, y, ...) with the points within `tol` yards of the line through the others left out
+-- (Douglas-Peucker): its first and last kept.
+function F.Simplify(pts, tol)
+  local n = #pts / 2
+  if n <= 2 then return pts end
+  local keep = { [1] = true, [n] = true }
+  local stack = { { 1, n } }
+  while #stack > 0 do
+    local seg = table.remove(stack)
+    local a, b = seg[1], seg[2]
+    local ax, ay, bx, by = pts[2 * a - 1], pts[2 * a], pts[2 * b - 1], pts[2 * b]
+    local vx, vy = bx - ax, by - ay
+    local L2 = vx * vx + vy * vy
+    local worst, wi = -1, nil
+    for i = a + 1, b - 1 do
+      local px, py = pts[2 * i - 1], pts[2 * i]
+      local t = L2 > 0 and math.max(0, math.min(1, ((px - ax) * vx + (py - ay) * vy) / L2)) or 0
+      local d = (ax + vx * t - px) ^ 2 + (ay + vy * t - py) ^ 2
+      if d > worst then worst, wi = d, i end
+    end
+    if wi and worst > tol * tol then
+      keep[wi] = true
+      stack[#stack + 1] = { a, wi }
+      stack[#stack + 1] = { wi, b }
+    end
+  end
+  local out = {}
+  for i = 1, n do
+    if keep[i] then out[#out + 1], out[#out + 2] = pts[2 * i - 1], pts[2 * i] end
+  end
+  return out
+end
+
+-- Every kind's lines (whether picked or not): { roads, walls, routes, pins, entrances }.
+function F.Lines()
+  local out = { roads = {}, walls = {}, routes = {}, pins = {}, entrances = {} }
+  local seen = {}
   local shipped = ns.RoadTracksIn or {}
   local function add(t)
     local key = tostring(t.continent) .. ":" .. tostring(t.time)
@@ -132,19 +188,29 @@ function F.RoadsText()
     seen[key] = true
     local op = t.op == "remove" and (t.area and "area" or "remove")
       or t.op == "wall" and "wall" or t.op == "unwall" and (t.area and "unwallarea" or "unwall") or "add"
-    local out = { "R", op, tostring(t.continent or 0), tostring(t.time or 0) }
+    local line = { "R", op, tostring(t.continent or 0), tostring(t.time or 0) }
     -- (its floor, where floors lie over each other: "z=<height>", "indoors=1|0", "down=1")
-    if t.z then out[#out + 1] = string.format("z=%.1f", t.z) end
-    if t.indoors ~= nil then out[#out + 1] = t.indoors and "indoors=1" or "indoors=0" end
-    if t.down then out[#out + 1] = "down=1" end
-    for i = 1, #t.pts - 1, 2 do out[#out + 1] = string.format("%.1f,%.1f", t.pts[i], t.pts[i + 1]) end
-    lines[#lines + 1] = table.concat(out, " ")
+    if t.z then line[#line + 1] = string.format("z=%.1f", t.z) end
+    if t.indoors ~= nil then line[#line + 1] = t.indoors and "indoors=1" or "indoors=0" end
+    if t.down then line[#line + 1] = "down=1" end
+    for i = 1, #t.pts - 1, 2 do line[#line + 1] = string.format("%.1f,%.1f", t.pts[i], t.pts[i + 1]) end
+    local list = (t.op == "wall" or t.op == "unwall") and out.walls or out.roads
+    list[#list + 1] = table.concat(line, " ")
   end
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do add(t) end
   for _, t in ipairs(ns.db and ns.db.feedback and ns.db.feedback.roads or {}) do add(t) end
-  for _, l in ipairs(ns.Pins and ns.db and ns.Pins.ShareLines() or {}) do lines[#lines + 1] = l end
-  -- dungeons' ways in learned (Taxi.NoteEntrance), those the data doesn't have yet:
-  -- "E map-id continent x,y"
+  for _, t in ipairs(ns.db and ns.db.feedback and ns.db.feedback.trips or {}) do
+    if t.pts and #t.pts >= 4 and t.to then
+      local line = { "T", tostring(t.continent or 0), tostring(t.time or 0), tostring(t.estimate or 0),
+        tostring(t.actual or 0), t.mounted and "1" or "0",
+        string.format("to=%.1f,%.1f,%s", t.to[1] or 0, t.to[2] or 0, tostring(t.to[3] or t.continent or 0)) }
+      local pts = F.Simplify(t.pts, F.TRIP_SIMPLIFY_YD)
+      for i = 1, #pts - 1, 2 do line[#line + 1] = string.format("%.0f,%.0f", pts[i], pts[i + 1]) end
+      out.routes[#out.routes + 1] = table.concat(line, " ")
+    end
+  end
+  for _, l in ipairs(ns.Pins and ns.db and ns.Pins.ShareLines() or {}) do out.pins[#out.pins + 1] = l end
+  -- dungeons' ways in learned (Taxi.NoteEntrance), those the data doesn't have yet
   for mapID, list in pairs(ns.db and ns.db.entrances or {}) do
     local known = F.KnownEntrances(mapID)
     for _, e in ipairs(list) do
@@ -152,9 +218,29 @@ function F.RoadsText()
       for _, k in ipairs(known) do
         if k[1] == e[1] and math.sqrt((k[2] - e[2]) ^ 2 + (k[3] - e[3]) ^ 2) <= 40 then have = true end
       end
-      if not have then lines[#lines + 1] = string.format("E %d %d %.1f,%.1f", mapID, e[1], e[2], e[3]) end
+      if not have then out.entrances[#out.entrances + 1] = string.format("E %d %d %.1f,%.1f", mapID, e[1], e[2], e[3]) end
     end
   end
+  return out
+end
+
+-- How many lines of each kind there are to share (picked or not): { roads = n, ... }.
+function F.KindCounts()
+  local counts = {}
+  for kind, list in pairs(F.Lines()) do counts[kind] = #list end
+  return counts
+end
+
+-- The text to copy: the kinds picked; and how many lines it has (the header aside).
+function F.RoadsText()
+  local all = F.Lines()
+  local lines = {}
+  for _, k in ipairs(F.KINDS) do
+    if F.Included(k.kind) then
+      for _, l in ipairs(all[k.kind]) do lines[#lines + 1] = l end
+    end
+  end
+  for _, l in ipairs(all.entrances) do lines[#lines + 1] = l end
   if #lines == 0 then return "", 0 end
   local v, b = "", ""
   if GetBuildInfo then v, b = GetBuildInfo() end

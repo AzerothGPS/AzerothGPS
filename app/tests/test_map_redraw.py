@@ -238,6 +238,30 @@ def test_a_pin_on_a_dungeons_floor_and_in_the_copied_map_data(game):
     assert "Second floor" not in ns.Feedback.RoadsText()[0]
 
 
+def test_the_copy_window_leaves_out_what_is_unticked(game):
+    # (asked) the Copy Map Data window: Roads, Walls, Routes and Pins ticked by default, with how many of
+    # each; unticked, that kind leaves the text at once (and stays unticked: a setting)
+    lua, ns = game
+    P, O = ns.Pins, ns.Options
+    pin = P.Add(lua.eval("{ level = 0, x = 2254, y = 293, name = 'Copy me' }"))
+    try:
+        O.ShowRoadsText()
+        f = lua.globals().AzerothGPSRoadsCopy
+        assert f._shown and "name=Copy me" in f.edit._text
+        boxes = {cb.kind: cb for cb in f.kinds.values()}
+        assert set(boxes) == {"roads", "walls", "routes", "pins"} and all(cb._checked for cb in boxes.values())
+        assert boxes["pins"].text._text == "Pins (1)"
+        boxes["pins"]._checked = False
+        boxes["pins"]._scripts.OnClick(boxes["pins"])
+        assert ns.settings.gps.copyPins is False and "Copy me" not in f.edit._text
+        boxes["pins"]._checked = True
+        boxes["pins"]._scripts.OnClick(boxes["pins"])
+        assert ns.settings.gps.copyPins is True and "name=Copy me" in f.edit._text
+    finally:
+        P.Remove(pin)
+        lua.globals().AzerothGPSRoadsCopy._shown = False
+
+
 def test_the_style_buttons_and_command_leave_a_held_style(game):
     # (API 9) while a game holds the map with a style, the Map Style buttons and /agps style don't change
     # it (they say why); the map draws it at every zoom; let go, the player's own is back

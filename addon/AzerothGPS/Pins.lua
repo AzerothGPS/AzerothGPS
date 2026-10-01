@@ -5,7 +5,8 @@
 -- Shown on the map (Options > Map, `showCustomPins`) like a city location: double-click for a stop there
 -- (with its height: its floor), right-click to remove it.
 -- Kept account-wide (ns.db.pins) and shared with the map data like roads and walls ("Copy Map Data...":
--- the "P" lines, Feedback.RoadsText): `agps import-shared` and the road watcher put them in
+-- the "P" lines, Feedback.RoadsText, unless unticked there): `agps import-shared` (or `agps pins`, from the
+-- saved variables; not the road watcher: the player's pins are theirs until shared) puts them in
 -- overrides/pins.json and Data/Pins.lua (ns.SharedPins, shown to everyone; ns.PinsIn, their times: the
 -- player's own copies of those are dropped at login).
 local _, ns = ...
