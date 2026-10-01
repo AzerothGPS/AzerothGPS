@@ -377,8 +377,9 @@ def test_the_options_pages_in_order(game):
     # (asked) the options' pages in this order; Help improve says a /reload saves every edit before copying
     lua, ns = game
     ns.Options.Show()
-    order = ["General", "Performance", "Opacity", "Routing", "Directions", "Map", "Quick buttons", "Road tools",
-             "Wall tools", "Help improve"]
+    # (asked later: the road and wall tools' pages one "Tools" page)
+    order = ["General", "Performance", "Opacity", "Routing", "Directions", "Map", "Quick buttons", "Tools",
+             "Help improve"]
     ws = lua.eval("AGPS_WIDGETS")
     ws = [ws[i] for i in range(1, len(ws) + 1)]  # (in the order made)
     # (the list on the left: a button per page, its name a font string on it)

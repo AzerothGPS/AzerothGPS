@@ -887,11 +887,10 @@ local function BuildWindow()
   col.y = col.y - #slots * 24
   controls[#controls + 1] = OrderRows
 
-  ---------------------------------------------------------------- Road tools
-  Page("Road tools")
-  header("Road network", "For fixing the road data the routes use.")
-  note("The road tools show the road network while they're on. To see it (and the walls) with the tools off: the |cffffd100Show Roads and Walls|r button under Undo on the map, or /agps roads on.")
-  header("Fixing roads")
+  ---------------------------------------------------------------- Tools
+  Page("Tools")
+  note("For fixing the map's data: roads the routes miss or that aren't there, and walls they walk through. Each set of tools shows its data while it's on; with them off, the |cffffd100Show Roads and Walls|r button under Undo on the map shows both (or /agps roads on, /agps walls on).")
+  header("Roads", "The road network the routes use.")
   note("With the road tools on, on the map: left-drag along a road the routes miss, right-drag over a \"road\" that isn't there (red), middle-drag to pan. Routes use it right away. A drawn road joins the roads it meets; where it runs along one, that road stays.")
   check("Road tools button on the map", "Adds a Road Tools toggle to the map's buttons (the up column). Also /agps dev.",
     function() return GPS().devTools end, function(v)
@@ -899,38 +898,24 @@ local function BuildWindow()
       if not v and ns.GPS.roadMode then ns.GPS.SetRoadMode(false) end
       if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     end)
-  local drawBtn = Button(page, "Road Tools On/Off", 150, function() ns.GPS.ToggleRoadMode() end)
-  place(drawBtn, 28, 4)
-  local undoBtn = Button(page, "Take Back the Last", 150, function() ns.Record.Undo() end)
-  local listBtn = Button(page, "List Drawn Roads", 150, function() ns.Record.List() end)
-  place(undoBtn, 28, 4)
-  listBtn:SetPoint("LEFT", undoBtn, "RIGHT", 6, 0)
-  controls[#controls + 1] = function()
-    local any = ns.db and ns.db.tracks and #ns.db.tracks > 0
-    undoBtn:SetEnabled(any and true or false)
-  end
-
-  ---------------------------------------------------------------- Wall tools
-  Page("Wall tools")
+  place(Button(page, "Road Tools On/Off", 150, function() ns.GPS.ToggleRoadMode() end), 28, 4)
   header("Walls", "What routes can't walk through: a town's wall, a fence, a cliff edge.")
-  note("The wall tools show the walls while they're on, in blood red: the edges of mountains and cliffs too steep to climb (the terrain data), buildings, and the walls drawn in (thicker). To see them with the tools off: the |cffffd100Show Roads and Walls|r button under Undo on the map, or /agps walls on.")
-  header("Fixing walls")
-  note("With the wall tools on, on the map: left-drag along a wall the routes try to walk through, right-drag over a wall that isn't there, or a mountain edge that's really walkable (circle an area to open all of it), middle-drag to pan. Routes go around your walls right away, like a mountain, and a road a wall crosses is cut there: leave a gap for a gate. Flight paths still cross them.")
+  note("With the wall tools on, on the map: left-drag along a wall the routes try to walk through, right-drag over a wall that isn't there, or a mountain edge that's really walkable (circle an area to open all of it), middle-drag to pan. Routes go around your walls right away, like a mountain, and a road a wall crosses is cut there: leave a gap for a gate. Flight paths still cross them. Shown in blood red: the edges of mountains and cliffs too steep to climb (the terrain data), buildings, and the walls drawn in (thicker).")
   check("Wall tools button on the map", "Adds a Wall Tools toggle to the map's buttons (the up column).",
     function() return GPS().wallTools end, function(v)
       GPS().wallTools = v
       if not v and ns.GPS.wallMode then ns.GPS.SetWallMode(false) end
       if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     end)
-  local wallBtn = Button(page, "Wall Tools On/Off", 150, function() ns.GPS.ToggleWallMode() end)
-  place(wallBtn, 28, 4)
-  local wUndo = Button(page, "Take Back the Last", 150, function() ns.Record.Undo() end)
-  local wList = Button(page, "List Drawn Walls", 150, function() ns.Record.List() end)
-  place(wUndo, 28, 4)
-  wList:SetPoint("LEFT", wUndo, "RIGHT", 6, 0)
+  place(Button(page, "Wall Tools On/Off", 150, function() ns.GPS.ToggleWallMode() end), 28, 4)
+  header("Your changes", "Roads and walls you draw or erase, in the order drawn.")
+  local undoBtn = Button(page, "Take Back the Last", 150, function() ns.Record.Undo() end)
+  local listBtn = Button(page, "List Your Changes", 150, function() ns.Record.List() end)
+  place(undoBtn, 28, 4)
+  listBtn:SetPoint("LEFT", undoBtn, "RIGHT", 6, 0)
   controls[#controls + 1] = function()
     local any = ns.db and ns.db.tracks and #ns.db.tracks > 0
-    wUndo:SetEnabled(any and true or false)
+    undoBtn:SetEnabled(any and true or false)
   end
 
   ---------------------------------------------------------------- Help improve

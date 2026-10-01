@@ -102,9 +102,9 @@ The addon is going public, so every change must keep it policy-safe:
     button (`G.MakeUseButton`, `G.UpdateUseButton`): a secure button parented to UIParent (the map
     may hide in combat), set only out of combat and hidden on PLAYER_REGEN_DISABLED.
   - `Record.lua`: the player's road fixes, drawn on the map with the road tools (Options >
-    Road tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
+    Tools, or `/agps dev`: the "Road tools" toggle, `G.roadMode`: left-drag draws,
     right-drag erases (a loop: everything inside), middle-drag pans, until toggled off;
-    `G.FinishRoad`). The wall tools (Options > Wall tools, `G.wallMode`, the "Wall tools"
+    `G.FinishRoad`). The wall tools (Options > Tools, `G.wallMode`, the "Wall tools"
     button) draw and erase walls the same way. The road tools on show the road network, the wall
     tools the walls; with the tools off, the "Show Roads and Walls" map button under Undo
     (`showMapData`, `G.ToggleMapData`: `showRoads` and `showWalls` together; also /agps roads|walls).
