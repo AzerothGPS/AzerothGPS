@@ -1581,6 +1581,10 @@ function N.Route(px, py, cont)
     if old and not Follow(old, px, py) then
       local rj = Rejoin(old, px, py, cont, offroad)
       if rj then Apply(rj, nil, px, py, cont, offroad, now) end
+    elseif old and N.route == nil then
+      -- (still on it, the route dropped for a finished search's recalculation: shown meanwhile, not
+      -- "Working out the route..." with no route every few seconds while riding past searched ground)
+      N.route = old
     end
     ns.Router.Background("route:" .. version .. ":" .. tostring(offroad), function()
       return Compute(px, py, cont, d, offroad)

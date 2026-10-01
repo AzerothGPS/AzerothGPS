@@ -64,6 +64,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - In a city with its own inside map (Ironforge, Undercity), zooming out stops at the city's map instead of turning to the land around it; right-click for the outside. Coming into the city zoomed far out, the map zooms in to it.
 - The map's title says the city you're in (Ironforge, not Dun Morogh).
 - The Deeprun Tram has its map (it was blank), with its name in the title.
+- While riding (or walking) past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...": it stays shown now while it's worked out again.
 - A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.

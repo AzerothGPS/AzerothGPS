@@ -882,3 +882,24 @@ def test_the_deeprun_tram_has_its_map(game):
     finally:
         lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
         G.Follow()
+
+
+def test_the_route_stays_shown_while_a_finished_search_works_it_out_again(game):
+    # (reported, a video: riding in Mulgore, "Working out the route..." and no route every few seconds) a
+    # finished background search drops the route for a recalculation; a long one is worked out in the
+    # background, and the player still on the old one sees it meanwhile, not nothing
+    lua, ns = game
+    N, R = ns.Nav, ns.Router
+    x, y = 2254.0, 293.0  # (Brill; the Sepulcher, 2.2k yd: a walk the background works out)
+    try:
+        N.SetStops(lua.eval("{ { x = 507, y = 1594, cont = 0, name = 'Sepulcher' } }"), False, "red")
+        assert N.Route(x, y, 0)  # (the road data and the first route, at once)
+        R.WARM, R.SYNC_WALKS = True, False
+        assert N.route and not N.warming
+        N.SearchDone()  # (a search from the player finished)
+        lua.execute("AGPS_T = AGPS_T + 10")
+        assert N.Route(x, y, 0) is not None and not N.warming
+        assert "Working out" not in str(N.StepsText())
+    finally:
+        R.WARM, R.SYNC_WALKS = False, True
+        N.Clear()
