@@ -1488,14 +1488,17 @@ function G.DownInCityAt(cont, x, y)
   if P and P.InGrid and not P.InGrid(lvl, x, y) then return nil end
   return lvl
 end
--- Whether the view's middle (cx, cy) is over the capital the player is in (px, py): its own cells, the
--- player within CITY_VIEW_YD (a capital is smaller than that; none lies that close to another).
+-- Whether the view's middle (cx, cy) is over the capital the player is in (px, py): anywhere in its grid's
+-- rectangle (the rock between Ironforge's halls too: over it the map flipped to the outside, a video
+-- 2026-10-01), the player within CITY_VIEW_YD.
 G.CITY_VIEW_YD = 900
 function G.OverCity(cont, px, py, cx, cy)
-  local R = ns.Router
-  if not (R and R.CapitalAt) then return false end
+  local R, P = ns.Router, ns.Passability
+  if not (R and R.CapitalAt and P and P.CapitalGridAt) then return false end
   if (cx - px) ^ 2 + (cy - py) ^ 2 > G.CITY_VIEW_YD ^ 2 then return false end
-  return R.CapitalAt(cont, px, py) and R.CapitalAt(cont, cx, cy) or false
+  if not R.CapitalAt(cont, px, py) then return false end
+  local g = P.CapitalGridAt(cont, px, py)
+  return g ~= nil and g == P.CapitalGridAt(cont, cx, cy)
 end
 local fromTerrain -- world-map browsing started by right-clicking the terrain view
 local openedFrom -- the view a city's or dungeon's map was opened from (right-click goes back to it)
@@ -2337,6 +2340,13 @@ function G.Update()
   end
   -- (the city's map on the player: zoomed out no further than CITY_MAX_ZOOM, G.WheelZoom)
   G.cityMap = place and inCity and not free or false
+  -- (its map shown, the capital's grid and its map: the title names the city anywhere in it, the rock
+  -- between its halls too, G.InfoParts)
+  G.cityGrid, G.cityGridMap = nil, nil
+  if place and inCity and ns.Passability and ns.Passability.CapitalGridAt then
+    G.cityGrid = ns.Passability.CapitalGridAt(cont, px, py)
+    G.cityGridMap = G.cityGrid and G.CityMapAt(cont, px, py) or nil
+  end
   if G.cityMap and S().zoom > G.CITY_MAX_ZOOM then
     S().zoom = G.CITY_MAX_ZOOM
     elapsed = 1
@@ -2927,6 +2937,11 @@ InfoParts = function()
   end
   if x and view.instance and ns.Instances[view.instance] then -- (a dungeon's map)
     return mark, ns.Instances[view.instance].name, string.format("%.0f, %.0f", x, y)
+  end
+  local cm = G.cityGridMap and ns.Maps and ns.Maps[G.cityGridMap]
+  if x and cm and cm.bounds and ns.Passability.InGridRect(G.cityGrid, x, y) then -- (the city's map shown: its name)
+    local b = cm.bounds
+    return mark, cm.name, string.format("%.1f, %.1f", (b[4] - y) / (b[4] - b[2]) * 100, (b[3] - x) / (b[3] - b[1]) * 100)
   end
   if x and view.cont then
     local _, name, u, v = G.LocateWorld(view.cont, x, y)

@@ -1229,6 +1229,15 @@ def test_panning_in_a_city_keeps_its_map(game):
         spots = [(-4840.0 + dx, -1100.0 + dy) for dx, dy in ((0, 160), (-150, 120), (120, -80), (-180, -60))]
         spots = [s for s in spots if R.CapitalAt(0, s[0], s[1])]
         assert len(spots) >= 2
+        # (and over the rock between its halls: not the city's own cells, but in its grid; the map flipped
+        # to the outside there, a second video)
+        P = ns.Passability
+        grid = P.CapitalGridAt(0, -4840.0, -1100.0)
+        rock = [(-4840.0 + dx, -1100.0 + dy) for dx in range(-240, 241, 40) for dy in range(-240, 241, 40)]
+        same = lua.eval("rawequal")
+        rock = [s for s in rock if not R.CapitalAt(0, s[0], s[1]) and same(P.CapitalGridAt(0, s[0], s[1]), grid)]
+        assert grid is not None and len(rock) >= 3
+        spots += rock[:4]
         for x, y in spots:  # (looked at from the player: the view's middle there, further than its 1.5 zooms)
             G.LookAt(0, x, y, 60.0)
             lua.execute("AGPS_T = AGPS_T + 1")

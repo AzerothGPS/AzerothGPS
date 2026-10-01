@@ -496,6 +496,23 @@ local function OverlayRaw(cont, x, y, floors)
 end
 P.OverlayRaw = OverlayRaw
 
+-- Whether (x, y) is within grid `o`'s rectangle (any of its cells: the continent's too).
+function P.InGridRect(o, x, y)
+  local col, row = ToCell(o, x, y)
+  return row >= 1 and row <= o.h and col >= 1 and col <= o.w
+end
+-- The capital's grid (Data/Capitals.lua) whose rectangle holds (x, y), the biggest there (the city's
+-- own, not a floor under it), its own cells or not: the rock between Ironforge's halls too. Nil: none.
+function P.CapitalGridAt(cont, x, y)
+  local ix = OverlayIndex(cont)
+  local list = ix and ix.b[math.floor(x / OV_BUCKET) * 65536 + math.floor(y / OV_BUCKET)]
+  local best
+  for _, o in ipairs(list or {}) do
+    if o.capital and P.InGridRect(o, x, y) and (not best or o.w * o.h > best.w * best.h) then best = o end
+  end
+  return best
+end
+
 -- An overlay's value at (x, y) (0 open, 2 closed), or nil where the continent's grid holds.
 -- (A capital's floor under another: the one over it, which a straight line there stays on.)
 local function Overlay(cont, x, y)
