@@ -275,6 +275,86 @@ def test_an_erasure_down_in_a_cave_leaves_the_land_roads_over_it(tmp_path):
     assert len(g.edges) == 1
 
 
+def test_roads_drawn_and_erased_down_in_a_cave_go_on_its_roads(tmp_path, monkeypatch):
+    # (caves.drawn_fixes: the addon puts them on the cave's roads until they ship, then drops the track
+    # (ns.RoadTracksIn), so Data/Caves.lua must have them: else an erased cave road came back, and a drawn
+    # one was a land road only)
+    import re
+    from types import SimpleNamespace
+
+    from azerothgps import caves, paths
+    from azerothgps.roads import terrain
+
+    X0, Y0, N = 1000, 2000, 100  # (the cave's grid: a yard a cell, rows along X, columns along Y)
+    ground = np.zeros((N, N), bool)
+    ground[75:, :] = True  # (the ground at its mouth)
+    ground[20:41, :6] = True  # (... and at a side opening)
+    overlay = np.where(ground, caves.CONT, caves.OPEN).astype(np.uint8)
+    overlay[10:30, 55:95] = caves.FLOOR_UNDER  # (a hill over it there)
+    g = RoadGraph()
+    a, j, m1, b = (g.add_node(p) for p in ((1010, 2050), (1030, 2050), (1085, 2050), (1030, 2003)))
+    for p, q in ((a, j), (j, m1), (j, b)):  # (its tunnel to the mouth, and a side tunnel to the opening)
+        g.add_edge(p, q, np.linspace(g.nodes[p], g.nodes[q], 10))
+    u = {"graph": g, "H": N, "W": N, "footprint": ~ground, "walk": np.ones((N, N), bool), "ground": ground,
+         "overlay": overlay, "world_to_px": lambda x, y: (int(x - X0), int(y - Y0)), "stair_z": {},
+         "is_open": lambda x, y: True, "height_at": lambda x, y: 0.0, "tx0": 30.0, "ty0": 30.0}
+
+    class Finder:  # (the ways out: on to the land's road just outside)
+        def __init__(self, grid, roads):
+            pass
+
+        def walk(self, p, inside, blocked_max=None):
+            return 10.0, [p, (p[0] + 10, p[1]) if p[0] > 1080 else (p[0], p[1] - 8)]
+
+    place = SimpleNamespace(uid=7, x=1040.0, y=2050.0)
+    monkeypatch.setattr(caves, "Ground", lambda cd, cont: None)
+    monkeypatch.setattr(caves, "shipped_roads", lambda cont: line_graph(((1095, 1900), (1095, 2200))))
+    monkeypatch.setattr(terrain, "continent_grid", lambda cd, cont, log=None: {
+        "cells": np.zeros((4, 4), np.uint8), "tileX0": 0, "tileY0": 0, "cellYd": 4.0})
+    monkeypatch.setattr(caves, "RoadFinder", Finder)
+    monkeypatch.setattr(caves, "find_caves", lambda cd, cont: [(place, "world/wmo/dungeon/md_mountaincave/t.wmo", "Test Cave")])
+    monkeypatch.setattr(caves, "build_cave", lambda *a, **k: u)
+    monkeypatch.setattr(paths, "RESOURCES", tmp_path)
+    rec = {"source": "recorded", "trim": True, "z": 40.0, "indoors": True}
+
+    def feat(op, coords, **props):
+        return {"type": "Feature", "properties": {"op": op, **rec, **props},
+                "geometry": {"type": "LineString", "coordinates": coords}}
+
+    (tmp_path / "overrides").mkdir()
+    (tmp_path / "overrides" / "roads_1.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": [
+        feat("remove", [[1025, 2008], [1035, 2008]], down=True),  # the side tunnel and its opening's way out
+        feat("add", [[1050, 2052], [1050, 2066], [1050, 2080]], down=True),  # a tunnel off the main one
+        feat("add", [[1020, 2060], [1020, 2075], [1020, 2090]], indoors=False),  # up on the hill: the land's
+        feat("add", [[1090, 2010], [1090, 2025], [1090, 2040]], down=True),  # over the ground outside: not its
+    ]}))
+    text = caves.caves_lua(SimpleNamespace(casc=SimpleNamespace(version="test")), continents=(1,),
+                           log=lambda *a: None, data_dir=tmp_path)
+
+    def near(x, y, yd):
+        from azerothgps.roads.graph import _dist_to_polyline
+
+        return any(_dist_to_polyline(np.array([x, y], float), e.pts) <= yd for e in g.edges.values())
+
+    drawn = [e for e in g.edges.values() if e.source == "override"]
+    assert len(drawn) == 1 and {tuple(np.round(g.nodes[n])) for n in (drawn[0].a, drawn[0].b)} == {(1050, 2050), (1050, 2080)}
+    assert g.degree()[next(n for n in g.nodes if tuple(np.round(g.nodes[n])) == (1050, 2050))] == 3  # (joined on)
+    assert not near(1030, 2008, 5) and b not in g.nodes  # (erased, the opening's way out too)
+    assert near(1030, 2035, 1)  # (the rest of the side tunnel stays)
+    assert not near(1020, 2075, 3) and not near(1090, 2025, 3)
+    assert [tuple(q) for _, q in u["joins"]] == [(1095, 2050)] and u["mouths"] == [m1]
+    # (as written: the joins and the gap links' nodes are nodes that are there)
+    nodes = [float(v) for v in re.search(r"^  n = \{([^}]*)\},$", text, re.M).group(1).split(",")]
+    xy = list(zip(nodes[::2], nodes[1::2]))
+    assert (1050, 2080) in xy and (1030, 2003) not in xy and (1030, 1995) not in xy
+
+    def listed(key):
+        return [xy[int(i) - 1] for i in re.search(r"^  %s = \{([^}]*)\},$" % key, text, re.M).group(1).split(",") if i]
+
+    assert listed("joins") == [(1095, 2050)]
+    assert sorted(listed("bridge")) == [(1085, 2050), (1095, 2050)]
+
+
 def test_shipped_times_list_the_drawn_roads_in_the_overrides(tmp_path):
     from azerothgps.roads.tracks import shipped_times
 

@@ -14,7 +14,7 @@ Lordaeron over Undercity (cities.py):
   the ground at each mouth), all caves of a continent in one entry of
   ns.RoadOverlays[continent]. From each mouth a road runs on to the continent's nearest road
   reached on foot (RoadFinder: a walk over its grid), and ends on it (`joins`: the addon ties
-  it there, Router.JoinOnto).
+  it there, Router.JoinOnto). The roads drawn and erased in game down in it go on them (drawn_fixes).
 `agps caves` renders each one (data/debug/caves/) and lists what's covered and skipped.
 """
 
@@ -307,6 +307,59 @@ def shipped_roads(cont: int):
     return g
 
 
+def drawn_fixes(built: list, cont: int, log=print) -> dict:
+    """The roads drawn and erased in game down in a cave (overrides/roads_<continent>.geojson, those
+    marked `down`: the addon's G.EditFloor) that lie mostly over a cave's own cells (its grid's values
+    other than the continent's), applied to that cave's roads (roads.graph.apply_overrides, a city's
+    rules), as the addon's Router.WithTracks had them before they shipped: a road drawn down in a cave
+    is one of its roads, and an erasure there cuts its roads (roads.build.finish_continent leaves the
+    land's). As capitals.drawn_fixes does for a capital's floors under others. The ways out an erasure
+    took away leave `joins` and `mouths`. {placement uid: stats}."""
+    import tempfile
+    from pathlib import Path
+
+    from .paths import RESOURCES
+    from .roads.graph import apply_overrides
+
+    src = RESOURCES / "overrides" / f"roads_{cont}.geojson"
+    if not built or not src.exists():
+        return {}
+    doc = json.loads(src.read_text(encoding="utf-8"))
+
+    def share(u, c):  # (of the line's points, those over the cave's own cells)
+        cells = u["overlay"]
+        H_, W_ = cells.shape
+        n = 0
+        for p_ in c:
+            r, col = u["world_to_px"](p_[0], p_[1])
+            n += 0 <= r < H_ and 0 <= col < W_ and cells[r, col] != CONT
+        return n / len(c)
+
+    mine = defaultdict(list)
+    for f in doc.get("features", []):
+        c = f["geometry"]["coordinates"]
+        if not c or not f.get("properties", {}).get("down"):
+            continue
+        # (the cave it's most over, where caves' grids overlap)
+        s, i = max(((share(u, c), i) for i, u in enumerate(built)), key=lambda t: (t[0], -t[1]))
+        if s >= 0.5:
+            mine[i].append(f)
+    stats = {}
+    for i, feats in sorted(mine.items()):
+        u = built[i]
+        g = u["graph"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixes.geojson"
+            path.write_text(json.dumps({"type": "FeatureCollection", "features": feats}), encoding="utf-8")
+            st = apply_overrides(g, path, city=True)
+        log(f"    {u.get('name') or 'cave'} ({u['uid']}): {len(feats)} drawn fixes down in it: {st}")
+        stats[u["uid"]] = st
+        # (its ways out that an erasure took away)
+        u["joins"] = [(j, q) for j, q in u["joins"] if j in g.nodes]
+        u["mouths"] = [m for m in u["mouths"] if m in g.nodes]
+    return stats
+
+
 def build_continent(cd: ClientData, cont: int, data_dir, log=print, only=None, report=None) -> list[dict]:
     """Every cave on a continent: its overlay grid, roads and mouths (with the entrance
     roads out to the continent's roads)."""
@@ -437,6 +490,8 @@ def build_continent(cd: ClientData, cont: int, data_dir, log=print, only=None, r
             report.append((cont, name, p.uid, path, "covered",
                            f"({p.x:.0f}, {p.y:.0f}): {g.total_length():.0f} yd of road, {len(mouths)} mouths, "
                            f"{sum(1 for _, q in joins if q)} joined to a road, {under * 100:.0f}% of its floor under walkable ground"))
+    # the roads drawn and erased in game down in a cave: on its roads, as the addon had them
+    drawn_fixes(out, cont, log)
     return out
 
 

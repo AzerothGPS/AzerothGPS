@@ -137,8 +137,9 @@ The addon is going public, so every change must keep it policy-safe:
     and other floors' roads and walls draw faint (`G.OtherFloor`: the graph's `otherFloors`, made in
     BuildGraph from `floorsAt` for an underground city). Offline: `roads.graph.LayerFloors`
     (`cities.py`), `capitals.drawn_fixes` (a `down` edit over a floor under the city goes on those
-    roads), `finish_continent` (a `down` erasure leaves the land's roads); imports and the share text
-    carry `z`, `indoors`, `down`.
+    roads), `caves.drawn_fixes` (a `down` edit mostly over a cave's own cells goes on its roads, in
+    `build_continent`: after one, `caves --write`), `finish_continent` (a `down` erasure leaves the
+    land's roads); imports and the share text carry `z`, `indoors`, `down`.
   - `Feedback.lua`: opt-in road and trip data.
   - `Options.lua`: the paged options window and the minimap button.
   - `Config.lua`: slash commands.
