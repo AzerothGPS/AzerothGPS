@@ -1115,6 +1115,7 @@ local ROAD_COLORS = { [0] = { 1, 0.35, 0.1 }, [1] = { 0.1, 0.9, 1 }, [2] = { 0.3
   [8] = { 0.85, 0.78, 0.6 } } -- 6: quest areas, 7: walls, 8: a dungeon's walls (its map)
 -- Route segment kinds -> { color, width, dotted }: road, off-road, transport ride, far-side walk.
 local ROUTE_STYLE = { [0] = { 3, 5, false }, [1] = { 3, 4, true }, [2] = { 4, 4, true }, [3] = { 5, 3, true } }
+ROUTE_STYLE[5], ROUTE_STYLE[6] = ROUTE_STYLE[2], ROUTE_STYLE[2] -- (a lift down or up, Router.KIND_LIFT_*: as a ride)
 local DASH, GAP = 7, 5 -- off-road route legs are dotted (UI units)
 G.HEADING_UP_LOW = 0.6 -- heading-up, following: the player this share of the half below the middle
 G.DETOUR_COLOR = { 0.62, 0.40, 0.18 } -- brown: the detour to a flight master not learned yet (Nav.LearnOnRoute)

@@ -43,6 +43,11 @@ The addon is going public, so every change must keep it policy-safe:
 - **Party members' positions are given** (probed grouped): `UnitPosition("party1")` returns their
   world position, and the other player needs no addon (`GPS.party.io.members`, round class icons).
 - **Old button art is missing** (e.g. `UI-PlusButton-Up`): draw simple controls instead.
+- **The player's height:** `UnitPosition`'s third value is always 0 here (the saved probes, Undercity
+  included), so `Nav.PlayerZ` is nil in game: anything by the player's height (Router's `opts.z`, the
+  road and wall tools' `z`, `CaveDown`'s `split`/`zsplit`) falls back (a split with no height: down;
+  a level with heights: every floor). `IsIndoors` is the only floor cue, and it says outdoors in
+  Ironforge's halls.
 
 ## Layout
 
@@ -258,8 +263,10 @@ The addon is going public, so every change must keep it policy-safe:
     (Thunder Bluff's mesas, Darnassus: `ground_above`) takes that ground in too; its gates'
     ways to the land's roads may not cross blocked ground (`join_blocked`), and a lift
     (`lifts`: Thunder Bluff's from Mulgore, shafts from the cmangos DB's "Mesa Elevator") is a
-    road from the city's road up top down onto the land's road at its foot, its length
-    counting the wait and the ride (`LIFT_SECONDS`). In a
+    road from the city's road up top down onto the land's road at its foot (`LIFT_FOOT_REACH`,
+    `LIFT_FOOT_Z`: none joined before), its length counting the wait and the ride (`LIFT_SECONDS`);
+    written as source 5, a route over it is kind `Router.KIND_LIFT_UP`/`DOWN` (drawn as a ride) and
+    Turns says "Take the lift up" (or down), as Undercity's lifts (rides) are said. In a
     capital, legs off the roads are straight (no terrain walk: its grid is coarser than the
     streets and blind to levels), gap links through closed cells are shut, and no joining the
     roads partway (`Router`'s `JOIN_ALONG_MAX` joins skip capitals, cities and caves); `route-check` leaves out trips from or to a capital's

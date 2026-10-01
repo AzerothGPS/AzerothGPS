@@ -180,12 +180,17 @@ function T.Maneuvers(path, stopLabel)
     end
   end
   local DROP = R and R.KIND_DROP or 4
-  local function roadish(k) return k == 0 or k == DROP end
+  local DOWN, UP = R and R.KIND_LIFT_DOWN or 5, R and R.KIND_LIFT_UP or 6
+  local function roadish(k) return k == 0 or k == DROP or k == DOWN or k == UP end
   for i = 2, #cum - 1 do
     local s = cum[i]
     -- a drop off a ledge starts here (said however near it is)
     if kinds[i] == DROP and kinds[i - 1] ~= DROP then
       out[#out + 1] = { dist = s, kind = "drop", text = "Jump down here" }
+    end
+    -- a lift (Thunder Bluff's): taken here, up or down
+    if (kinds[i] == UP or kinds[i] == DOWN) and kinds[i - 1] ~= kinds[i] then
+      out[#out + 1] = { dist = s, kind = "lift", text = kinds[i] == UP and "Take the lift up" or "Take the lift down" }
     end
     if s >= T.MIN_AHEAD then
       local a = Bend(path, s)

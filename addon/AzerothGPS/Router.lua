@@ -14,6 +14,9 @@ ns.Router = R
 R.OFFROAD_PENALTY = 1.25 -- road mode: off-road yards cost this much more than road yards
 R.KIND_ROAD, R.KIND_OFFROAD = 0, 1
 R.KIND_DROP = 4 -- off a ledge onto the floor below (Nav's own kinds are 2 and 3)
+-- a lift (Thunder Bluff's: a road from its top to its foot, Data/Capitals.lua's source 5, its length
+-- the wait and the ride), down it or up it: "Take the lift up" (Turns), as Undercity's lifts are rides
+R.SOURCE_LIFT, R.KIND_LIFT_DOWN, R.KIND_LIFT_UP = 5, 5, 6
 R.DROP_COST = 30 -- yards a drop counts extra: taken only when it saves real distance
 R.OFFROAD_LINKS = 24 -- offroad mode: straight links tried from start/destination to road nodes
 R.OFFROAD_LINK_MAX = 3000 -- yards
@@ -2245,6 +2248,7 @@ local function Build(g, pieces)
     Breathe(pi, 12) -- (in a background job: a pause now and then)
     if p.edge then
       local kind = g.drops and g.drops[p.edge] and R.KIND_DROP or R.KIND_ROAD
+      if g.e[p.edge][4] == R.SOURCE_LIFT then kind = p.from <= p.to and R.KIND_LIFT_DOWN or R.KIND_LIFT_UP end
       for _, q in ipairs(EdgePoints(g.e[p.edge], p.from, p.to)) do add(q[1], q[2], kind, zs and R.EdgeZ(g, p.edge, q[3])) end
     else
       if p.gap then blocked = blocked + Dist(p[2], p[3], p[4], p[5]) end

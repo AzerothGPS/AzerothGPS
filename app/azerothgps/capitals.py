@@ -33,7 +33,10 @@ from .extract.spike import ClientData
 from .roads.terrain import encode_row
 
 FLOOR_SLOPE = 0.64  # a floor's normal at least this upright (about 50 degrees)
-LIFT_REACH = 40.0  # yards: a lift's shaft joins the roads this near it, up top and at its foot
+LIFT_REACH = 40.0  # yards: a lift's shaft joins the city's roads this near it up top
+LIFT_FOOT_REACH = 100.0  # ... and the land's road this near its foot (over the ground: Mulgore's road
+#                          runs 42-50 yd from Thunder Bluff's shafts, and no lift was joined: 2026-09-30)
+LIFT_FOOT_Z = 15.0  # ... at about the foot's height (the lifts' spots are ~9 yd over the ground; a mesa's top, 100 up)
 LIFT_SECONDS = 20  # waiting for a lift and the ride
 GATE_REACH = 80.0  # yards: the ground this near a gate is where the city is walked into
 GROUND_REACH = 30.0  # yards: the ground outside a gate taken into the city's grid
@@ -710,12 +713,13 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
                 near = [(best[0], n)]
         land = []
         if finder is not None:
-            cand = [q for q in finder.road.values() if math.hypot(q[0] - lx, q[1] - ly) <= LIFT_REACH]
+            cand = [q for q in finder.road.values() if math.hypot(q[0] - lx, q[1] - ly) <= LIFT_FOOT_REACH]
             if cand:
                 h, _ = ground.sample(np.array([q[0] for q in cand]), np.array([q[1] for q in cand]))
-                land = sorted((math.hypot(q[0] - lx, q[1] - ly), q) for q, z in zip(cand, h) if abs(z - lz) < 8)
+                land = sorted((math.hypot(q[0] - lx, q[1] - ly), q) for q, z in zip(cand, h) if abs(z - lz) < LIFT_FOOT_Z)
         if not near or near[0][0] > LIFT_REACH or not land:
-            log(f"  {cap.name}: lift at ({lx:.0f}, {ly:.0f}) not joined")
+            log(f"  {cap.name}: lift at ({lx:.0f}, {ly:.0f}) not joined (up top: "
+                f"{f'{near[0][0]:.0f} yd' if near else 'no road'}; at its foot: {'a road' if land else 'none'})")
             continue
         end = g.add_node(land[0][1])
         g.add_edge(near[0][1], end, [g.nodes[near[0][1]], (lx, ly), land[0][1]], source="lift")
@@ -1000,7 +1004,7 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
         def roads(label, parts, cave):
             """One entry of the overlays: the parts (nodes, edges, drops, joins, bridge or None,
             extra yards per edge) one after the other, their node numbers moved on."""
-            n_all, e_all, joins, bridge, drops = [], [], [], [], {}
+            n_all, e_all, joins, bridge, drops, lifts = [], [], [], [], {}, set()
             for nodes, edges, dr, jn, br, extra in parts:
                 base = len(n_all)
                 for i, (a, b, pts) in enumerate(edges):
@@ -1011,6 +1015,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                         pts = pts * 2
                     length = sum(math.hypot(q[0] - p_[0], q[1] - p_[1]) for p_, q in zip(pts, pts[1:]))
                     length += (extra or {}).get(i, 0)  # (a lift: its wait and ride, as yards walked)
+                    if i in (extra or {}):
+                        lifts.add(len(e_all))
                     if i in dr:
                         drops[len(e_all)] = dr[i]
                     e_all.append((a + base, b + base, length, pts))
@@ -1023,7 +1029,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
             out.append("  n = {" + ",".join(f"{x:.0f},{y:.0f}" for x, y in n_all) + "},")
             out.append("  e = {")
             for i, (a, b, length, pts) in enumerate(e_all):
-                out.append(f"    {{{a + 1},{b + 1},{length:.0f},{3 if i in drops else 0},\"{pack_points(pts)}\"}},")
+                src = 3 if i in drops else 5 if i in lifts else 0  # (5: a lift, its top to its foot: Router.SOURCE_LIFT)
+                out.append(f"    {{{a + 1},{b + 1},{length:.0f},{src},\"{pack_points(pts)}\"}},")
             out.append("  },")
             out.append("  joins = {" + ",".join(str(j + 1) for j in joins) + "},")
             if cave:
@@ -1083,16 +1090,20 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
 JUMP_TOL = 3.0  # yards: a step up or down from one sample to the next (half a yard on)
 JUMP_CLIP = 5  # samples: a corner clipped (no floor about the height) before it counts
 JUMP_MAX = 8.0  # yards: a jump bigger than this between levels is flagged (steep stairs are less)
+CLIMB_MAX = 8.0  # yards: a route up over both its ends and back down by more than this is marked "^"
 
 
-def walk_3d(u: dict, pts, kinds, lifts=()) -> tuple:
+def walk_3d(u: dict, pts, kinds, lifts=(), with_climb: bool = False) -> tuple:
     """Whether a route stays on the city's floors in 3D: the heights a walk along it may be at
     (every floor within JUMP_TOL of the last sample's), sample by sample, half a yard apart;
     drops (kind 4) may go down, and a lift's shaft (lifts: (x, y, z)) up or down. The worst jump
-    between levels (yards) and where, or (0, None)."""
+    between levels (yards) and where, or (0, None). `with_climb`: and how far it must go up over
+    both its ends (the lowest floor it may be on, at its highest) and back down: a way up a stair
+    and down again (Ironforge's trainers, asked 2026-09-30)."""
     bands, wall3, Z0 = u["bands"], u["wall3"], u["Z0"]
     H, W = u["H"], u["W"]
     zs, worst, where, miss = None, 0.0, None, 0
+    lows = []
     for i, kd in enumerate(kinds):
         (x1, y1), (x2, y2) = pts[i], pts[i + 1]
         n = max(1, int(math.hypot(x2 - x1, y2 - y1) / 0.5))
@@ -1120,6 +1131,10 @@ def walk_3d(u: dict, pts, kinds, lifts=()) -> tuple:
                 nz = fz
             miss = 0
             zs = nz
+            lows.append(min(zs))
+    if with_climb:
+        climb = max(lows) - max(lows[0], lows[-1]) if lows else 0.0
+        return worst, where, climb
     return worst, where
 
 
@@ -1142,7 +1157,7 @@ def check_routes(built: list, log=print) -> list:
             road = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
                        for i, k in enumerate(kinds) if k == 0)
             last = math.hypot(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
-            jump, where = walk_3d(u, pts, kinds, cap.lifts)
+            jump, where, climb = walk_3d(u, pts, kinds, cap.lifts, with_climb=True)
             closed = 0.0  # (yards of the legs off the roads through the city's closed cells)
             for i, k in enumerate(kinds):
                 if k == 1:
@@ -1153,7 +1168,8 @@ def check_routes(built: list, log=print) -> list:
                                   if ns.Passability.Overlay(cap.cont, x1 + (x2 - x1) * s / n, y1 + (y2 - y1) * s / n) == 2)
             bad = jump > JUMP_MAX or closed > 5
             out.append(f"{'!' if bad else ' '} {cap.name}: {name}: {r.length:.0f} yd, {road / max(r.length, 1):.0%} on roads, "
-                       f"last leg {last:.0f} yd, {closed:.0f} yd off the roads through closed cells, 3D jump {jump:.0f} yd"
+                       f"last leg {last:.0f} yd, {closed:.0f} yd off the roads through closed cells, 3D jump {jump:.0f} yd, "
+                       f"climb {climb:.0f} yd{' ^' if climb > CLIMB_MAX else ''}"
                        + (f" ({where[0]} at {where[1]}, {where[2]})" if where else ""))
             log(out[-1])
     return out

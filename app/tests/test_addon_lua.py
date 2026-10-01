@@ -2214,17 +2214,18 @@ def check_capital_route(ns, cont, r):
     the last leg's yards)."""
     P = ns.Passability
     pts, kinds = route_pts(r)
-    road = closed = 0.0
+    road = closed = drawn = 0.0
     for i, k in enumerate(kinds):
         (x1, y1), (x2, y2) = pts[i], pts[i + 1]
         d = math.hypot(x2 - x1, y2 - y1)
-        road += d if k == 0 else 0
+        drawn += d
+        road += d if k in (0, 4, 5, 6) else 0  # (roads, drops off ledges, lifts)
         if k == 1:
             n = max(1, int(d))
             closed += sum(d / (n + 1) for s in range(n + 1)
                           if P.Overlay(cont, x1 + (x2 - x1) * s / n, y1 + (y2 - y1) * s / n) == 2)
     last = math.hypot(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
-    return road / r.length, closed, last
+    return road / max(drawn, 1), closed, last  # (of the way drawn: a lift's length counts its wait too)
 
 
 ORGRIMMAR_OUTSIDE = (1310.0, -4388.0)  # (on Durotar's road, outside the front gate)
@@ -2337,6 +2338,13 @@ def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
     assert share > 0.85 and closed < 5 and last < 25  # (the streets: see above)
     pts, _ = route_pts(r)
     assert min(math.dist(p, q) for p in pts for q in ((-1286.2, 189.7), (-1308.4, 185.3))) < 12  # (the lift)
+    # (asked: as Undercity's, the lift said: "Take the lift up", the route over it drawn as a ride)
+    _, kinds = route_pts(r)
+    assert ns.Router.KIND_LIFT_UP in kinds
+    load(lua, ns, "Turns.lua")
+    part = lua.table(pts=r.pts, kinds=r.kinds, cont=1, stop=1)
+    ms = ns.Turns.Maneuvers(ns.Turns.Path(lua.table(parts=lua.table(part))))
+    assert any(str(ms[i].text) == "Take the lift up" for i in range(1, len(ms) + 1))
 
 
 def test_thunder_bluff_places_are_reached_on_its_roads(capitals_env):
