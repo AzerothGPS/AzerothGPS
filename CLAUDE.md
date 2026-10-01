@@ -409,7 +409,9 @@ The addon is going public, so every change must keep it policy-safe:
     `app/azerothgps/extract/dbd/` (written by hand). `agps instances` renders each into
     `data/debug/instances/` with `summary.txt` (covered, skipped and why); `--write` writes the
     file; `--check` routes from the entrance to every boss and walks the routes in 3D ("!": a
-    jump between levels, a long last leg, yards through closed cells).
+    jump between levels, a long last leg, yards through closed cells). It routes as the game's
+    `G.SuggestedPath` does (`instances.boss_route`: from the way in's height to the boss's): without
+    them the start took the road nearest in 2D, Scholomance's on the hall under its way in.
   - `Data/CityPlaces.lua`: capitals' service locations (map %), shown once a guard in that
     city has been talked to (`Layers.RevealCity`, account-wide); a stop still comes from
     asking a guard. Each has a 4th value, its NPC's height (world yards, from the CMaNGOS

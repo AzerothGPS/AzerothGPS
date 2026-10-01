@@ -839,6 +839,21 @@ JUMP_MAX = 8.0  # yards: a jump bigger than this between levels is flagged
 LAST_MAX = 25.0  # yards: a last leg off the roads longer than this is flagged
 
 
+def boss_route(lua, R, level: int, entrances: list, b: dict) -> tuple:
+    """The route from a dungeon's way in to a boss, as the game's (G.SuggestedPath): from the nearest
+    way in (an instance of wings, the Scarlet Monastery's, has one each), roads only, from its height to
+    the boss's (opts.z / opts.tz: where floors lie over each other they pick the floors; without them the
+    start took the road nearest in 2D, Scholomance's on the floor 28 yd under its way in). (entrance, route)."""
+    e = min(entrances, key=lambda e: math.hypot(e[4] - b["x"], e[5] - b["y"]))
+    opts = {"offroad": False}
+    if e[6] is not None:
+        opts["z"] = e[6]
+    if b.get("z") is not None:
+        opts["tz"] = b["z"]
+    R.Reset()
+    return e, R.Route(level, e[4], e[5], b["x"], b["y"], lua.table(**opts))
+
+
 def check_routes(built: list, log=print, text: str | None = None) -> list:
     """Routes (the addon's own, under lupa, over Data/Instances.lua as written, or `text`)
     from each entrance to every boss, and the 3D walk over the floors (capitals.walk_3d): "!"
@@ -873,10 +888,7 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
         for b in inst.bosses:
             if b["x"] is None:
                 continue
-            # (from the nearest way in: an instance of wings, the Scarlet Monastery's, has one each)
-            e = min(inst.entrances, key=lambda e: math.hypot(e[4] - b["x"], e[5] - b["y"]))
-            R.Reset()
-            r = R.Route(L, e[4], e[5], b["x"], b["y"], lua.table(offroad=False))
+            e, r = boss_route(lua, R, L, inst.entrances, b)
             if not r or not r.pts:
                 out.append(f"! {inst.name}: {b['name']}: no route")
                 log(out[-1])

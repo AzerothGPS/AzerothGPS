@@ -11,6 +11,7 @@ pytest.importorskip("lupa")
 
 DM = 20036  # the Deadmines' level (instances.LEVEL_BASE + its MapID)
 WC = 20043  # Wailing Caverns'
+SCHOLO = 20289  # Scholomance's
 DM_INSIDE = (-14.6, -385.5)  # where the portal puts you
 VANCLEEF = (-87.4, -819.9)
 SENTINEL_HILL = (-10630.0, 1040.0)  # Westfall, on the continent
@@ -70,6 +71,39 @@ def test_route_to_a_boss_follows_the_instances_roads(inst_env):
     for i, k in enumerate(kinds):
         if k == 1:
             assert math.dist(pts[i], pts[i + 1]) < 25, (pts[i], pts[i + 1])
+
+
+def test_scholomances_boss_routes_keep_to_the_floors_from_its_way_in(inst_env):
+    # (agps instances --check flagged every Scholomance boss: a 31 yd jump at road (182, 127). Its way in
+    # (z 137) is over a hall (z 110) whose road runs right under it, and the check routed without heights:
+    # the start took that road, a floor down. The check's route (instances.boss_route) has the way in's
+    # height and the boss's, as G.SuggestedPath in game: along the corridor and down its ramp.)
+    from azerothgps.instances import JUMP_MAX, boss_route
+    lua, ns = inst_env
+    R = ns.Router
+    info = ns.Instances[SCHOLO]
+    le = info.entrances[1]  # { continent, x, y, x, y, z inside }
+    entrances = [(le[1], le[2], le[3], None, le[4], le[5], le[6])]  # (as instances.entrances')
+    bs = info.bosses
+    n = 0
+    for i in range(1, len(bs) + 1):
+        if bs[i][3] is None:
+            continue
+        b = {"name": bs[i][1], "x": bs[i][3], "y": bs[i][4], "z": bs[i][5]}
+        e, r = boss_route(lua, R, SCHOLO, entrances, b)
+        assert r and r.zs, b["name"]
+        pts, kinds = pts_kinds(r)
+        zs = [r.zs[k] for k in range(1, len(r.zs) + 1)]
+        assert abs(zs[0] - e[6]) < JUMP_MAX, (b["name"], zs[0], e[6])  # (on the way in's floor, not under it)
+        assert abs(zs[-1] - b["z"]) < JUMP_MAX, (b["name"], zs[-1], b["z"])
+        # (and from floor to floor by stairs and ramps: no step between two points climbs or falls more than
+        # a stair's grade, except a drop off a ledge)
+        for k, kd in enumerate(kinds):
+            if kd != R.KIND_DROP:
+                d = math.dist(pts[k], pts[k + 1])
+                assert abs(zs[k + 1] - zs[k]) <= JUMP_MAX + d, (b["name"], pts[k], pts[k + 1], zs[k], zs[k + 1])
+        n += 1
+    assert n >= 10
 
 
 def test_gnomeregans_lift_is_taken_and_said(inst_env):
