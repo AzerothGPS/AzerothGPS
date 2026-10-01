@@ -1357,6 +1357,39 @@ def test_a_stop_picked_in_a_dungeons_map_goes_to_its_entrance(game):
         G.Follow()
 
 
+def test_a_bigger_window_shows_more_of_the_map_not_the_map_bigger(game):
+    # (asked: at the most zoomed out, a bigger map window only made the map bigger) the size changed keeps the
+    # scale (more or less of the map shown), and a window bigger than 450 zooms out further, on the terrain
+    # view's tiles still
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    size, zoom = st.size, st.zoom
+    try:
+        st.size = 450
+        G.ApplySettings()
+        for _ in range(12):
+            G.WheelZoom(2.0)
+        top = st.zoom
+        assert top == pytest.approx(2500.0)
+        st.size = 800
+        G.ApplySettings()
+        assert st.zoom == pytest.approx(top * 800 / 450)  # (the same yards to a pixel: more of the map)
+        for _ in range(4):
+            G.WheelZoom(2.0)
+        assert st.zoom == pytest.approx(top * 800 / 450) and st.zoom < G.MinimapMaxZoom()  # (its limit; tiles)
+        st.size = 450
+        G.ApplySettings()
+        assert st.zoom == pytest.approx(top)
+        G.SetZoom(300.0)
+        st.size = 600
+        G.ApplySettings()
+        assert st.zoom == pytest.approx(400.0)  # (not only at the limit)
+    finally:
+        st.size, st.zoom = size, zoom
+        G.ApplySettings()
+        st.zoom = zoom
+
+
 def test_the_deeprun_tram_has_its_map(game):
     # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
     # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features

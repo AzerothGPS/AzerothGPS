@@ -929,6 +929,16 @@ function G.LocateWorld(cont, x, y)
 end
 
 G.MINIMAP_MAX_ZOOM = 3000 -- wider than this, the terrain view shows map art instead of tiles
+-- The zoom limits (yards from the middle to the edge) at the window's size: past ZOOM_REF_SIZE, a bigger
+-- window zooms out further at the same scale, more of the map rather than the map bigger (asked
+-- 2026-10-01: at the most zoomed out, a bigger window only made the map bigger).
+G.ZOOM_REF_SIZE = 450
+function G.ZoomScale()
+  local st = ns.settings and ns.settings.gps
+  return math.max(1, (st and st.size or G.ZOOM_REF_SIZE) / G.ZOOM_REF_SIZE)
+end
+function G.MaxZoom() return MAX_ZOOM * G.ZoomScale() end
+function G.MinimapMaxZoom() return G.MINIMAP_MAX_ZOOM * G.ZoomScale() end
 
 -- The smallest map with art on continent `cont` that contains (cx, cy) and is at least
 -- about as big as a view of `zoom` yards: a zone, else the continent, else the whole
@@ -2250,7 +2260,7 @@ function G.Update()
         local x0, x1, y0, y1 = G.InstanceBounds(inst)
         browse, browseZoom, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil, nil
         free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cont = inst, instance = inst }
-        st.zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
+        st.zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), math.max(x1 - x0, y1 - y0) / 2 * 1.05))
         hiddenShown = inst
       end
       px, py, cont, pz = free.x, free.y, free.cont, nil
@@ -2404,7 +2414,7 @@ function G.Update()
         end
       end
     end
-  elseif G.IsMapStyle(G.Style()) or zoom > G.MINIMAP_MAX_ZOOM then
+  elseif G.IsMapStyle(G.Style()) or zoom > G.MinimapMaxZoom() then
     -- The player's zone map, or a bigger map (continent, world) when zoomed out past it.
     -- (the view moved off somewhere else: the zone there, not the player's)
     local id = free and G.LocateWorld(Geo.Base(viewCont), cx, cy)
@@ -3015,6 +3025,11 @@ function G.ApplySettings()
     for _, fn in pairs(G.layoutHooks) do pcall(fn, inset) end
   end
   if G.moveTab then G.moveTab:SetShown(not st.locked and not framed) end
+  -- (a bigger or smaller window: the same scale, more or less of the map shown, not the map bigger)
+  if G.sizeShown and G.sizeShown ~= st.size and st.zoom then
+    st.zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), st.zoom * st.size / G.sizeShown))
+  end
+  G.sizeShown = st.size
   frame:SetSize(st.size, st.size)
   local hidden = ns.inCombat and st.combatHideMap
   frame:SetAlpha(ns.inCombat and (st.combatAlpha or st.alpha) or st.alpha)
@@ -3153,7 +3168,7 @@ function G.WheelZoom(f)
   end
   local z = math.max(MIN_ZOOM, browseZoom * f)
   if not browse and f > 1 then
-    z = math.min(z, math.max(MAX_ZOOM, math.min(browseZoom, G.MINIMAP_MAX_ZOOM - 1)))
+    z = math.min(z, math.max(G.MaxZoom(), math.min(browseZoom, G.MinimapMaxZoom() - 1)))
   end
   browseZoom = z
   elapsed = 1
@@ -3167,7 +3182,7 @@ function G.BrowseToTerrain()
   local x, y, c, z = view.x, view.y, browseCont, browseZoom
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   free = { x = x, y = y, rot = 0, cross = true, cont = c }
-  if z then S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, z)) end
+  if z then S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), z)) end
   if recenter then recenter:Show() end
   elapsed = 1
 end
@@ -3231,7 +3246,7 @@ function G.OpenInset(it)
   local ib = im.bounds
   browse, browseZoom, browseCont, browseBounds, fromTerrain, openedFrom = nil, nil, nil, nil, nil, nil
   free = { x = (ib[1] + ib[3]) / 2, y = (ib[2] + ib[4]) / 2, rot = 0, cont = im.continent }
-  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, G.MapFitZoom(im)))
+  S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), G.MapFitZoom(im)))
   if recenter then recenter:Show() end
   elapsed = 1
 end
@@ -3628,7 +3643,7 @@ function G.ShowInstance(lvl)
   RememberView()
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cross = true, cont = lvl, instance = lvl }
-  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, math.max(x1 - x0, y1 - y0) / 2 * 1.05))
+  S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), math.max(x1 - x0, y1 - y0) / 2 * 1.05))
   if recenter then recenter:Show() end
   elapsed = 1
 end
@@ -3638,7 +3653,7 @@ function G.ShowEntrance(e)
   openedFrom = nil
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
   free = { x = e[2], y = e[3], rot = 0, cross = true, cont = e[1] }
-  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, 400))
+  S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), 400))
   if recenter then recenter:Show() end
   elapsed = 1
 end
@@ -3733,7 +3748,7 @@ end
 -- than its tiles go (MINIMAP_MAX_ZOOM; past that the zone maps' art showed instead, the map
 -- switching halfway through the zoom); a map browsed or the map style, all of it.
 function G.TourZoom(z)
-  if not browse and not G.IsMapStyle(G.Style()) then return math.min(z, G.MINIMAP_MAX_ZOOM - 1) end
+  if not browse and not G.IsMapStyle(G.Style()) then return math.min(z, G.MinimapMaxZoom() - 1) end
   return z
 end
 
@@ -4751,7 +4766,7 @@ end
 function G.SetZoom(z)
   -- zooming yourself near a stop: that zoom stays (no zooming back out for this stop)
   if approachZoom then approachSkip, approachZoom = ns.Nav.dest, nil end
-  S().zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, z))
+  S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), z))
   elapsed = 1
 end
 
