@@ -406,16 +406,44 @@ def cmd_city_places(args) -> int:
     return 0
 
 
-def cmd_install_addon(args) -> int:
-    import shutil
+# More AddOns folders every install also goes into, one per line (a second install of the game, a private
+# test server's): in the user's home folder, so the paths stay out of the repo.
+EXTRA_INSTALLS = Path.home() / ".agps-installs"
 
+
+def extra_addons_dirs() -> list:
+    """The AddOns folders listed in EXTRA_INSTALLS (blank lines and "#" comments skipped)."""
+    if not EXTRA_INSTALLS.is_file():
+        return []
+    out = []
+    for line in EXTRA_INSTALLS.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            out.append(Path(line))
+    return out
+
+
+def cmd_install_addon(args) -> int:
     from .hpa import refresh
 
-    dst = Path(args.wow_path) / args.flavor / "Interface" / "AddOns" / "AzerothGPS"
-    if not dst.parent.is_dir():
-        print(f"no AddOns folder at {dst.parent}")
+    addons = Path(args.wow_path) / args.flavor / "Interface" / "AddOns"
+    if not addons.is_dir():
+        print(f"no AddOns folder at {addons}")
         return 1
     refresh()  # (the terrain's blocks, when the terrain or the shipped walls changed: Data/TerrainHPA.lua)
+    rc = _install_into(addons, getattr(args, "dev", False))
+    for extra in extra_addons_dirs():
+        if extra.is_dir() and extra.resolve() != addons.resolve():
+            rc = _install_into(extra, getattr(args, "dev", False)) or rc
+        elif not extra.is_dir():
+            print(f"no AddOns folder at {extra} (listed in {EXTRA_INSTALLS})")
+    return rc
+
+
+def _install_into(addons: Path, dev: bool) -> int:
+    import shutil
+
+    dst = addons / "AzerothGPS"
     # Copy over the installed addon, then remove files the addon no longer has (a clean copy
     # without deleting everything first: a file another program has open can't stop halfway
     # and leave the folder half empty).
@@ -432,7 +460,7 @@ def cmd_install_addon(args) -> int:
         shutil.rmtree(old)  # replaced by AzerothGPS
         print(f"removed old {old}")
     print(f"copied addon to {dst} -- /reload in game to pick up changes")
-    if getattr(args, "dev", False):
+    if dev:
         # the private dev tools (AzerothGPS-Dev, checked out next to this repo): never shipped
         src = ADDON_DIR.parents[2] / "AzerothGPS-Dev" / "addon" / "AzerothGPS_Dev"
         if not src.is_dir():
