@@ -2509,14 +2509,17 @@ local function CheckArrival(px, py, cont)
   return false
 end
 
--- "Working out the route...", and now and then said another way (asked, 2026-10-01): in Murloc about one
--- time in five (N.WORKING_FLAVORS: each its share of the times and its lines). Picked once each time a
+-- "Working out the route...", and now and then said another way (asked, 2026-10-01): in Murloc one time
+-- in twenty, gnome engineers at it one in five (N.WORKING_FLAVORS: each its share of the times and its
+-- lines). Picked once each time a
 -- route is being worked out (not every redraw: it would flicker), until there's a route. N.FUN = false:
 -- always the plain one (the tests).
 N.WORKING_TEXT = "Working out the route..."
 N.WORKING_FLAVORS = {
-  { share = 0.2, lines = { "Mrglglglgl... mrrgll mrgl...", "Aaaaaughibbrgubugbugrguburgle!",
+  { share = 0.05, lines = { "Mrglglglgl... mrrgll mrgl...", "Aaaaaughibbrgubugbugrguburgle!",
     "Mmmrrglllm... rrrgle mrgl?", "Mrrrggk! Mglrmglmglmgl..." } },
+  { share = 0.2, lines = { "Recalibrating the gyro-o-matic...", "Consulting the Tinker Town schematics...",
+    "Spinning up the Route-o-Tron 3000...", "Oiling the cogs of the navigation engine..." } },
 }
 N.Random = math.random
 local working -- (the text picked while the route is being worked out)
