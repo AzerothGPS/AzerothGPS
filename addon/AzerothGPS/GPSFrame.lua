@@ -679,6 +679,21 @@ end
 G.LABEL_GROUP_YD = 70 -- rooms of one name closer than this: one label
 G.LABEL_MIN_AREA = 1500 -- square yards a label's rooms must cover
 local interiorLabels = {}
+-- The capitals' districts' names (Data/Capitals.lua's ns.CityLabels: Trade District, The Drag, Hunter
+-- Rise) as place labels when zoomed in on the city, as Undercity's come with its inside map.
+G.CITY_LABEL_ZOOM = 700 -- yards from the middle to the edge, at most
+function G.CityLabelPois(pois, viewCont, cx, cy, rot, s, half, zoom)
+  local list = zoom <= G.CITY_LABEL_ZOOM and ns.CityLabels and ns.CityLabels[Geo.Base(viewCont)]
+  for _, l in ipairs(list or {}) do
+    local dx, dy = Geo.ScreenOffset(cx, cy, l[1], l[2])
+    dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+    if math.abs(dx) <= half and math.abs(dy) <= half then
+      pois[#pois + 1] = { 3, dx, dy, l[3], l[1], l[2] }
+    end
+  end
+  return pois
+end
+
 function G.InteriorLabels(place, wmo, room)
   local key = tostring(place) .. ":" .. tostring(room and room[3] or 0)
   if interiorLabels[key] then return interiorLabels[key] end
@@ -2265,6 +2280,7 @@ function G.Update()
     if not (bm and bm.type == 2) then
       pois = G.LayoutPois(cx, cy, viewCont, rot, zoom, half, { st.poiTaxi, st.poiPoi, st.poiLabels }, fac)
       AddMarks(pois)
+      if st.poiLabels ~= false then G.CityLabelPois(pois, viewCont, cx, cy, rot, s, half, zoom) end
     end
     -- a continent's map: its capitals, to click for the city
     if bm and bm.type == 2 then

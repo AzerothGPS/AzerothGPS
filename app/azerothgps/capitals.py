@@ -100,6 +100,58 @@ def terrain_liquids(cd: ClientData, cont: int, box) -> list:
     return out
 
 
+def city_labels(cd: ClientData, cap: Capital, u: dict, box) -> list:
+    """The city's districts' names and spots, for labels on the map (Undercity's come from its inside
+    map's rooms; these cities are drawn on the terrain): its models' named areas (u["areas"]: Trade
+    District, The Drag, Tinker Town), and the ground's subzones of the city (the ADTs' area ids under
+    the city's AreaTable entry: Thunder Bluff's rises, whose models aren't named) at their chunks'
+    middle. Not the city's own name. [(name, x, y)]."""
+    import struct as _struct
+
+    from .extract import adt
+
+    own = {cap.name.lower(), cap.name.lower().replace(" city", "")}
+    out, seen = [], set()
+    for name, x, y in u.get("areas", []):
+        k = name.lower()
+        if k not in own and k not in seen:
+            seen.add(k)
+            out.append((name, x, y))
+    areas = {r["ID"]: r for r in cd.table("AreaTable")}
+    city = [r["ID"] for r in areas.values() if r.get("ContinentID") == cap.cont and r["AreaName_lang"].lower() in own]
+    subs = {i: r["AreaName_lang"] for i, r in areas.items() if r.get("ParentAreaID") in city}
+    if not subs:
+        return out
+    T = adt.TILE_YD
+    C = T / 16
+    x0, y0, x1, y1 = box
+    m = next(r for r in cd.table("Map") if r["ID"] == cap.cont)
+    wdt = adt.parse_wdt(cd.casc.read(m["WdtFileDataID"]))
+    spots = defaultdict(list)
+    for tx in range(int(32 - y1 / T), int(32 - y0 / T) + 1):
+        for ty in range(int(32 - x1 / T), int(32 - x0 / T) + 1):
+            t = wdt.tiles.get((tx, ty))
+            if not t or not t.root:
+                continue
+            ids = adt.parse_root_area_ids(cd.casc.read(t.root))
+            for cy in range(16):
+                for cx in range(16):
+                    a = int(ids[cy, cx])
+                    if a in subs:
+                        X, Y = (32 - ty) * T - (cy + 0.5) * C, (32 - tx) * T - (cx + 0.5) * C
+                        if x0 <= X <= x1 and y0 <= Y <= y1:
+                            spots[a].append((X, Y))
+    for a, pts in sorted(spots.items()):
+        name = subs[a]
+        if name.lower() in seen or name.lower() in own:
+            continue
+        mx, my = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+        X, Y = min(pts, key=lambda p: (p[0] - mx) ** 2 + (p[1] - my) ** 2)  # (a chunk of it, near its middle)
+        seen.add(name.lower())
+        out.append((name, X, Y))
+    return out
+
+
 def drawn_fixes(g, cap: Capital, inside, log=print, touches=None) -> dict:
     """The roads drawn and erased in game (overrides/roads_<continent>.geojson) that lie mostly over
     the city (inside(x, y)), applied to its roads (roads.graph.apply_overrides, a city's rules: a
@@ -431,7 +483,8 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     # (the terrain's water over the city too: Stormwind's canals are the land's, their beds the model's)
     xs = [q[0] for f in fl for q in f[0]]
     ys = [q[1] for f in fl for q in f[0]]
-    tl = terrain_liquids(cd, cap.cont, (min(xs), min(ys), max(xs), max(ys)))
+    box = (min(xs), min(ys), max(xs), max(ys))
+    tl = terrain_liquids(cd, cap.cont, box)
     lq = lq + tl
     log(f"  {cap.name}: {len(tl)} quads of the terrain's water over the city")
 
@@ -631,8 +684,9 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         g.add_edge(near[0][1], end, [g.nodes[near[0][1]], (lx, ly), land[0][1]], source="lift")
         joins.append((end, land[0][1]))
     u.update({"joins": joins, "mouths": [n for n in mouths if n in g.nodes]})
+    u["labels"] = city_labels(cd, cap, u, box)
     log(f"  {cap.name}: {len(g.nodes)} nodes, {g.total_length():.0f} yd of road, {len(u['mouths'])} gate roads, "
-        f"{len(joins)} joined, grid {W}x{H}")
+        f"{len(joins)} joined, grid {W}x{H}; {len(u['labels'])} district labels")
     return u
 
 
@@ -888,6 +942,13 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
         for u in lst:
             cap = u["capital"]
             out.append(f"  {{ {_lua_str(cap.name)}, \"{key_of(cap)}\", {cap.ui_map} }},")
+        out.append("}")
+        # (their districts' names, labels on the map: GPSFrame's CityLabelPois)
+        out.append("ns.CityLabels = ns.CityLabels or {}")
+        out.append(f"ns.CityLabels[{cont}] = {{")
+        for u in lst:
+            for name, x, y in u.get("labels", []):
+                out.append(f"  {{ {x:.1f}, {y:.1f}, {_lua_str(name)} }},")
         out.append("}")
         def grid(key, cells, tx0, ty0, extra=""):
             r0, r1, c0, c1 = _crop(cells)

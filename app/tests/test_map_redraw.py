@@ -621,3 +621,22 @@ def test_ironforge_s_roads_show_on_its_inside_map(game):
     finally:
         st.showRoads, st.zoom = False, zoom
         lua.execute("IsIndoors = AGPS_INDOORS_REAL AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = 2254.0, 293.0, 0")
+
+
+def test_capitals_show_their_districts_names(game):
+    # (asked: like Undercity's Trade Quarter, the other capitals' districts named on the map) zoomed in on
+    # Stormwind (terrain view, no inside map there): "Trade District" and the others as place labels
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    names = {str(l[3]) for l in ns.CityLabels[0].values()} | {str(l[3]) for l in ns.CityLabels[1].values()}
+    for n in ("Trade District", "Old Town", "The Drag", "Valley of Strength", "Tinker Town"):
+        assert n in names, n
+    assert any("Rise" in n for n in names)  # (Thunder Bluff's, from the ground's subzones)
+    assert "Stormwind City" not in names and "Orgrimmar" not in names
+    pois = lua.table()
+    G.CityLabelPois(pois, 0, -8832.0, 625.0, 0, 1.0, 200.0, 300.0)
+    near = [str(pois[i][4]) for i in range(1, len(pois) + 1)]
+    assert "Trade District" in near
+    pois = lua.table()
+    G.CityLabelPois(pois, 0, -8832.0, 625.0, 0, 0.1, 200.0, 2000.0)
+    assert len(pois) == 0  # (zoomed far out: none)

@@ -29,6 +29,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **A route to another continent** is shown on the world map first, then the map follows you again.
 - **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the way ahead shows.
 - **Right-click inside a building** shows the outside view first; the next right-click, the continent's map.
+- **Capitals' districts named on the map** when zoomed in, as Undercity's are: Stormwind's Trade District and Old Town, Orgrimmar's Valleys and The Drag, Ironforge's Wards, Thunder Bluff's Rises, Darnassus's Terraces.
 - **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
 - **More roads** on Eastern Kingdoms, drawn in game.
 - **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
