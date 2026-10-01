@@ -1334,13 +1334,68 @@ function G.InstanceFloors(inst)
   return out
 end
 
+-- Wings (Data/Instances.lua's `wings`: ways in into parts of their own, the Scarlet Monastery's four,
+-- Dire Maul's; each way in's 7th value its wing, each boss's `wing`; asked 2026-10-01): the wing shown
+-- of level `lvl`: its map opened from that wing's icon, else the one the player went in by
+-- (Taxi.EnteredWing); nil for all of it (no wings, or not known).
+function G.InstanceWing(lvl)
+  local info = lvl and ns.Instances and ns.Instances[lvl]
+  if not (info and info.wings) then return nil end
+  if free and free.instance == lvl and free.wing then return free.wing end
+  return ns.Taxi and ns.Taxi.EnteredWing and ns.Taxi.EnteredWing(lvl) or nil
+end
+-- Whether boss row `b` is in wing `wing` (nil: any; a boss with no wing is in each; `wings`: in several,
+-- Maraudon's inner bosses).
+function G.InWing(b, wing)
+  if not wing or not (b.wing or b.wings) then return true end
+  if b.wing then return b.wing == wing end
+  for _, w in ipairs(b.wings) do
+    if w == wing then return true end
+  end
+  return false
+end
+-- Wing `wing`'s (first) way in of level `lvl`, else its first.
+function G.WingEntrance(lvl, wing)
+  local info = ns.Instances and ns.Instances[lvl]
+  local list = info and info.entrances or {}
+  for _, e in ipairs(list) do
+    if wing and e[7] == wing then return e end
+  end
+  return list[1]
+end
+-- A wing's extent: its ways in and bosses, WING_MARGIN round them (x0, x1, y0, y1), or nil (none of the
+-- bosses its own: a door into the whole dungeon, Uldaman's back way in).
+G.WING_MARGIN = 80
+function G.WingBounds(lvl, wing)
+  local info = ns.Instances and ns.Instances[lvl]
+  if not (info and wing) then return nil end
+  local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+  local function add(x, y)
+    x0, x1, y0, y1 = math.min(x0, x), math.max(x1, x), math.min(y0, y), math.max(y1, y)
+  end
+  local own = false
+  for _, b in ipairs(info.bosses or {}) do
+    if b[3] and (b.wing or b.wings) and G.InWing(b, wing) then
+      add(b[3], b[4])
+      own = true
+    end
+  end
+  if not own then return nil end
+  for _, e in ipairs(info.entrances or {}) do
+    if e[7] == wing and e[4] then add(e[4], e[5]) end
+  end
+  local m = G.WING_MARGIN
+  return x0 - m, x1 + m, y0 - m, y1 + m
+end
+
 -- A dungeon's bosses in the usual order (optional ones left out; those without an order after,
--- as listed): { boss row, ... }.
-function G.BossOrder(lvl)
+-- as listed): { boss row, ... }. Of wing `wing` (nil: the wing shown, G.InstanceWing; false: all).
+function G.BossOrder(lvl, wing)
+  if wing == nil then wing = G.InstanceWing(lvl) end
   local info = ns.Instances and ns.Instances[lvl]
   local list = {}
   for i, b in ipairs(info and info.bosses or {}) do
-    if not b.optional then list[#list + 1] = { b = b, key = (b.order or 1000) * 1000 + i } end
+    if not b.optional and G.InWing(b, wing or nil) then list[#list + 1] = { b = b, key = (b.order or 1000) * 1000 + i } end
   end
   table.sort(list, function(a, c) return a.key < c.key end)
   local out = {}
@@ -1353,17 +1408,19 @@ end
 -- (again every 2 s while a terrain search it needs runs), then kept.
 local suggested = {}
 function G.SuggestedPath(inst)
-  local c = suggested[inst]
+  local wing = G.InstanceWing(inst) -- (a wing's: from its way in, its bosses)
+  local key = wing and (inst .. ":" .. wing) or inst
+  local c = suggested[key]
   local now = GetTime and GetTime() or 0
   if c and (c.done or now - c.at < 2) then return c.pts, c.zs, c.legs end
   local info = ns.Instances and ns.Instances[inst]
   local R = ns.Router
-  local e = info and info.entrances and info.entrances[1]
+  local e = info and G.WingEntrance(inst, wing)
   if not (e and R and R.Route) then return {} end
   local pts, zs, pending = {}, {}, false
   local legs = {} -- { { first point, last point, boss row }, ... }: the way to each boss in turn
   local x, y, z = e[4], e[5], e[6]
-  for _, b in ipairs(G.BossOrder(inst)) do
+  for _, b in ipairs(G.BossOrder(inst, wing or false)) do
     local first = #pts / 2 + 1
     -- (from floor to floor: the heights say which, the stairs between them in the route; no
     -- spot, no stretch)
@@ -1379,7 +1436,7 @@ function G.SuggestedPath(inst)
     legs[#legs + 1] = { first, #pts / 2, b }
     if b[3] then x, y, z = b[3], b[4], b[5] end
   end
-  suggested[inst] = { pts = pts, zs = zs, legs = legs, at = now, done = not pending }
+  suggested[key] = { pts = pts, zs = zs, legs = legs, at = now, done = not pending }
   return pts, zs, legs
 end
 
@@ -1866,7 +1923,7 @@ local function PoiButton(i)
       return
     end
     if self.cityMap then G.ShowCity(self.cityMap) end -- (a capital on a continent's map)
-    if self.instance then G.ShowInstance(self.instance) end -- (a dungeon's entrance: its map)
+    if self.instance then G.ShowInstance(self.instance, self.wing) end -- (a dungeon's entrance: its map, a wing's)
     if self.exit then G.ShowEntrance(self.exit) end -- (in a dungeon's map: back out at its entrance)
   end)
   b:SetScript("OnDoubleClick", function(self)
@@ -1935,7 +1992,7 @@ local function DrawPois(pois, zoom)
       b.name, b.wx, b.wy = p[4], p[5], p[6]
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.z = p.z -- (a city place's height: its floor, where floors lie over each other)
-      b.preview, b.cityMap, b.instance, b.exit = nil, nil, nil, nil
+      b.preview, b.cityMap, b.instance, b.exit, b.wing = nil, nil, nil, nil, nil
       b.dock, b.pin = nil, nil
       if b.timer then b.timer:Hide() end
       if p[1] == 10 then -- a zeppelin's or boat's dock: its next arrival under it
@@ -1959,7 +2016,7 @@ local function DrawPois(pois, zoom)
         ns.SetIcon(b.icon, p.raid and "atlas:Raid" or "atlas:Dungeon", INSTANCE_ICON)
         b.stopTex, b.questID = nil, nil
         b.note = (p.raid and "Raid" or "Dungeon") .. ". Click: show its map"
-        b.instance = p.instance
+        b.instance, b.wing = p.instance, p.wing
         b:SetSize(20, 20)
       elseif p[1] == 11 then -- a cave's or mine's way in
         ns.SetIcon(b.icon, "atlas:CaveUnderground-Down", CAVE_ICON)
@@ -2715,8 +2772,9 @@ function G.Update()
       stairs(G.FloorChanges(sp, sz), false)
     end
     local _, nextBoss = G.NextBoss(inst)
+    local wing = G.InstanceWing(inst)
     for _, b in ipairs(info.bosses or {}) do
-      if b[3] then
+      if b[3] and G.InWing(b, wing) then
       -- (on another floor than the one shown: faint; down already: faint, and said so)
       local off = instBand and b[5] and (b[5] < instBand[1] - G.FLOOR_HEAD or b[5] > instBand[2] + G.FLOOR_HEAD)
       local dead = ns.Nav.BossDead({ cont = inst, boss = ns.Nav.BossKey(b) })
@@ -2778,7 +2836,9 @@ function G.Update()
         local dx, dy = Geo.ScreenOffset(cx, cy, e.x, e.y)
         dx, dy = Geo.Rotate(dx * s, dy * s, rot)
         if math.abs(dx) <= half and math.abs(dy) <= half and not (zoomedOut and e.shared) then
-          pois[#pois + 1] = { 6, dx, dy, e.name, e.x, e.y, instance = e.level, raid = e.raid, level = e.cont }
+          -- (a continent's map: one icon where several are, the dungeon's, the whole of it)
+          pois[#pois + 1] = { 6, dx, dy, zoomedOut and e.base or e.name, e.x, e.y, instance = e.level, raid = e.raid,
+            level = e.cont, wing = not zoomedOut and e.wing or nil }
         end
       end
     end
@@ -2954,7 +3014,8 @@ InfoParts = function()
     x, y, mark = view.x, view.y, "|cffffd100+|r "
   end
   if x and view.instance and ns.Instances[view.instance] then -- (a dungeon's map)
-    return mark, ns.Instances[view.instance].name, string.format("%.0f, %.0f", x, y)
+    local wing = G.InstanceWing(view.instance)
+    return mark, ns.Instances[view.instance].name .. (wing and (": " .. wing) or ""), string.format("%.0f, %.0f", x, y)
   end
   local cm = G.cityGridMap and ns.Maps and ns.Maps[G.cityGridMap]
   if x and cm and cm.bounds and ns.Passability.InGridRect(G.cityGrid, x, y) then -- (the city's map shown: its name)
@@ -3585,7 +3646,18 @@ function G.InstanceEntrances(cont)
         for _, o in ipairs(list) do
           if (o.x - e[2]) ^ 2 + (o.y - e[3]) ^ 2 <= 60 * 60 then shared = true break end
         end
-        list[#list + 1] = { level = lvl, name = info.name, raid = info.raid, cont = e[1], x = e[2], y = e[3], shared = shared }
+        -- (a wing's: its icon of its own, named, "Scarlet Monastery: Library"; a second door into the
+        -- same wing at the same spot left out)
+        local wing = not info.ghost and e[7] or nil
+        local same = e.guess and not info.ghost or false -- (a wing guessed, its spot too: no icon, Data/Instances.lua)
+        for _, o in ipairs(list) do
+          if o.level == lvl and o.wing == wing and (o.x - e[2]) ^ 2 + (o.y - e[3]) ^ 2 <= 10 * 10 then same = true break end
+        end
+        if not same then
+          local name = wing and (info.name .. ": " .. wing .. (e.door and (" (" .. e.door .. ")") or "")) or info.name
+          list[#list + 1] = { level = lvl, name = name, raid = info.raid, cont = e[1], x = e[2], y = e[3], shared = shared,
+            wing = wing, base = info.name }
+        end
       end
     end
   end
@@ -3601,19 +3673,22 @@ function G.InstanceStopEntrance(lvl, x, y, pcont, px, py)
   local info = ns.Instances and ns.Instances[lvl]
   if not info then return nil end
   local list = info.ghost and { info.ghost } or info.entrances or {}
+  local wing = G.InstanceWing(lvl) -- (a wing's map: that wing's way in)
   local best, bd
   for _, e in ipairs(list) do
     local d
-    if e[4] and e[5] then
+    if wing and e[7] and e[7] ~= wing then
+      d = nil -- (another wing's)
+    elseif e[4] and e[5] then
       d = (e[4] - x) ^ 2 + (e[5] - y) ^ 2
     elseif pcont and px and Geo.Base(pcont) == e[1] then
       d = (e[2] - px) ^ 2 + (e[3] - py) ^ 2
     else
       d = math.huge
     end
-    if not bd or d < bd then best, bd = e, d end
+    if d and (not bd or d < bd) then best, bd = e, d end
   end
-  return best and { cont = best[1], x = best[2], y = best[3], name = info.name } or nil
+  return best and { cont = best[1], x = best[2], y = best[3], name = info.name .. (best[7] and (": " .. best[7]) or "") } or nil
 end
 
 -- A dungeon's extent: x0, x1, y0, y1 (its floor grid, else its map's minimap tiles: WoW
@@ -3637,13 +3712,19 @@ function G.InstanceBounds(lvl)
   return x0, x1, y0, y1
 end
 
--- A dungeon's map: its floors, bosses and ways out, fitted in the view.
-function G.ShowInstance(lvl)
+-- A dungeon's map: its floors, bosses and ways out, fitted in the view. Of wing `wing` (its icon's):
+-- that wing fitted, its bosses and usual way.
+function G.ShowInstance(lvl, wing)
   local x0, x1, y0, y1 = G.InstanceBounds(lvl)
   if not x0 then return end
+  local wx0, wx1, wy0, wy1 = G.WingBounds(lvl, wing)
+  if wx0 then
+    wx0, wx1, wy0, wy1 = math.max(x0, wx0), math.min(x1, wx1), math.max(y0, wy0), math.min(y1, wy1)
+    if wx0 < wx1 and wy0 < wy1 then x0, x1, y0, y1 = wx0, wx1, wy0, wy1 end
+  end
   RememberView()
   browse, browseZoom, browseCont, browseBounds, fromTerrain = nil, nil, nil, nil, nil
-  free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cross = true, cont = lvl, instance = lvl }
+  free = { x = (x0 + x1) / 2, y = (y0 + y1) / 2, rot = 0, cross = true, cont = lvl, instance = lvl, wing = wing }
   S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), math.max(x1 - x0, y1 - y0) / 2 * 1.05))
   if recenter then recenter:Show() end
   elapsed = 1
@@ -3684,8 +3765,7 @@ LeaveOpened = function()
     free.city = nil
     return false
   end
-  local info = ns.Instances and ns.Instances[inst]
-  local e = info and info.entrances and info.entrances[1]
+  local e = G.WingEntrance(inst, G.InstanceWing(inst)) -- (a wing's: its way in)
   if not e then return false end
   G.ShowEntrance(e)
   return true
@@ -4565,8 +4645,9 @@ function G.BossRoute(quiet)
   end
   ns.Nav.SetStops(stops, false, true) -- (the usual order: kept)
   G.RouteChanged()
+  local wing = G.InstanceWing(lvl)
   ns.Print(string.format("%s: %s, %d boss%s in the usual order%s. Each is done when it dies; remove one to skip it.",
-    quiet and "Dungeon route" or "Boss Route", info.name, #stops, #stops == 1 and "" or "es",
+    quiet and "Dungeon route" or "Boss Route", info.name .. (wing and (": " .. wing) or ""), #stops, #stops == 1 and "" or "es",
     dead > 0 and string.format(" (%d already down)", dead) or ""))
 end
 
@@ -6215,7 +6296,7 @@ function G.SaveView()
   if not free then return nil end
   local from = openedFrom
   return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont, city = free.city,
-    instance = free.instance, zoom = ns.settings and S().zoom or nil, -- (a dungeon's map, and its floor stepped to)
+    instance = free.instance, wing = free.wing, zoom = ns.settings and S().zoom or nil, -- (a dungeon's map, a wing's, and its floor stepped to)
     floor = free.instance and floorInst == free.instance and floorSel or nil,
     browse = browse, browseZoom = browseZoom, browseCont = browseCont, fromTerrain = fromTerrain,
     -- (the view a city's or dungeon's map was opened from: right-click still goes back there)
@@ -6244,7 +6325,7 @@ function G.ApplyView(v)
     browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
   end
   free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont, city = v.city,
-    interior = v.city and G.CityInterior(v.city) or nil, instance = v.instance }
+    interior = v.city and G.CityInterior(v.city) or nil, instance = v.instance, wing = v.instance and v.wing or nil }
   if v.zoom and ns.settings then S().zoom = v.zoom end
   if v.instance then floorInst, floorSel = v.instance, v.floor end
   openedFrom = v.from

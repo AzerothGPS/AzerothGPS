@@ -91,7 +91,9 @@ The addon is going public, so every change must keep it policy-safe:
     frame, map menu, search, drawing a farming area).
     Inside maps (`G.FindInterior`): a model's indoor rooms only (or where the game says indoors;
     down in an underground city, any of its rooms); indoors the inside map shows at any zoom,
-    outdoors up to `INTERIOR_MAX_ZOOM`. Never from Stormwind's city model (`G.NO_INSIDE_MAP`: its
+    outdoors up to `INTERIOR_MAX_ZOOM`. Zoom is yards from the middle to the edge: its limits grow with
+    the window past `ZOOM_REF_SIZE` (`G.MaxZoom`, `G.MinimapMaxZoom`), and a resize keeps the scale
+    (`ApplySettings`): a bigger window shows more of the map, not the map bigger. Never from Stormwind's city model (`G.NO_INSIDE_MAP`: its
     streets have art and district names too, and it looks worse than the terrain). In a city (a
     capital's own cells, down in an underground city) its inside map shows at any zoom, and the wheel
     zooms out no further than `CITY_MAX_ZOOM` (`G.cityMap`; zoomed further out on the way in, zoomed
@@ -248,7 +250,12 @@ The addon is going public, so every change must keep it policy-safe:
     node links and legs, not in the zones the route starts and ends in; an open straight line
     through one isn't taken at once but weighed. A route to a stop in one asks first
     (`Nav.RedStops`, `GPS.ConfirmRedZone`: "route there anyway?"; `SetStops`/`AddStop` return
-    false, true while asking), not for the zone the player is in.
+    false, true while asking), not for the zone the player is in. A route worked out through one
+    asks "Keep this route?" (`Nav.CheckRedRoute`, `GPS.ConfirmRedRoute`), and while it asks the
+    route isn't drawn or followed (`Nav.RedAsking`: the map and the arrow leave it out); the
+    planner weighs those zones, so a way round (the tram) comes first and this asks only when it's
+    the best left (a ride removed). No route with rides removed (`Nav.SkipRide` keeps their pins'
+    names): "Route not possible without <them>. Put it back?" (`Nav.AskSkipped`, once per change).
   - `Data/Caves.lua` (`app/azerothgps/caves.py`, the WMO floor code shared with Undercity in
     `walknet.py`): caves, mines, dens and tunnels on continents 0 and 1 (minor-dungeon WMOs placed
     in the ADTs), merged into the continent's level. Each gets a grid over the continent's
@@ -261,7 +268,10 @@ The addon is going public, so every change must keep it policy-safe:
     the lowest per cell. A trip gets on or off a cave's roads only down in it, or on its way
     in when the other end is down in one (`Router.CaveDown`, `CaveLevel`); over a mine under
     a hill the player's level is told by `IsIndoors()` (`Nav.Indoors`), and a stop over its
-    floor is taken to be down in it. Terrain walks (`FindPath`) ignore the caves' grids
+    floor is taken to be down in it. A spot in a narrow gap of a cave's or capital's grid (its cells
+    within `CAVE_GAP_YD` on both sides) is down as they are (`Router.CaveDown`: the tram's way in under
+    Ironforge, a strip with no cells, was taken as up on the mountain, and the walk there went round
+    by Loch Modan). Terrain walks (`FindPath`) ignore the caves' grids
     (their cells are coarser than a tunnel); `route-check` leaves out trips from or to a
     spot over a cave (its flat reference walk can't judge them).
     `agps caves` renders each one into `data/debug/caves/` with `summary.txt` (covered and
@@ -351,7 +361,20 @@ The addon is going public, so every change must keep it policy-safe:
     from or to inside that instance: never through a dungeon's two entrances as a shortcut).
     On the map (`layerInstances`, the "Dungeons and raids" quick button): entrance icons on
     every style but the world map (one per spot on a continent's map); a click opens the
-    instance's map (`G.ShowInstance`: no art here, its floors' outline from
+    instance's map. **Wings** (`app/azerothgps/wings.py`: the Scarlet Monastery's, Dire Maul's,
+    Stratholme's, Maraudon's, Uldaman's, Gnomeregan's ways in into parts of their own): each way in
+    named by its wing (`WINGS`, from the server's teleport names; its 7th value, `door`), each boss
+    its wing's (`wing`, or `wings` when in several: Maraudon's inner bosses; by name, `BOSSES`, where
+    known, else the way in its roads reach it from soonest: the roads guessed Stratholme's halves and Dire
+    Maul's West wrong), the instance's `wings`; `DOORS` (Uldaman's back way in, Gnomeregan's Train Depot)
+    are named but don't split the bosses (their map is the whole dungeon); an icon
+    per wing, named ("Scarlet Monastery: Library"), whose map is that wing's (`G.ShowInstance(lvl,
+    wing)`, `free.wing`): fitted to it (`G.WingBounds`), its bosses, usual way (`G.SuggestedPath`
+    from its way in) and boss route (`G.BossOrder`/`G.BossStops`: `G.InstanceWing`, else the wing the
+    player went in by, `Taxi.NoteWing`/`EnteredWing`). A wing's own door is paired with its way out by
+    name however far off (Stratholme's back door; `DOOR_OUTS`). A stop picked in a dungeon's map
+    (a spot, a boss, a pin) is a stop at its entrance's icon on the continent instead
+    (`G.InstanceStopEntrance`: the wing's), not inside it. Its map (`G.ShowInstance`: no art here, its floors' outline from
     `G.BlockEdges` at `EDGE_SAMPLES_INSTANCE`, its roads, boss icons numbered in order, the way
     out); right-click or the way-out icon goes back to the entrance (`G.ShowEntrance`). The
     player inside one gets the same view (`G.InstanceOf`, `view.instance`). Its art is the

@@ -262,6 +262,33 @@ function T.NoteEntrance(mapID, now)
   return true
 end
 
+-- A dungeon with wings (Data/Instances.lua's `wings`: the Scarlet Monastery's, Dire Maul's): the wing the
+-- player went in by, the way in nearest where they last stood outside (noted on entering, as T.NoteEntrance;
+-- kept per character, over a /reload in there). Its map, boss route and usual way are that wing's.
+function T.NoteWing(mapID, now)
+  if not (mapID and outside) or now - outside.at > T.ENTRANCE_FRESH then return nil end
+  local lvl = ns.Nav and ns.Nav.InstanceLevel and ns.Nav.InstanceLevel(mapID)
+  local info = lvl and ns.Instances and ns.Instances[lvl]
+  if not (info and info.wings) then return nil end
+  local best, bd
+  for _, e in ipairs(info.entrances or {}) do
+    if e[7] and ns.Geo.Base(e[1]) == ns.Geo.Base(outside[1]) then
+      local d = (e[2] - outside[2]) ^ 2 + (e[3] - outside[3]) ^ 2
+      if not bd or d < bd then best, bd = e[7], d end
+    end
+  end
+  local cdb = ns.CharDB and ns.CharDB()
+  if cdb then cdb.enteredWing = best and { level = lvl, wing = best } or nil end
+  return best
+end
+
+-- The wing of dungeon level `lvl` the player went in by (T.NoteWing), or nil.
+function T.EnteredWing(lvl)
+  local cdb = ns.CharDB and ns.CharDB()
+  local w = cdb and cdb.enteredWing
+  return w and w.level == lvl and w.wing or nil
+end
+
 do
   local function tick()
     local ok, px, py, _, cont = pcall(UnitPosition, "player")

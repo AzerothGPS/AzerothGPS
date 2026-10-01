@@ -1343,7 +1343,7 @@ def test_a_stop_picked_in_a_dungeons_map_goes_to_its_entrance(game):
     G, N = ns.GPS, ns.Nav
     # (the Scarlet Monastery's four wings: the second's way in is at (853, 1319) inside)
     e = G.InstanceStopEntrance(20189, 860.0, 1310.0)
-    assert (e.cont, e.x, e.y, e.name) == (0, 2915.1, -823.6, "Scarlet Monastery")
+    assert (e.cont, e.x, e.y, e.name) == (0, 2915.1, -823.6, "Scarlet Monastery: Cathedral")
     N.Clear()
     try:
         G.ShowInstance(20036)  # (the Deadmines' map, opened from its icon)
@@ -1395,6 +1395,72 @@ def test_a_bigger_window_shows_more_of_the_map_not_the_map_bigger(game):
         st.size, st.zoom = size, zoom
         G.ApplySettings()
         st.zoom = zoom
+
+
+def test_a_dungeons_wings_each_have_their_icon_map_bosses_and_way(game):
+    # (asked: the Scarlet Monastery's four icons with their wing, the bosses and routes each its own; "do
+    # this for any dungeon/raid that does this") an icon per wing, named; its map that wing's: its bosses,
+    # its usual way from its way in, its boss route; inside, the wing gone in by
+    lua, ns = game
+    G, T = ns.GPS, ns.Taxi
+    SM = 20189
+    info = ns.Instances[SM]
+    assert list(info.wings.values()) == ["Graveyard", "Library", "Armory", "Cathedral"]
+    icons = sorted(e.name for e in G.InstanceEntrances(0).values() if e.level == SM)
+    assert icons == ["Scarlet Monastery: Armory", "Scarlet Monastery: Cathedral", "Scarlet Monastery: Graveyard",
+                     "Scarlet Monastery: Library"]
+    want = {"Graveyard": {"Interrogator Vishas", "Bloodmage Thalnos", "Azshir the Sleepless", "Fallen Champion", "Ironspine"},
+            "Library": {"Houndmaster Loksey", "Arcanist Doan"}, "Armory": {"Herod"},
+            "Cathedral": {"Scarlet Commander Mograine", "High Inquisitor Fairbanks", "High Inquisitor Whitemane"}}
+    assert {w: {b[1] for b in info.bosses.values() if b.wing == w} for w in want} == want
+    try:
+        for wing, bosses in want.items():
+            G.ShowInstance(SM, wing)  # (its icon clicked)
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+            assert G.InstanceWing(SM) == wing
+            assert _shown(lua, lambda w: w._text is not None and f"Scarlet Monastery: {wing}" in str(w._text))  # (the title)
+            assert {b[1] for b in G.BossOrder(SM).values()} <= bosses
+            assert {d.name for d in G.BossStops(SM)[0].values()} <= bosses
+            e = G.WingEntrance(SM, wing)
+            path = G.SuggestedPath(SM)[0]
+            assert e[7] == wing and (path[1], path[2]) == pytest.approx((e[4], e[5]), abs=30)  # (from its way in)
+        # inside: the wing gone in by, where the player last stood outside (the Library's door)
+        G.Follow()
+        lib = G.WingEntrance(SM, "Library")
+        T.NoteOutside(1000.0, lib[2] + 3.0, lib[3], 0)
+        assert T.NoteWing(189, 1005.0) == "Library" and G.InstanceWing(SM) == "Library"
+        assert {b[1] for b in G.BossOrder(SM).values()} <= want["Library"]
+        assert {b[1] for b in G.BossOrder(SM, False).values()} > want["Library"]  # (false: the whole of it)
+    finally:
+        ns.CharDB().enteredWing = None
+        G.Follow()
+    # the others: each wing its own door on the continent (Stratholme's back door and Uldaman's back way in
+    # at their own, not the main gate's)
+    wings = {20429: ["East", "West", "North"], 20329: ["Main Gate", "Service Entrance"], 20349: ["Orange", "Purple"],
+             20070: ["Front Entrance", "Back Entrance"], 20090: ["Front Entrance", "Train Depot"]}
+    for lvl, ws in wings.items():
+        assert list(ns.Instances[lvl].wings.values()) == ws, lvl
+    dm = sorted(e.name for e in G.InstanceEntrances(1).values() if e.level == 20429)
+    assert dm == ["Dire Maul: East", "Dire Maul: East (Back Door)", "Dire Maul: North", "Dire Maul: West",
+                  "Dire Maul: West (Side Door)"]  # (not the plain "Dire Maul" way in, its wing a guess, at West's door)
+    bosses = {lvl: {b[1]: b for b in ns.Instances[lvl].bosses.values()} for lvl in wings}
+    assert bosses[20429]["Prince Tortheldrin"].wing == "West" and bosses[20429]["King Gordok"].wing == "North"
+    assert bosses[20329]["The Unforgiven"].wing == "Main Gate" and bosses[20329]["Baron Rivendare"].wing == "Service Entrance"
+    theradras = bosses[20349]["Princess Theradras"]  # (Maraudon's inner bosses: from either side)
+    assert theradras.wing is None and list(theradras.wings.values()) == ["Orange", "Purple"]
+    assert G.InWing(theradras, "Purple") and G.InWing(theradras, "Orange")
+    # Uldaman's back way in, Gnomeregan's Train Depot: doors into the whole dungeon, every boss from each
+    assert all(b.wing is None and b.wings is None for lvl in (20070, 20090) for b in bosses[lvl].values())
+    G.ShowInstance(20070, "Back Entrance")
+    try:
+        assert G.WingBounds(20070, "Back Entrance") is None and len(G.BossOrder(20070)) == len(G.BossOrder(20070, False))
+    finally:
+        G.Follow()
+    service, gate = G.WingEntrance(20329, "Service Entrance"), G.WingEntrance(20329, "Main Gate")
+    assert (service[2], service[3]) == pytest.approx((3233.0, -4048.0), abs=5) and abs(gate[3] - service[3]) > 300
+    back = G.WingEntrance(20070, "Back Entrance")
+    assert (back[2], back[3]) == pytest.approx((-6620.0, -3766.0), abs=5)
 
 
 def test_removing_the_tram_asks_about_the_walk_through_zones_too_high(game):

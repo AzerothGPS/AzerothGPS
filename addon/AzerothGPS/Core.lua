@@ -265,7 +265,10 @@ do
         -- (into a dungeon: its way in is where the player last stood outside, Taxi.NoteEntrance)
         if inside and ns.Taxi and ns.Taxi.NoteEntrance and GetInstanceInfo then
           local ok, _, _, _, _, _, _, _, mapID = pcall(GetInstanceInfo)
-          if ok then pcall(ns.Taxi.NoteEntrance, mapID, GetTime()) end
+          if ok then
+            pcall(ns.Taxi.NoteWing, mapID, GetTime()) -- (the wing gone in by: its map and boss route)
+            pcall(ns.Taxi.NoteEntrance, mapID, GetTime())
+          end
         end
         -- (after a /reload or logging in: the continent's roads and terrain prepared in the
         -- background now, not in the frame of the first route or the first showing of the roads)

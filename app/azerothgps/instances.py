@@ -41,6 +41,7 @@ from . import walknet
 from .extract import adt
 from .extract.spike import ClientData
 from .roads.terrain import ALPHABET, encode_row
+from .wings import DOOR_OUTS, entrance_wing, wings as instance_wings
 
 LEVEL_BASE = 20000  # an instance's level: LEVEL_BASE + its MapID
 CELL = walknet.CELL
@@ -179,15 +180,21 @@ def entrances(cd: ClientData, inst: Instance, server: dict, triggers: list) -> l
             # (by name: "Deadmines - Entering" and "Deadmines - Exiting"), the one nearest the
             # ghost's way in when several
             k = _tele_key(t["name"])
-            cands = [o for o in outs if _tele_key(o["name"]) == k and not (by_id.get(o["id"]) and
-                                                                          by_id[o["id"]]["ContinentID"] != inst.map_id)]
+            door_out = DOOR_OUTS.get(t["name"])
+            cands = [o for o in outs if o["name"] == door_out] if door_out else []
+            cands = cands or [o for o in outs if _tele_key(o["name"]) == k and not (by_id.get(o["id"]) and
+                                                                                    by_id[o["id"]]["ContinentID"] != inst.map_id)]
+            # (a wing's own door, by its name or paired by hand: its way out however far from the ghost's way in,
+            # Stratholme's back door 690 yd off; it went to the main gate's, wings.py)
+            door = bool(cands) and (door_out is not None or entrance_wing(inst.map_id, t["name"])[1] is not None
+                                    or (entrance_wing(inst.map_id, t["name"])[0] is not None and len(cands) == 1))
             if not cands:
                 first = k.split(" ")[0] if k else ""
                 cands = [o for o in outs if first and _tele_key(o["name"]).split(" ")[0] == first]
             if inst.corpse:
                 cands = [o for o in cands if o["map"] == inst.corpse[0]]
                 cands.sort(key=lambda o: math.hypot(o["x"] - inst.corpse[1], o["y"] - inst.corpse[2]))
-            if cands and (not inst.corpse or math.hypot(cands[0]["x"] - inst.corpse[1], cands[0]["y"] - inst.corpse[2]) < 600):
+            if cands and (door or not inst.corpse or math.hypot(cands[0]["x"] - inst.corpse[1], cands[0]["y"] - inst.corpse[2]) < 600):
                 o = cands[0]
                 spot = (o["map"], o["x"], o["y"], o["z"])
         if spot is None and src is not None and src["ContinentID"] in (0, 1):
@@ -605,8 +612,9 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
            "-- ns.Roads[level]: its roads (a road's points packed: from its first node, each move in whole",
            "-- yards, caves.pack_points); ns.RoadDrops[level]: one-way drops off ledges (yards fallen);",
            "-- ns.CityHeights[level]: each cell's floor height, runs of (height character, length);",
-           "-- ns.Instances[level]: name, map, raid, entrances { cont, x, y, inside x, y, z }, bosses { name, npc,",
-           "-- x, y, z, enc = DungeonEncounter IDs, order = the usual kill order when known }. Each entrance",
+           "-- ns.Instances[level]: name, map, raid, entrances { cont, x, y, inside x, y, z, wing (door = ...) },",
+           "-- wings (ways in into parts of their own, the Scarlet Monastery's), bosses { name, npc,",
+           "-- x, y, z, enc = DungeonEncounter IDs, order = the usual kill order when known, wing }. Each entrance",
            "-- is a portal in ns.Transports (continent end, instance end).",
            "local _, ns = ...",
            "ns.CityLevels = ns.CityLevels or {}",
@@ -617,20 +625,47 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
     zcache: dict = {}
     for inst, u in built:
         L = inst.level
+        nodes, edges, drops, zs = instance_roads(u)
+        from .roads.lifts import add_instance_lifts, wait_yards
+
+        lifts = add_instance_lifts(inst.map_id, nodes, edges, zs, log)  # (Gnomeregan's: roads/lifts.py)
+        # (ways in into parts of their own, the Scarlet Monastery's: each named by its wing, each boss its
+        # wing's, wings.py)
+        named, boss_wing, wing_order = instance_wings(inst.map_id, inst.entrances, inst.bosses, nodes, edges, zs)
+        if wing_order:
+            log(f"  {inst.name}: wings {', '.join(wing_order)}; bosses "
+                + ", ".join(f"{inst.bosses[i]['name']} ({w})" for i, w in sorted(boss_wing.items())))
         out.append(f"-- {inst.name} (map {inst.map_id}, {'raid' if inst.raid else 'dungeon'})")
         out.append(f"ns.CityLevels[{L}] = {{ base = {inst.map_id}, name = {_lua_str(inst.name)}, instance = true"
                    f"{', raid = true' if inst.raid else ''} }}")
-        ents = ", ".join(f"{{ {c}, {x:.1f}, {y:.1f}, {ix:.1f}, {iy:.1f}, {iz:.1f} }}" for c, x, y, _z, ix, iy, iz, _n in inst.entrances)
+        def ent(i, e):
+            c, x, y, _z, ix, iy, iz, label = e
+            wing, door = named[i] if named else (None, None)
+            more = (f", {_lua_str(wing)}" if wing else "") + (f", door = {_lua_str(door)}" if door else "")
+            # (its wing only guessed by its roads, no name to go by, its spot on the continent a guess too: Dire
+            # Maul's plain "Dire Maul", at West's door: a portal, no icon of its own)
+            if wing and entrance_wing(inst.map_id, label) == (None, None):
+                more += ", guess = true"
+            return f"{{ {c}, {x:.1f}, {y:.1f}, {ix:.1f}, {iy:.1f}, {iz:.1f}{more} }}"
+
+        ents = ", ".join(ent(i, e) for i, e in enumerate(inst.entrances))
         bl = []
-        for b in inst.bosses:
+        for bi, b in enumerate(inst.bosses):  # (not `k`: the tile's cells, below)
             if b["x"] is None:
                 continue
             enc = ",".join(str(e) for e in b["enc"])
             order = f", order = {b['order'] + 1}" if b.get("order") is not None else ""
             order += ", optional = true" if b.get("optional") else ""
+            bw = boss_wing.get(bi)
+            if isinstance(bw, (list, tuple)):  # (in more than one wing: Maraudon's inner bosses)
+                order += ", wings = { " + ", ".join(_lua_str(w) for w in bw) + " }"
+            elif bw:
+                order += f", wing = {_lua_str(bw)}"
             bl.append(f"    {{ {_lua_str(b['name'])}, {b['npc']}, {b['x']:.1f}, {b['y']:.1f}, {b['z']:.1f}, enc = {{ {enc} }}{order} }},")
         out.append(f"ns.Instances[{L}] = {{ name = {_lua_str(inst.name)}, map = {inst.map_id}, raid = {str(inst.raid).lower()},")
         out.append(f"  entrances = {{ {ents} }},")
+        if wing_order:
+            out.append("  wings = { " + ", ".join(_lua_str(w) for w in wing_order) + " },")
         if inst.corpse and inst.entrances and inst.entrances[0][0] not in (0, 1):
             # (in through another instance: its icon on the continent where the ghost's way in is)
             c, x, y = inst.corpse
@@ -657,10 +692,6 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         for row in top:
             out.append(f'  "{height_runs("".join(height_char(z, z0, step) for z in row))}",')
         out.append("} }")
-        nodes, edges, drops, zs = instance_roads(u)
-        from .roads.lifts import add_instance_lifts, wait_yards
-
-        lifts = add_instance_lifts(inst.map_id, nodes, edges, zs, log)  # (Gnomeregan's: roads/lifts.py)
         out.append(f"ns.Roads[{L}] = {{")
         out.append("  n = {" + ",".join(f"{x:.0f},{y:.0f}" for x, y in nodes) + "},")
         if zs:  # (each node's height: the floors over floors are told apart by it)
@@ -682,12 +713,13 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
         out.append("}")
         out.append(f"ns.RoadDrops[{L}] = {{ " + ", ".join(f"[{i + 1}] = {h}" for i, h in sorted(drops.items())) + " }")
         names = {i.level: i.name for i, _u in built}
-        for c, x, y, _z, ix, iy, iz, _n in inst.entrances:
+        for i, (c, x, y, _z, ix, iy, iz, _n) in enumerate(inst.entrances):
             place = names.get(c) if c >= LEVEL_BASE else (zone_name(cd, c, x, y, zcache) or inst.name)
             if c >= LEVEL_BASE and c not in names:
                 continue  # (from an instance not built: no way in)
+            to = inst.name + (f": {named[i][0]}" if named and named[i][0] else "")  # (a wing's: "Scarlet Monastery: Library")
             out.append(f"ns.Transports[#ns.Transports + 1] = {{ {c}, {x:.1f}, {y:.1f}, {L}, {ix:.1f}, {iy:.1f}, "
-                       f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(inst.name)}, \"portal\", iz = {iz:.1f} }}")
+                       f"{PORTAL_SECONDS}, \"portal\", {_lua_str(place)}, {_lua_str(to)}, \"portal\", iz = {iz:.1f} }}")
     # dungeons and raids with their map only (WoW Forever's own): the terrain's minimap tiles,
     # their bosses without spots, entrances when known
     out.append("-- dungeons and raids with their map only (no walk network): ns.MinimapTiles[map id], bosses")
@@ -839,12 +871,14 @@ JUMP_MAX = 8.0  # yards: a jump bigger than this between levels is flagged
 LAST_MAX = 25.0  # yards: a last leg off the roads longer than this is flagged
 
 
-def boss_route(lua, R, level: int, entrances: list, b: dict) -> tuple:
+def boss_route(lua, R, level: int, entrances: list, b: dict, wings: list | None = None, wing: str | None = None) -> tuple:
     """The route from a dungeon's way in to a boss, as the game's (G.SuggestedPath): from the nearest
-    way in (an instance of wings, the Scarlet Monastery's, has one each), roads only, from its height to
-    the boss's (opts.z / opts.tz: where floors lie over each other they pick the floors; without them the
-    start took the road nearest in 2D, Scholomance's on the floor 28 yd under its way in). (entrance, route)."""
-    e = min(entrances, key=lambda e: math.hypot(e[4] - b["x"], e[5] - b["y"]))
+    way in (an instance of wings, the Scarlet Monastery's: of the boss's wing, `wing`, the ways in's being
+    `wings`), roads only, from its height to the boss's (opts.z / opts.tz: where floors lie over each other
+    they pick the floors; without them the start took the road nearest in 2D, Scholomance's on the floor
+    28 yd under its way in). (entrance, route)."""
+    own = [e for i, e in enumerate(entrances) if wings and wing and i < len(wings) and wings[i] == wing]
+    e = min(own or entrances, key=lambda e: math.hypot(e[4] - b["x"], e[5] - b["y"]))
     opts = {"offroad": False}
     if e[6] is not None:
         opts["z"] = e[6]
@@ -885,10 +919,14 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
         L = inst.level
         if not inst.entrances:
             continue
+        # (its wings, as written: each way in's and each boss's, by name)
+        info = ns.Instances[L]
+        wings = [info.entrances[i][7] for i in range(1, len(info.entrances) + 1)] if info else None
+        boss_wing = {info.bosses[i][1]: info.bosses[i].wing for i in range(1, len(info.bosses) + 1)} if info else {}
         for b in inst.bosses:
             if b["x"] is None:
                 continue
-            e, r = boss_route(lua, R, L, inst.entrances, b)
+            e, r = boss_route(lua, R, L, inst.entrances, b, wings, boss_wing.get(b["name"]))
             if not r or not r.pts:
                 out.append(f"! {inst.name}: {b['name']}: no route")
                 log(out[-1])
