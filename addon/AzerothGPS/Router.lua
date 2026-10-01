@@ -2142,10 +2142,25 @@ end
 -- under walkable ground, when the player's spot, only when `indoors` (IsIndoors) says so
 -- (a stop there is taken to be down in it). A capital's floor under another (Data/Capitals.lua,
 -- `split`: a height between the two) goes by the player's height `z` instead, when known.
+R.CAVE_GAP_YD = 12 -- yards: a spot in a gap of a cave's or city's grid with its cells this near on both sides
 function R.CaveDown(cont, x, y, indoors, z)
   local P = ns.Passability
   local v, o = P.OverlayRaw(cont, x, y)
-  if v == nil or not (o and o.cave) then return false end
+  if v == nil then
+    -- (in a narrow gap of its grid, its cells on both sides: down as they are. The tram's way in under
+    -- Ironforge, a strip with none: taken as up on the mountain, the walk there from the city went out by
+    -- its gate and round through Loch Modan and the Wetlands, 10 km; reported 2026-10-01)
+    local d = R.CAVE_GAP_YD
+    for _, s in ipairs({ { d, 0 }, { 0, d } }) do
+      local v1, o1 = P.OverlayRaw(cont, x + s[1], y + s[2])
+      local v2, o2 = P.OverlayRaw(cont, x - s[1], y - s[2])
+      if v1 ~= nil and v2 ~= nil and o1 and o1.cave and o2 and o2.cave then
+        return R.CaveDown(cont, x + s[1], y + s[2], indoors, z)
+      end
+    end
+    return false
+  end
+  if not (o and o.cave) then return false end
   -- (a floor under another's: `split`; a city under a mountain's own grid, Ironforge's: `zsplit`, its
   -- floor or the ground over it, not skipped as the floors under others are by Passability's `floors`)
   local split = o.split or o.zsplit

@@ -166,3 +166,16 @@ def test_a_shipped_drawn_road_joins_the_cave_mouths_roads(caves_world):
     for end in ((-4097.1, -2465.9), (-4092.7, -2435.7)):
         n = min(range(1, int(g.count) + 1), key=lambda i: math.dist((g.n[2 * i - 1], g.n[2 * i]), end))
         assert math.dist((g.n[2 * n - 1], g.n[2 * n]), end) < 1 and len(g.adj[n]) >= 2, end
+
+
+def test_ironforges_tram_is_walked_to_inside_the_city(caves_world):
+    # (reported, a screenshot: "10.4k yd to the Deeprun Tram" from Ironforge's Military Ward, and "the only
+    # way walks through the Wetlands, Loch Modan") the tram's way in lies in a strip of the city's grid with
+    # no cells, taken as up on the mountain: the walk went out by the gate and round. A gap that narrow
+    # between the city's cells is down in the city (Router.CaveDown, CAVE_GAP_YD)
+    lua, ns = caves_world
+    R = ns.Router
+    assert R.CaveDown(0, -4840.3, -1330.5)
+    R.Reset()
+    r = R.Route(0, -4944.0, -1232.0, -4840.3, -1330.5, lua.table(offroad=False))
+    assert r.length < 400
