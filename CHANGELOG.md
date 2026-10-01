@@ -38,7 +38,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **More roads** on Eastern Kingdoms, drawn in game.
 - **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
 - **Editing floors over floors** (Undercity, the floors under Orgrimmar's Drag and Stormwind's bridges, caves and mines): with the road or wall tools on, **Shift + mouse wheel** picks the floor you edit, from the floors where the map is centered (the game doesn't tell addons your height). The hint under the map says which ("Editing: floor 2 of 3 here", or all floors), its roads and walls draw bright and the others faint, and what you draw or erase changes that floor only. Turning the tools off goes back to all floors.
-- **For other addons:** API versions 3 to 9 (HoldMap, with a map style held while it's on; LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
+- **For other addons:** API versions 3 to 10 (HoldMap, with a map style held while it's on; icons in overlays; LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
 

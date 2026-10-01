@@ -1637,13 +1637,34 @@ function ctx.Dot(x, y, color, size, alpha) -- a square dot `size` UI units acros
   size = size or 6
   AddSeg(sx - size / 2, sy, sx + size / 2, sy, color, size, alpha or 1, true)
 end
-local function RunOverlays(cx, cy, viewCont, rot, s, half, zoom)
-  if not next(G.overlays) then return end
-  ctx.x, ctx.y, ctx.cont, ctx.rot, ctx.scale, ctx.half, ctx.zoom, ctx.reach = cx, cy, viewCont, rot, s, half, zoom, half * 1.5
-  for name, fn in pairs(G.overlays) do
-    local ok, err = pcall(fn, ctx)
-    if not ok then G.LogError("overlay " .. tostring(name), err) end
+-- (API 10) An icon at (x, y): a texture (file id, path or "atlas:<name>"), `size` UI units across.
+local overlayIcons, overlayIconsUsed = {}, 0
+function ctx.Icon(x, y, texture, size, alpha)
+  local sx, sy = ctx.ToScreen(x, y)
+  if Outside(sx, sy, sx, sy) or not poiLayer then return end
+  overlayIconsUsed = overlayIconsUsed + 1
+  local t = overlayIcons[overlayIconsUsed]
+  if not t then
+    t = poiLayer:CreateTexture(nil, "OVERLAY")
+    overlayIcons[overlayIconsUsed] = t
   end
+  ns.SetIcon(t, texture, "Interface\\Icons\\INV_Misc_QuestionMark")
+  t:SetSize(size or 16, size or 16)
+  t:SetAlpha(alpha or 1)
+  t:ClearAllPoints()
+  t:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
+  t:Show()
+end
+local function RunOverlays(cx, cy, viewCont, rot, s, half, zoom)
+  overlayIconsUsed = 0
+  if next(G.overlays) then
+    ctx.x, ctx.y, ctx.cont, ctx.rot, ctx.scale, ctx.half, ctx.zoom, ctx.reach = cx, cy, viewCont, rot, s, half, zoom, half * 1.5
+    for name, fn in pairs(G.overlays) do
+      local ok, err = pcall(fn, ctx)
+      if not ok then G.LogError("overlay " .. tostring(name), err) end
+    end
+  end
+  for i = overlayIconsUsed + 1, #overlayIcons do overlayIcons[i]:Hide() end
 end
 
 -- Color, thickness and alpha only when they changed (most lines keep theirs frame to frame).

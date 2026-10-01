@@ -262,6 +262,23 @@ def test_the_copy_window_leaves_out_what_is_unticked(game):
         lua.globals().AzerothGPSRoadsCopy._shown = False
 
 
+def test_an_overlay_draws_icons_until_removed(game):
+    # (API 10, for the dev tools' import preview: a shared pin with its own icon) ctx.Icon on the map
+    lua, ns = game
+    G, A = ns.GPS, lua.globals().AzerothGPS
+    A.SetOverlay("test icons", lua.eval("""function(ctx)
+      ctx.Icon(2254, 293, 136777, 20, 0.5)
+      ctx.Icon(99999, 99999, 136778, 20)
+    end"""))
+    lua.execute("AGPS_T = 720")
+    G.Update()
+    shown = _shown(lua, lambda w: w._tex == 136777)
+    assert len(shown) == 1 and not _shown(lua, lambda w: w._tex == 136778)  # (one off the map: not drawn)
+    A.SetOverlay("test icons", None)
+    lua.execute("AGPS_T = 721")
+    G.Update()
+    assert not _shown(lua, lambda w: w._tex == 136777)
+
 def test_the_style_buttons_and_command_leave_a_held_style(game):
     # (API 9) while a game holds the map with a style, the Map Style buttons and /agps style don't change
     # it (they say why); the map draws it at every zoom; let go, the player's own is back

@@ -4728,7 +4728,7 @@ def test_public_api_exposes_documented_functions(api):
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
                  "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
         assert A[name] is not None, name
-    assert A.version == 9
+    assert A.version == 10
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 

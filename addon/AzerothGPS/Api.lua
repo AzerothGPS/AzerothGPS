@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 9 }
+local API = { version = 10 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -123,6 +123,8 @@ end
 -- view; ctx.Line(x1, y1, x2, y2, { r, g, b }, width, alpha, dotted) and
 -- ctx.Dot(x, y, { r, g, b }, size, alpha) take world yards; ctx.ToScreen(x, y) gives UI units
 -- from the center; ctx.zoom is yards from center to edge. fn = nil removes it.
+-- (Version 10) ctx.Icon(x, y, texture, size, alpha): an icon there (a file id, a path, or
+-- "atlas:<name>"), `size` UI units across.
 function API.SetOverlay(name, fn)
   if not GPS() then return end
   GPS().overlays[name] = fn

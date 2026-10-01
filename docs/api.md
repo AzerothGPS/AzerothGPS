@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 9) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 10) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -45,6 +45,8 @@ center, +x right and +y up.
   continent in view and `ctx.zoom` the yards from center to edge. Draw with
   `ctx.Line(x1, y1, x2, y2, {r, g, b}, width, alpha, dotted)` and
   `ctx.Dot(x, y, {r, g, b}, size, alpha)` in world yards; `ctx.ToScreen(x, y)` converts.
+  `ctx.Icon(x, y, texture, size, alpha)` (version 10) puts an icon there: a file id, a path or
+  `"atlas:<name>"`, `size` UI units across.
   The lines join the map's own: clipped, rotated with the map, drawn above the route, never
   faded. Pass `nil` to remove the overlay. Errors are logged like the map's own.
 - `ShowRoads(owner, on, {r, g, b})`: shows the road network in that color while any owner
