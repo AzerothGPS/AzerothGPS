@@ -440,6 +440,7 @@ class Capital:
     outside: tuple = ()  # (x, y): a spot on the land's road outside, where the checks start
     indoor: bool = False  # under a mountain (Ironforge): like a cave, the land over it is the continent's
     ground_above: float | None = None  # the ground higher than this is the city's too (Thunder Bluff's mesas)
+    stair_max: float = walknet.STAIR_MAX  # the longest way a stair between levels is looked for (yards)
     ground_reach: float = GROUND_REACH  # yards: the ground taken in from the models' floors
 
 
@@ -526,7 +527,7 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         return h, ok & near
 
     u = walknet.build(fl, wl, lq, label=cap.name, ground=ground_at_gates, ground_reach=cap.ground_reach, prune=PRUNE,
-                      fill=FILL, top_reached=True, road_pieces=True, ground_under=True, log=log)
+                      fill=FILL, top_reached=True, road_pieces=True, ground_under=True, stair_max=cap.stair_max, log=log)
     H, W = u["H"], u["W"]
     g = u["graph"]
     # the city's own cells: its models' footprint (floors, and the rock and walls between them)
@@ -681,6 +682,12 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
                                  under_at=cell_is(un["zone"], True) if un else None,
                                  over_under=cell_is(cells, FLOOR_UNDER))
 
+    # (a piece of road only dropped down out of, no way up onto it found (Ironforge's Mystic Ward balcony,
+    # 22 yd over its floor): routes went up to it by a straight gap link and jumped back down to the
+    # trainers under it (2026-10-01); left out, with its drops
+    hung = hanging_pieces(g, set(mouths))
+    if hung:
+        log(f"  {cap.name}: {len(hung)} road pieces only dropped down out of (no way up onto them) left out")
     joins = []
     for patch, lst in sorted(by_patch.items()):
         ways = []
@@ -731,6 +738,49 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
     log(f"  {cap.name}: {len(g.nodes)} nodes, {g.total_length():.0f} yd of road, {len(u['mouths'])} gate roads, "
         f"{len(joins)} joined, grid {W}x{H}; {len(u['labels'])} district labels")
     return u
+
+
+def hanging_pieces(g, keep: set) -> list:
+    """The pieces of g's road (joined without its drops) left only by drops (sources "drop:<yd>") down out
+    of them, none into them, and none of them a node in `keep` (the gates' roads): removed. Returns them
+    (sets of edge ids)."""
+    drops = {eid for eid, e in g.edges.items() if str(e.source).startswith("drop")}
+    parent: dict = {}
+
+    def find(a):
+        while parent.get(a, a) != a:
+            parent[a] = parent.get(parent[a], parent[a])
+            a = parent[a]
+        return a
+    for eid, e in g.edges.items():
+        if eid not in drops:
+            ra, rb = find(e.a), find(e.b)
+            if ra != rb:
+                parent[ra] = rb
+    out_of, into = defaultdict(int), defaultdict(int)
+    for eid in drops:
+        e = g.edges[eid]
+        ca, cb = find(e.a), find(e.b)
+        if ca != cb:
+            out_of[ca] += 1
+            into[cb] += 1
+    pieces = defaultdict(set)
+    for eid, e in g.edges.items():
+        if eid not in drops:
+            pieces[find(e.a)].add(eid)
+    kept = {find(n) for n in keep if n in g.nodes}
+    drop_from = {d: find(g.edges[d].a) for d in drops}  # (worked out before any is removed)
+    hung = []
+    for c, eids in pieces.items():
+        if out_of.get(c) and not into.get(c) and c not in kept and len(pieces) > 1:
+            gone = set(eids) | {d for d in drops if drop_from[d] == c}
+            for eid in gone:
+                if eid in g.edges:
+                    g.remove_edge(eid)
+            hung.append(gone)
+    if hung:
+        g.drop_isolated_nodes()
+    return hung
 
 
 STACK_GAP = 6  # yards: a floor this far under another reached one is a level of its own there
