@@ -12,7 +12,9 @@ local ARROW_FILE = "Interface\\Minimap\\MinimapArrow"
 local TEXT_EVERY = 0.25 -- seconds between text updates (the arrow itself turns every frame)
 
 local frame, arrow, slot, bang, dist, line1, line2, line3, line4, grip, stale
-local useBtn -- the route's first step a hearthstone or teleport: its button where the arrow is (GPSFrame's NewUseButton)
+-- the route's first step a hearthstone or teleport: its icon where the arrow is, glowing (pulsing like
+-- the quest route's remake button), and over it its button, clear (GPSFrame's NewUseButton: a click uses it)
+local useBtn, useIcon, useGlow
 local SPRINT_ICON = "Interface\\Icons\\Ability_Rogue_Sprint" -- the quest route button's
 local QUEST_ICON = "Interface\\GossipFrame\\AvailableQuestIcon" -- the "!" in a quest area
 local rows = {} -- the later stops, as many as fit the window's height
@@ -146,12 +148,18 @@ local function UpdateText(px, py, cont)
   -- out of step with the steps), the walk after it next
   local use = N.route and N.dest and not N.route.flying and not (N.questing and N.dest) and N.UseNow and N.UseNow() or nil
   SetUse(use)
+  if not use then
+    useIcon:Hide()
+    useGlow:Hide()
+  end
   if N.questing and N.dest then return QuestText(px, py, cont) end
   arrow:SetSize(58, 58)
   arrow:SetAlpha(1)
   arrow:ClearAllPoints()
   arrow:SetPoint("CENTER", slot, "CENTER")
   arrow:Show()
+  useIcon:Hide()
+  useGlow:Hide()
   bang:Hide()
   dist:Hide()
   local r, d = N.route, N.dest
@@ -199,7 +207,10 @@ local function UpdateText(px, py, cont)
   elseif use then
     line1:SetText("Use " .. tostring(use[8]))
     line2:SetText(use[10] and use[10] ~= "" and ("to " .. use[10]) or "")
-    arrow:Hide() -- (its button there instead: click it)
+    arrow:Hide() -- (its icon there instead, glowing: click it)
+    useIcon:SetTexture(ns.GPS and ns.GPS.UseTexture and ns.GPS.UseTexture(use) or 134400)
+    useIcon:Show()
+    useGlow:Show()
   elseif m then
     -- what to do now, then the maneuver: "Continue straight, then slight right in 13 yd" (shorter when
     -- the window is too narrow for it on one line)
@@ -290,6 +301,11 @@ local function Update(dt)
     stale:Show()
   else
     stale:Hide()
+  end
+  if useIcon:IsShown() then -- (the hearthstone's icon in the arrow's place: glowing, as the remake button pulses)
+    local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
+    useIcon:SetAlpha(0.75 + 0.25 * a)
+    useGlow:SetAlpha(a)
   end
   textWait = textWait - dt
   if textWait <= 0 then
@@ -457,8 +473,23 @@ function A.Init()
   slot:SetPoint("LEFT", 8, 0)
   arrow:SetPoint("CENTER", slot, "CENTER")
   ns.SetIcon(arrow, "atlas:" .. ARROW_ATLAS, ARROW_FILE)
-  -- (the route's first step a hearthstone or teleport: its button in the arrow's place, as the map's)
-  if ns.GPS and ns.GPS.NewUseButton then useBtn = ns.GPS.NewUseButton("AzerothGPSArrowUseButton", frame, 40) end
+  -- (the route's first step a hearthstone or teleport: its icon in the arrow's place, glowing, and its
+  -- button over it: the window's own texture shows it whatever the secure button does)
+  useIcon = frame:CreateTexture(nil, "ARTWORK")
+  useIcon:SetSize(40, 40)
+  useIcon:SetPoint("CENTER", slot, "CENTER")
+  useIcon:Hide()
+  useGlow = frame:CreateTexture(nil, "OVERLAY")
+  useGlow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+  useGlow:SetBlendMode("ADD")
+  useGlow:SetVertexColor(1, 0.85, 0.3)
+  useGlow:SetSize(78, 78)
+  useGlow:SetPoint("CENTER", useIcon, "CENTER")
+  useGlow:Hide()
+  if ns.GPS and ns.GPS.NewUseButton then
+    useBtn = ns.GPS.NewUseButton("AzerothGPSArrowUseButton", frame, 40)
+    if useBtn then useBtn.icon:SetAlpha(0) end -- (clear: the icon under it is the window's)
+  end
   bang = frame:CreateTexture(nil, "ARTWORK")
   bang:SetSize(40, 40)
   bang:SetPoint("CENTER", arrow, "CENTER")

@@ -4315,6 +4315,16 @@ function G.MakeUseButton(panel)
   G.useBtn = G.NewUseButton("AzerothGPSUseButton", panel, 24)
 end
 
+-- A teleport row's icon: its item's or spell's (the question mark when the game hasn't it yet).
+function G.UseTexture(t)
+  local tex
+  if t and t.item then
+    tex = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(t.item)) or (GetItemIcon and GetItemIcon(t.item))
+  elseif t and t.spell then
+    tex = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(t.spell)) or (GetSpellTexture and GetSpellTexture(t.spell))
+  end
+  return tex or 134400
+end
 -- What the use button uses: `t`, a teleport row with item or spell (Nav.UseNow), or nil (hidden).
 -- The key it's set for: "item:6948", "spell:556", or nil.
 function G.UseKey(t)
@@ -4335,19 +4345,16 @@ function G.SetUseButton(b, t, place)
     b:Hide()
     return
   end
-  local tex
   if t.item then
     b:SetAttribute("type", "item")
     b:SetAttribute("item", key)
     b:SetAttribute("spell", nil)
-    tex = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(t.item)) or (GetItemIcon and GetItemIcon(t.item))
   else
     b:SetAttribute("type", "spell")
     b:SetAttribute("spell", ns.SpellName and ns.SpellName(t.spell) or t.spell)
     b:SetAttribute("item", nil)
-    tex = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(t.spell)) or (GetSpellTexture and GetSpellTexture(t.spell))
   end
-  b.icon:SetTexture(tex or 134400)
+  b.icon:SetTexture(G.UseTexture(t))
   b.what, b.to = t[8], t[10]
   b:ClearAllPoints()
   place(b)

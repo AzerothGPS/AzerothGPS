@@ -300,6 +300,11 @@ def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
         arrowWin._scripts.OnUpdate(arrowWin, 1)
         btn = lua.globals().AzerothGPSArrowUseButton
         assert btn._shown and btn._attr["item"] == "item:6948"
+        # (asked: the item's icon where the arrow was, glowing like the quest route's remake button; the
+        # window's own texture, the clear button over it)
+        tex = G.UseTexture(hearth)
+        glow = [w for w in lua.eval("AGPS_WIDGETS").values() if w._shown and w._tex and "UI-ActionButton-Border" in str(w._tex)]
+        assert _shown(lua, lambda w: w._tex == tex and w._parent is not None and w._parent._name == "AzerothGPSArrow") and len(glow) == 1
         texts = [str(w._text) for w in lua.eval("AGPS_WIDGETS").values() if w._kind == "FontString" or w._text]
         assert "Use your Hearthstone" in texts and "to Northshire Valley" in texts
         assert not any(t.startswith("Straight") or t.startswith("Continue straight") for t in texts if t)
