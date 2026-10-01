@@ -93,6 +93,44 @@ def test_a_detour_is_removed_for_this_route_by_its_pin(game):
     assert N.LearnOnRoute(N.route) and N.LearnOnRoute(N.route)[1].node == 13
 
 
+def _ride_pins(lua):
+    return [w for w in lua.eval("AGPS_WIDGETS").values() if w.ride and w._shown]
+
+
+def test_a_ride_is_left_out_of_this_route_by_its_pin(game):
+    # (asked) right-click "Remove?" on a ride's pin (the zeppelin from Brill): not taken again on this
+    # route, rerouting or after a /reload; a new route takes it again
+    lua, ns = game
+    N, G = ns.Nav, ns.GPS
+    ns.settings.gps.zoom = 2400
+    stop = lua.eval("{ { x = 1600, y = -4400, cont = 1 } }")
+    N.SetStops(stop, False, "red")
+    lua.execute("AGPS_T = 400")
+    G.Update()
+    zep = [p for p in _ride_pins(lua) if p.ride[8] == "zeppelin" and p.ride[10].startswith("Brill")]
+    assert len(zep) == 1 and zep[0].title == "Zeppelin to Jaggedswine Farm, Durotar"
+    assert str(zep[0].icon._tex).endswith(r"Media\Zeppelin")
+    zep[0]._scripts.OnEnter(zep[0])  # (its tooltip: the dock's timetable and the hint)
+    key = N.RideKey(zep[0].ride)
+    G.AskRemove(zep[0])
+    ask = next(w for w in lua.eval("AGPS_WIDGETS").values() if w._text == "Remove?")
+    ask._scripts.OnClick(ask)
+    assert N.skipRides[key]
+    lua.execute("AGPS_T = 401")
+    G.Update()
+    r = N.route
+    assert r and all(not r.legs[i].ride or N.RideKey(r.legs[i].ride) != key for i in range(1, len(r.legs) + 1))
+    assert all(N.RideKey(p.ride, p.hop) != key for p in _ride_pins(lua))
+    N.skipRides = lua.eval("{}")  # (a /reload: back from the saved stops)
+    N.Restore()
+    assert N.skipRides[key]
+    N.SetStops(stop)  # (a new route: asked about the zones on the way first, the rides back...)
+    N.SetStops(stop, False, "red")  # (...and the yes to it)
+    lua.execute("AGPS_T = 402")
+    G.Update()
+    assert not N.skipRides[key]
+    assert any(N.RideKey(p.ride) == key for p in _ride_pins(lua))
+
 def test_the_dev_hooks_for_sharing(game):
     # (the private dev addon, AzerothGPS_Dev: AzerothGPS_Extend runs its setup with ns; the one way
     # out, Import.io.send; messages in, Import.OnAddonMessage; the popup, Import.Offer)

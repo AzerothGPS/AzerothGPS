@@ -1872,13 +1872,36 @@ local function StopPin(i)
   b:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(self.title, 1, 1, 1)
-    GameTooltip:AddLine(self.learnNode and "Right-click: remove this detour (for this route)" or "Right-click: remove this stop",
-      0.7, 0.7, 0.7)
+    if self.dock then -- (a zeppelin's or boat's dock: its timetable, as its own icon's)
+      local _, lines = G.DockTimes(self.dock[1], self.dock[2])
+      for _, l in ipairs(lines or {}) do GameTooltip:AddLine(l, 1, 0.82, 0) end
+    end
+    GameTooltip:AddLine(G.PinHint(self), 0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)
   stopPins[i] = b
   return b
+end
+
+-- A route pin's right-click hint.
+function G.PinHint(b)
+  if b.learnNode then return "Right-click: remove this detour (for this route)" end
+  if b.ride then
+    return b.hop and "Right-click: don't fly this connection (for this route)" or "Right-click: don't take this ride (for this route)"
+  end
+  return "Right-click: remove this stop"
+end
+-- A ride's pin icon (Nav.RidePins' kinds; a teleport's, its item's or spell's).
+local RIDE_ICON = { flight = TAXI_ICON.known, tram = "Interface\\Icons\\INV_Misc_Gear_01", lift = "Interface\\Icons\\INV_Misc_Gear_01" }
+function G.RideIcon(p)
+  if p.kind == "teleport" then
+    local t = p.ride
+    local tex = t.item and GetItemIcon and GetItemIcon(t.item)
+    if not tex and t.spell and ns.SpellIcon then tex = ns.SpellIcon(t.spell) end
+    return tex or "Interface\\Icons\\INV_Misc_Rune_01"
+  end
+  return RIDE_ICON[p.kind] or DOCK_ICON[p.kind] or TAXI_ICON.known
 end
 
 -- Draw the pins: route stops (solid) and pending stops (lighter, removable).
@@ -1898,11 +1921,14 @@ local function DrawStopPins(toScreen, viewCont)
     local b = StopPin(n)
     if d.learnNode then -- (a flight master's detour: the map's own icon for it, as a stop made from a map icon)
       b.icon:SetTexture(TAXI_ICON.unlearned)
+    elseif d.ride then -- (a ride the route takes: its icon where it's boarded)
+      ns.SetIcon(b.icon, G.RideIcon(d))
     else
       b.icon:SetTexture(ns.Nav.StopIcon(d))
     end
     b.icon:SetAlpha(pendingIndex and 0.75 or 1)
     b.title, b.pendingIndex, b.stopIndex, b.learnNode = title, pendingIndex, stopIndex, d.learnNode
+    b.ride, b.hop, b.dock = d.ride, d.hop, d.dock
     if G.clickThrough then
       b.agpsMouse = true -- restored when click-through ends
       b:EnableMouse(false)
@@ -1910,7 +1936,7 @@ local function DrawStopPins(toScreen, viewCont)
       b:EnableMouse(true)
     end
     b:ClearAllPoints()
-    if d.learnNode then -- (where the map's icon is, its size: that icon, right-clickable)
+    if d.learnNode or d.ride then -- (where the map's icon is, its size: that icon, right-clickable)
       b:SetSize(16, 16)
       b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
     else
@@ -1933,6 +1959,10 @@ local function DrawStopPins(toScreen, viewCont)
   local learn = ns.Nav.route and not ns.Nav.QuestPaused() and ns.Nav.LearnOnRoute(ns.Nav.route)
   for _, h in ipairs(learn or {}) do
     pin({ cont = h.cont, x = h.x, y = h.y, learnNode = h.node }, "Detour: learn the flight path at " .. h.name)
+  end
+  -- the rides it takes (flights, boats, zeppelins, the tram, teleports): each removable from this route
+  for _, p in ipairs(ns.Nav.route and ns.Nav.RidePins and ns.Nav.RidePins(ns.Nav.route) or {}) do
+    pin(p, p.title)
   end
   for i = n + 1, #stopPins do stopPins[i]:Hide() end
 end
@@ -2415,6 +2445,11 @@ function G.Update()
     end
     -- (and a flight master's detour: its pin is that flight master's icon, right-clickable)
     for _, h in ipairs(ns.Nav.route and ns.Nav.LearnOnRoute(ns.Nav.route) or {}) do
+      local x, y = Geo.ToContinent(h.cont, h.x, h.y, viewCont)
+      if x then under[#under + 1] = { x, y } end
+    end
+    -- (and the rides the route takes: their pins are the flight master's or dock's icon, right-clickable)
+    for _, h in ipairs(ns.Nav.route and ns.Nav.RidePins(ns.Nav.route) or {}) do
       local x, y = Geo.ToContinent(h.cont, h.x, h.y, viewCont)
       if x then under[#under + 1] = { x, y } end
     end
@@ -3916,6 +3951,9 @@ function G.AskRemove(pin)
       if self.learnNode then -- (a detour: skipped for this route)
         ns.Nav.SkipLearn(self.learnNode)
         elapsed = 1
+      elseif self.ride then -- (a ride, or a flight's connection: not taken on this route)
+        ns.Nav.SkipRide(self.ride, self.hop)
+        elapsed = 1
       elseif self.pendingIndex then
         G.RemovePending(self.pendingIndex)
       elseif self.stopIndex then
@@ -3928,6 +3966,7 @@ function G.AskRemove(pin)
     end)
   end
   removeAsk.pendingIndex, removeAsk.stopIndex, removeAsk.learnNode = pin.pendingIndex, pin.stopIndex, pin.learnNode
+  removeAsk.ride, removeAsk.hop = pin.ride, pin.hop
   removeAsk.shownAt = GetTime()
   removeAsk:ClearAllPoints()
   removeAsk:SetPoint("BOTTOM", pin, "TOP", 0, 2)

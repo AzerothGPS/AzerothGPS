@@ -97,6 +97,9 @@ local function Save()
   local skip = {}
   for node in pairs(N.skipLearn or {}) do skip[#skip + 1] = node end
   cdb.skipLearn = (#list > 0 and #skip > 0) and skip or nil
+  local rides = {}
+  for key in pairs(N.skipRides or {}) do rides[#rides + 1] = key end
+  cdb.skipRides = (#list > 0 and #rides > 0) and rides or nil
 end
 N.SaveStops = Save
 
@@ -226,7 +229,7 @@ end
 
 function N.SetStops(stops, fastest, force)
   if Locked(force) then return false end
-  if force ~= "red" then N.redOk, N.skipLearn = {}, {} end -- (a new route: its zones asked about again, its detours back)
+  if force ~= "red" then N.redOk, N.skipLearn = {}, {} N.ClearSkippedRides() end -- (a new route: its zones asked about again, its detours and rides back)
   -- ("red": asked and confirmed; true: the dungeon route, its own)
   if not force and AskRed(stops, function() N.SetStops(stops, fastest, "red") end) then return false, true end
   N.stops, N.loop = {}, false
@@ -348,6 +351,7 @@ function N.Version() return version end
 function N.Clear()
   N.stops, N.loop = {}, false
   N.redOk, N.skipLearn = {}, {}
+  N.ClearSkippedRides()
   Changed()
 end
 
@@ -364,6 +368,9 @@ function N.Restore()
   for _, z in ipairs(#N.stops > 0 and cdb.redOk or {}) do N.redOk[z] = true end
   N.skipLearn = {}
   for _, node in ipairs(#N.stops > 0 and cdb.skipLearn or {}) do N.skipLearn[node] = true end
+  N.skipRides = {}
+  for _, key in ipairs(#N.stops > 0 and cdb.skipRides or {}) do N.skipRides[key] = true end
+  if next(N.skipRides) then N.FlightsChanged() end
   N.dest = N.stops[1]
   N.route, N.arrivedAt = nil, nil
   version = version + 1
@@ -449,6 +456,33 @@ function N.KnownFlightNodes()
     end
   end
   return known, n
+end
+
+-- Rides the player left out of this route (right-click "Remove?" on a ride's pin: GPSFrame): not taken
+-- again on it, rerouting or after a /reload (saved with the stops); a new route clears it. A flight's is
+-- one connection between two flight masters (either way: "h:a:b"), so every flight over it goes too; a
+-- boat's, a zeppelin's, the tram's, its row's; a teleport's, its item or spell.
+N.skipRides = {}
+local function HopKey(a, b)
+  a, b = tostring(a), tostring(b)
+  if b < a then a, b = b, a end
+  return "h:" .. a .. ":" .. b
+end
+-- The key ride row `t` is left out by (`hop`: a flight's k-th connection, from its k-th flight master).
+function N.RideKey(t, hop)
+  if hop and t.hops and t.hops[hop + 1] then return HopKey(t.hops[hop], t.hops[hop + 1]) end
+  if t.use then return "u:" .. (t.item and ("i" .. t.item) or ("s" .. tostring(t.spell or t[8]))) end
+  if t.from and t.to then return "f:" .. tostring(t.from) .. ">" .. tostring(t.to) end
+  return string.format("t:%s:%.0f,%.0f>%.0f,%.0f", tostring(t[8]), t[2], t[3], t[5], t[6])
+end
+function N.SkipRide(t, hop)
+  N.skipRides[N.RideKey(t, hop)] = true
+  N.FlightsChanged() -- (the flights over a connection left out: worked out again without it)
+  N.SaveStops()
+end
+function N.ClearSkippedRides()
+  if next(N.skipRides or {}) then N.FlightsChanged() end
+  N.skipRides = {}
 end
 
 -- Recompute the flights on the next plan (a flight map was opened, the option changed).
@@ -551,7 +585,7 @@ local function Flights()
       done[u] = true
       for _, e in ipairs(u == from and first or adj[u] or {}) do
         local v, nd = e[1], best + e[2]
-        if not dist[v] or nd < dist[v] then dist[v], prev[v] = nd, u end
+        if not N.skipRides[HopKey(u, v)] and (not dist[v] or nd < dist[v]) then dist[v], prev[v] = nd, u end
       end
     end
     trips[from] = {}
@@ -569,7 +603,8 @@ local function Flights()
         local took = learned[a[4] .. " > " .. b[4]]
         local secs = took and took.seconds or yards / N.FLIGHT_SPEED + N.FLIGHT_OVERHEAD
         trips[from][to] = { a[1], a[2], a[3], b[1], b[2], b[3], secs, "flight", a[4], b[4],
-          fresh[from] and "new flight master" or "flight master", pts = pts, learn = fresh[from] and true or nil }
+          fresh[from] and "new flight master" or "flight master", pts = pts, learn = fresh[from] and true or nil,
+          from = from, to = to, hops = stops }
       end
     end
   end
@@ -581,6 +616,58 @@ local function Flights()
   for node in pairs(lands) do trips[node] = trips[node] or {} end
   flightCache = { key = key, masters = masters, trips = trips }
   return flightCache
+end
+
+-- The rides route `r` takes that the player can leave out of it (right-click on their pins: GPSFrame),
+-- each once: { cont, x, y, title, kind, ride = row, hop = k, dock = { transport, side } } where it's
+-- boarded: a flight's at each flight master it flies on from (a connection each), a teleport's where it
+-- lands; none for the flight being flown or a dungeon's way in.
+N.RIDE_NAMES = { zeppelin = "Zeppelin", boat = "Boat", tram = "Deeprun Tram", lift = "Lift" }
+local rowIndex = setmetatable({}, { __mode = "k" }) -- [transport row] = its index in ns.Transports
+function N.RidePins(r)
+  local out, seen = {}, {}
+  if not r then return out end
+  local masters = flightCache and flightCache.masters
+  local function add(p)
+    local key = N.RideKey(p.ride, p.hop)
+    if seen[key] then return end
+    seen[key] = true
+    out[#out + 1] = p
+  end
+  local function legs(list)
+    for _, leg in ipairs(list or {}) do
+      local t = leg.ride
+      if t and not t.flying and t[8] ~= "portal" then
+        if t.hops then
+          for k = 1, #t.hops - 1 do
+            local a, b = masters and masters[t.hops[k]], masters and masters[t.hops[k + 1]]
+            if a and b then
+              add({ cont = a[1], x = a[2], y = a[3], kind = "flight", ride = t, hop = k,
+                title = "Flight: " .. tostring(a[4]) .. " to " .. tostring(b[4]) })
+            end
+          end
+        elseif t.use then
+          add({ cont = t[4], x = t[5], y = t[6], kind = "teleport", ride = t,
+            title = tostring(t[8]):gsub("^%l", string.upper) .. " to " .. tostring(t[10] ~= "" and t[10] or "?") })
+        elseif t[8] ~= "flight" then
+          local back = leg.from == 2
+          if not next(rowIndex) then
+            for i, row in ipairs(ns.Transports or {}) do rowIndex[row] = i end
+          end
+          local i = rowIndex[t]
+          add({ cont = back and t[4] or t[1], x = back and t[5] or t[2], y = back and t[6] or t[3], kind = t[8], ride = t,
+            title = (N.RIDE_NAMES[t[8]] or "Ride") .. " to " .. tostring(back and t[9] or t[10]),
+            dock = i and { i, back and 2 or 1 } or nil })
+        end
+      end
+    end
+  end
+  local stretches = r.stretches
+  legs(r.legs)
+  for i = 2, stretches and N.PlannedStops() or 0 do
+    if stretches[i] then legs(stretches[i].legs) end
+  end
+  return out
 end
 
 -- Fastest sequence of legs from (px, py) on `cont` to stop d (default: the next stop),
@@ -641,16 +728,16 @@ function N.Plan(cont, px, py, speed, d, teleports, direct)
           cost = N.PlanYards(a[1], a[2], a[3], b[2], b[3], u ~= 1 and v ~= 2, exempt) * N.WALK_FACTOR / speed
           if u == 1 and v == 2 and direct then cost = math.max(cost, direct) end
         end
-        if a.t and b.t == a.t and a.side ~= b.side then
+        if a.t and b.t == a.t and a.side ~= b.side and not N.skipRides[N.RideKey(ns.Transports[a.t])] then
           local secs = ns.Transports[a.t][7]
           if not cost or secs < cost then cost, ride = secs, { ns.Transports[a.t], a.side } end
         end
-        if u == 1 and b.tp and (not cost or b.tp[7] < cost) then -- a teleport, from where we stand
+        if u == 1 and b.tp and not N.skipRides[N.RideKey(b.tp)] and (not cost or b.tp[7] < cost) then -- a teleport, from where we stand
           cost, ride = b.tp[7], { b.tp, 1 }
         end
         if a.fm and b.fm then
           local row = fl.trips[a.fm][b.fm]
-          if row and (not cost or row[7] < cost) then cost, ride = row[7], { row, 1 } end
+          if row and not N.skipRides[N.RideKey(row)] and (not cost or row[7] < cost) then cost, ride = row[7], { row, 1 } end
         end
         if cost and (not dist[v] or dist[u] + cost < dist[v]) then
           dist[v], prev[v], rode[v] = dist[u] + cost, u, ride

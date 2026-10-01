@@ -75,6 +75,12 @@ The addon is going public, so every change must keep it policy-safe:
     abilities (`N.MOVE_ABILITIES`, `N.MoveAbility`: its time beside walking; while on, it's the
     walking speed; learned per character in `moveSpeeds`). The walked part behind the player is
     trimmed off every `TRIM_MOVED_YD` between recalculations (`Follow(r, x, y, ahead)`).
+    Rides left out of the route (`N.skipRides`, `N.SkipRide(row, hop)`, keys `N.RideKey`: a flight's
+    connection between two flight masters either way, so every flight over it goes from `Flights()`; a
+    transport's row; a teleport's item or spell): not planned again until a new route (`SetStops`
+    without "red", `Clear`), saved with the stops (`cdb.skipRides`). Their pins (`N.RidePins`: a
+    flight's at each master it flies on from, a teleport's where it lands) are drawn with the stops'
+    (`DrawStopPins`, the map's icon under them left out) and right-clicked like a detour's.
   - `Turns.lua`: turn-by-turn maneuvers.
   - `Arrow.lua`: the direction arrow window.
   - `GPSFrame.lua`: the map window (layers, fade while moving, click-through, window

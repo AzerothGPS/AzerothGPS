@@ -3378,6 +3378,77 @@ def test_connecting_flight_and_option_off(nav_env):
     assert all(not legs[i].ride for i in range(1, len(legs) + 1))
 
 
+def _rides(legs):
+    return [legs[i].ride for i in range(1, len(legs) + 1) if legs[i].ride]
+
+
+def test_a_ride_left_out_is_not_taken_on_this_route(nav_env):
+    # (asked) right-click "Remove?" on a ride's pin: that zeppelin isn't taken again on this route
+    # (rerouting, after a /reload), and is back with a new route
+    lua, ns = nav_env
+    N = ns.Nav
+    N.SetDestination(1600.0, -4400.0, 1, "Orgrimmar")
+    zep = _rides(N.Plan(0, 1600.0, 240.0, 7.0)[0])[0]
+    assert zep[8] == "zeppelin"
+    key = N.RideKey(zep)
+    N.SkipRide(zep)
+    legs, _ = N.Plan(0, 1600.0, 240.0, 7.0)
+    assert legs and all(N.RideKey(t) != key for t in _rides(legs))
+    assert list(ns.CharDB().skipRides.values()) == [key]  # (saved with the stops)
+    N.skipRides = lua.eval("{}")
+    N.Restore()  # (a /reload)
+    assert N.skipRides[key]
+    assert all(N.RideKey(t) != key for t in _rides(N.Plan(0, 1600.0, 240.0, 7.0)[0]))
+    N.SetDestination(1600.0, -4400.0, 1, "Orgrimmar")  # (a new route: the ride back)
+    assert not N.skipRides[key]
+    assert N.RideKey(_rides(N.Plan(0, 1600.0, 240.0, 7.0)[0])[0]) == key
+    N.SkipRide(zep)
+    N.Clear()
+    assert not N.skipRides[key] and not ns.CharDB().skipRides
+
+
+def test_a_flight_connection_left_out_breaks_the_flights_over_it(nav_env):
+    # (asked) "Remove?" on a flight's pin leaves out that one connection between two flight masters:
+    # a flight connecting over it can't be taken either on this route ("so be it"), the others can
+    lua, ns = flights_env(nav_env, [10, 11, 68])
+    N = ns.Nav
+    load(lua, ns, "Turns.lua")
+    N.SetDestination(2320.0, -5280.0, 0, "Light's Hope")
+    stop = N.dest
+    r = N.Route(480.0, 1530.0, 0)
+    pins = N.RidePins(r)
+    titles = [pins[i].title for i in range(1, len(pins) + 1)]
+    assert len(titles) == 2  # Sepulcher to Undercity, Undercity to Light's Hope: one pin each
+    assert titles[0].startswith("Flight: The Sepulcher") and " to Undercity" in titles[0]
+    assert titles[1].startswith("Flight: Undercity") and " to Light's Hope" in titles[1]
+    assert pins[1].kind == "flight" and pins[2].hop == 2
+    N.SkipRide(pins[2].ride, pins[2].hop)
+    legs, _ = N.Plan(0, 480.0, 1530.0, 7.0, stop)
+    assert not any(t[10].startswith("Light's Hope") for t in _rides(legs))
+    # (the Sepulcher to Undercity still flies)
+    to_uc = _rides(N.Plan(0, 480.0, 1530.0, 7.0, lua.eval("{ x = 1560.0, y = 260.0, cont = 0 }"))[0])
+    assert len(to_uc) == 1 and to_uc[0][10].startswith("Undercity")
+    # (either way: Light's Hope to Undercity is the same connection)
+    back = _rides(N.Plan(0, 2270.0, -5340.0, 7.0, lua.eval("{ x = 1560.0, y = 260.0, cont = 0 }"))[0])
+    assert not any(t[9].startswith("Light's Hope") for t in back)
+
+
+def test_a_teleport_left_out_is_not_used_on_this_route(nav_env):
+    lua, ns = nav_env
+    N = ns.Nav
+    hearth = lua.eval("""{ { 0, 1560.0, 260.0, 0, -900.0, -3480.0, 10, "your Hearthstone", "", "Hammerfall", "your Hearthstone",
+      use = true, item = 6948 } }""")
+    stop = lua.eval("{ x = -910.0, y = -3490.0, cont = 0 }")
+    N.SetDestination(-910.0, -3490.0, 0, "Hammerfall")
+    assert N.RideKey(hearth[1]) == "u:i6948"
+    rides = _rides(N.Plan(0, 1560.0, 260.0, 7.0, stop, hearth)[0])
+    assert rides and rides[0].use
+    pins = N.RidePins(lua.eval("function(t) return { legs = { { ride = t, from = 1 } } } end")(hearth[1]))
+    assert len(pins) == 1 and pins[1].kind == "teleport" and pins[1].title == "Your Hearthstone to Hammerfall"
+    assert pins[1].x == -900.0  # (where it lands)
+    N.SkipRide(hearth[1])
+    assert not any(t.use for t in _rides(N.Plan(0, 1560.0, 260.0, 7.0, stop, hearth)[0]))
+
 def test_route_learns_a_new_flight_master_on_the_way(nav_env):
     # Near Tarren Mill (not learned yet), to Undercity (known): walk to Tarren Mill, learn
     # it and fly, rather than the long walk. Horde only; flights never land at unknown ones.
