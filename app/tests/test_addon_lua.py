@@ -5443,3 +5443,48 @@ def test_copy_map_data_includes_only_the_kinds_picked(env):
     trips = parse_shared_trips("T 1 13 300 200 1 to=50.0,60.0,1 0,0 30,0 40,25\nT 1 nope\nR add 0 11 1,2 3,4")
     assert trips == [{"continent": 1, "time": 13, "estimate": 300, "actual": 200, "mounted": True, "from": [0.0, 0.0],
                       "to": [50.0, 60.0, 1], "pts": [0.0, 0.0, 30.0, 0.0, 40.0, 25.0], "source": "shared"}]
+
+
+def test_shared_map_data_is_taken_into_the_players_own(env):
+    # (asked: the dev tools' "Import into My Data") roads, walls, pins, faster trips and dungeons' ways in
+    # someone shared, taken in with their times (each once; not what the data has); pins marked shared so
+    # the road watcher takes them, never the player's own
+    from azerothgps.pins import saved_pins
+
+    lua, ns = env
+    ns.db = lua.eval("{ tracks = { { op = 'add', continent = 0, time = 5, pts = { 1, 2, 3, 4 } } } }")
+    ns.RoadTracksIn = lua.eval("{ [7] = true }")
+    ns.PinsIn = lua.eval("{ [30] = true }")
+    ns.settings = lua.eval("{ gps = {} }")
+    load(lua, ns, "Record.lua", "Pins.lua", "Feedback.lua")
+    tracks = lua.eval("""{ { op = "add", continent = 0, time = 5, pts = { 1, 2, 3, 4 } },
+      { op = "wall", continent = 0, time = 6, pts = { 5, 6, 7, 8 }, z = 55 },
+      { op = "remove", continent = 0, time = 7, pts = { 9, 9, 10, 10 } },
+      { op = "remove", continent = 1, time = 8, pts = { 1, 1, 2, 2, 3, 3 }, area = true } }""")
+    assert ns.Record.AddShared(tracks) == 2  # (5: here already; 7: in the data)
+    assert ns.Record.AddShared(tracks) == 0
+    got = {int(t.time): (t.op, bool(t.shared), bool(t.drawn), t.z) for t in ns.db.tracks.values()}
+    assert got[6] == ("wall", True, True, 55) and got[8][0] == "remove" and len(got) == 3
+    pins = lua.eval("""{ { add = true, level = 0, x = 1, y = 2, time = 20, name = "Shared spot", icon = 136001 },
+      { add = true, level = 0, x = 1, y = 2, time = 30, name = "In the data" }, { remove = true, time = 30 },
+      { remove = true, time = 99 } }""")
+    assert tuple(ns.Pins.AddShared(pins)) == (1, 1)
+    assert tuple(ns.Pins.AddShared(pins)) == (0, 0)
+    ns.Pins.Add(lua.eval('{ level = 0, x = 5, y = 5, name = "Mine" }'))
+    own = list(ns.Pins.Own().values())
+    assert [(p.name, bool(p.shared)) for p in own] == [("Shared spot", True), ("Mine", False)]
+    assert ns.db.pinsRemoved[30] == "shared"
+    # (the road watcher: the shared ones only)
+    sv = {"AzerothGPSDB": {"pins": [dict(level=0, x=1, y=2, time=20, name="Shared spot", shared=True),
+                                    dict(level=0, x=5, y=5, time=21, name="Mine")],
+                           "pinsRemoved": {30: "shared", 31: True}}}
+    added, removed = saved_pins(sv, shared_only=True)
+    assert [p["name"] for p in added] == ["Shared spot"] and removed == {30}
+    added, removed = saved_pins(sv)
+    assert len(added) == 2 and removed == {30, 31}
+    trips = lua.eval("""{ { continent = 1, time = 13, estimate = 300, actual = 200, mounted = true, to = { 9, 9, 1 },
+      pts = { 0, 0, 30, 0 } } }""")
+    ways = lua.eval("{ { map = 36, level = 0, x = -11208, y = 1672 } }")
+    assert tuple(ns.Feedback.AddShared(trips, ways)) == (1, 1)
+    assert tuple(ns.Feedback.AddShared(trips, ways)) == (0, 0)
+    assert ns.db.feedback.trips[1].shared and ns.db.entrances[36][1][2] == -11208

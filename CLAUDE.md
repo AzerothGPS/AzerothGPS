@@ -173,7 +173,11 @@ The addon is going public, so every change must keep it policy-safe:
     (`agps import-shared`, `agps pins`; not the road watcher: the player's own pins stay theirs) into
     `overrides/pins.json` and `Data/Pins.lua`
     (`ns.SharedPins`, `shipped`; `ns.PinsIn`: the player's own copies pruned at login, `P.Prune`). A shared
-    pin removed is hidden (`ns.db.pinsRemoved`) and its removal shared. Names are cleaned (`P.CleanName`, no
+    pin removed is hidden (`ns.db.pinsRemoved`) and its removal shared. Map data someone shared, taken in by
+    the dev tools' import (`Record.AddShared`, `Pins.AddShared`, `Feedback.AddShared`: their times kept, each
+    once): roads and walls as drawn ones, pins and pin removals marked "shared", which the road watcher takes
+    into the data (`pins.saved_pins(shared_only=True)`; never the player's own), and the dungeons' ways in
+    (the watcher merges them into `overrides/instance_entrances.json`; `agps instances --write` ships them). Names are cleaned (`P.CleanName`, no
     "|" codes) and icons only file ids or icon paths (pins.py `clean_icon`): the data is never run.
   - `Feedback.lua`: opt-in road and trip data, and "Copy Map Data..." (`F.RoadsText`): the kinds picked
     (`F.KINDS`: roads, walls, routes = the faster trips' simplified traces as "T" lines, pins; settings

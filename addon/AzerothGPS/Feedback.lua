@@ -224,6 +224,44 @@ function F.Lines()
   return out
 end
 
+-- Faster trips and dungeons' ways in someone shared, taken in (the dev tools' import of a Copy Map Data
+-- text): trips with the ones kept here (by continent and time, each once; `agps feedback` exports them),
+-- ways in with the ones learned (Taxi.NoteEntrance's, `agps entrances` / the road watcher take them).
+-- trips: { continent, time, estimate, actual, mounted, to = { x, y, cont }, pts }; entrances: { map,
+-- level, x, y }. Returns how many of each were new.
+function F.AddShared(trips, entrances)
+  local nt, ne = 0, 0
+  local fb = Store()
+  local have = {}
+  for _, t in ipairs(fb.trips) do have[tostring(t.continent) .. ":" .. tostring(t.time)] = true end
+  for _, t in ipairs(trips or {}) do
+    local key = tostring(t.continent) .. ":" .. tostring(t.time)
+    if not have[key] and t.pts and #t.pts >= 4 then
+      have[key] = true
+      Push(fb.trips, { continent = t.continent, time = t.time, estimate = t.estimate, actual = t.actual,
+        mounted = t.mounted, from = { t.pts[1], t.pts[2] }, to = t.to, pts = t.pts, shared = true }, F.MAX_TRIPS)
+      nt = nt + 1
+    end
+  end
+  ns.db.entrances = ns.db.entrances or {}
+  for _, e in ipairs(entrances or {}) do
+    local list = ns.db.entrances[e.map] or {}
+    ns.db.entrances[e.map] = list
+    local near = false
+    for _, k in ipairs(list) do
+      if k[1] == e.level and math.sqrt((k[2] - e.x) ^ 2 + (k[3] - e.y) ^ 2) <= 40 then near = true end
+    end
+    for _, k in ipairs(F.KnownEntrances(e.map)) do
+      if k[1] == e.level and math.sqrt((k[2] - e.x) ^ 2 + (k[3] - e.y) ^ 2) <= 40 then near = true end
+    end
+    if not near then
+      list[#list + 1] = { e.level, e.x, e.y }
+      ne = ne + 1
+    end
+  end
+  return nt, ne
+end
+
 -- How many lines of each kind there are to share (picked or not): { roads = n, ... }.
 function F.KindCounts()
   local counts = {}

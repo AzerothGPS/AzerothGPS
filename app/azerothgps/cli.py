@@ -100,8 +100,16 @@ def cmd_watch_roads(args) -> int:
                 per: dict = {}
                 before = _override_keys(RESOURCES / "overrides")
                 n = import_tracks(wtf, RESOURCES / "overrides", per)
-                # (not the player's own pins: they're theirs until shared, `agps pins` or import-shared)
+                # (pins and dungeons' ways in taken in from someone's shared map data, the dev tools'
+                # import; not the player's own pins: they're theirs until shared, `agps pins`)
+                np_ = _import_saved_pins(wtf, shared_only=True)
+                ne_ = _import_saved_entrances(wtf)
                 last = cur
+                if (np_ or ne_) and not n:
+                    if np_:
+                        cmd_install_addon(args)
+                    print(f"{time.strftime('%H:%M:%S')} {np_} shared pin change(s) in the data, {ne_} dungeon way(s) in"
+                          + (" (agps instances --write puts the ways in into Instances.lua)" if ne_ else ""))
                 if n:
                     stamp = time.strftime("%H:%M:%S")
                     print(f"{stamp} {n} new drawn road(s): {per}")
@@ -133,15 +141,25 @@ def cmd_watch_roads(args) -> int:
         time.sleep(args.interval)
 
 
-def _import_saved_pins(wtf: Path) -> int:
+def _import_saved_pins(wtf: Path, shared_only: bool = False) -> int:
     """The pins in the saved variables into overrides/pins.json, and Data/Pins.lua written when they
-    changed: the number of changes."""
+    changed: the number of changes. `shared_only`: those taken in from shared map data only."""
     from .pins import import_saved, write_pins_lua
 
-    n = import_saved(wtf)
+    n = import_saved(wtf, shared_only=shared_only, log=lambda *a: None)
     if n:
         write_pins_lua()
     return n
+
+
+def _import_saved_entrances(wtf: Path) -> int:
+    """Dungeons' ways in in the saved variables (learned, or taken in from shared map data) into
+    overrides/instance_entrances.json: how many were new."""
+    from .instances import merge_entrances, saved_entrances
+    from .savedvars.parser import load_savedvariables
+
+    return sum(merge_entrances(saved_entrances(load_savedvariables(f)), log=lambda *a: None)
+               for f in sorted(wtf.glob("*/SavedVariables/AzerothGPS.lua")))
 
 
 def cmd_pins(args) -> int:

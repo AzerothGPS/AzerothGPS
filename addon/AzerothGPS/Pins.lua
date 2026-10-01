@@ -94,6 +94,36 @@ function P.Changed()
   if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
 end
 
+-- Pins someone shared, taken in (the dev tools' import of a Copy Map Data text): an added one kept with its
+-- time (left out: one here already, or in the data), marked `shared`; a removal of one the data has hides
+-- it here, marked "shared". The road watcher takes in those marked so (`agps watch-roads`), never the
+-- player's own. Each { add = true, level, x, y, z, down, icon, name, time } or { remove = true, time }.
+-- Returns how many added, removed.
+function P.AddShared(list)
+  local own, shipped = P.Own(), ns.PinsIn or {}
+  local have = {}
+  for _, p in ipairs(own) do
+    if p.time then have[p.time] = true end
+  end
+  local added, removed = 0, 0
+  for _, s in ipairs(list or {}) do
+    if s.remove and s.time then
+      if shipped[s.time] and not (ns.db.pinsRemoved and ns.db.pinsRemoved[s.time]) then
+        ns.db.pinsRemoved = ns.db.pinsRemoved or {}
+        ns.db.pinsRemoved[s.time] = "shared"
+        removed = removed + 1
+      end
+    elseif s.time and s.x and s.y and not have[s.time] and not shipped[s.time] then
+      own[#own + 1] = { level = s.level, x = s.x, y = s.y, z = s.z, down = s.down, icon = s.icon or P.DEFAULT_ICON,
+        name = P.CleanName(s.name), time = s.time, shared = true }
+      have[s.time] = true
+      added = added + 1
+    end
+  end
+  if added + removed > 0 then P.Changed() end
+  return added, removed
+end
+
 -- At login: the player's pins the data has now are dropped (its copy shows), and the removals of shared
 -- pins the data no longer has are forgotten.
 function P.Prune()

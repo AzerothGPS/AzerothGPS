@@ -79,6 +79,29 @@ function R.Save(track)
   return #t
 end
 
+-- Roads and walls someone shared, taken into the player's own (the dev tools' import of a Copy Map Data
+-- text): kept with their times (their keys: one here already, or in the data, is left out), so routes use
+-- them at once, Undo takes them back, and the road watcher puts them into the data as it does drawn ones.
+-- Each { op = "add"|"remove"|"wall"|"unwall", continent, time, pts, area, z, indoors, down }. How many.
+function R.AddShared(list)
+  local t = Tracks()
+  local have = {}
+  for _, o in ipairs(t) do
+    if o.time then have[o.time] = true end
+  end
+  local n = 0
+  for _, s in ipairs(list or {}) do
+    if s.time and not have[s.time] and not (ns.RoadTracksIn and ns.RoadTracksIn[s.time]) and s.pts and #s.pts >= 4 then
+      t[#t + 1] = { op = s.op, drawn = true, shared = true, continent = s.continent, zone = s.zone or "shared",
+        time = s.time, pts = s.pts, area = s.area or nil, z = s.z, indoors = s.indoors, down = s.down }
+      have[s.time] = true
+      n = n + 1
+    end
+  end
+  if n > 0 then R.Changed() end
+  return n
+end
+
 function R.Delete(i)
   local t = Tracks()
   if not (i and t[i]) then

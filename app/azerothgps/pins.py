@@ -81,13 +81,15 @@ def parse_shared_pins(text: str) -> tuple[list[dict], set[int]]:
     return added, removed
 
 
-def saved_pins(savedvars: dict) -> tuple[list[dict], set[int]]:
-    """The pins in the saved variables (AzerothGPSDB.pins) and the shared ones removed (pinsRemoved)."""
+def saved_pins(savedvars: dict, shared_only: bool = False) -> tuple[list[dict], set[int]]:
+    """The pins in the saved variables (AzerothGPSDB.pins) and the shared ones removed (pinsRemoved).
+    `shared_only`: only those taken in from someone's shared map data (the dev tools' import: `shared`,
+    a removal "shared"), not the player's own: what the road watcher takes."""
     db = savedvars.get("AzerothGPSDB") or {}
     pins = db.get("pins") or {}
     out = []
     for p in (pins.values() if isinstance(pins, dict) else pins):
-        if not isinstance(p, dict):
+        if not isinstance(p, dict) or (shared_only and not p.get("shared")):
             continue
         try:
             out.append(make_pin(p["level"], p["time"], p["x"], p["y"], p.get("z"), p.get("down"), p.get("icon"),
@@ -97,7 +99,7 @@ def saved_pins(savedvars: dict) -> tuple[list[dict], set[int]]:
     removed = set()
     rm = db.get("pinsRemoved") or {}
     for k, v in (rm.items() if isinstance(rm, dict) else enumerate(rm)):
-        if v:
+        if v and (not shared_only or v == "shared"):
             try:
                 removed.add(int(k))
             except (TypeError, ValueError):
@@ -164,13 +166,14 @@ def write_pins_lua(path: Path = FILE, pins: Path = PINS) -> Path:
     return path
 
 
-def import_saved(wtf_account_dir: Path, path: Path = PINS, log=print) -> int:
-    """The pins in every character's saved variables into overrides/pins.json: the number of changes."""
+def import_saved(wtf_account_dir: Path, path: Path = PINS, log=print, shared_only: bool = False) -> int:
+    """The pins in every character's saved variables into overrides/pins.json: the number of changes.
+    `shared_only`: only the ones taken in from shared map data (the road watcher's)."""
     from .savedvars.parser import load_savedvariables
 
     added, removed = [], set()
     for f in sorted(wtf_account_dir.glob("*/SavedVariables/AzerothGPS.lua")):
-        a, r = saved_pins(load_savedvariables(f))
+        a, r = saved_pins(load_savedvariables(f), shared_only)
         added += a
         removed |= r
     return merge_pins(added, removed, path, log=log)
