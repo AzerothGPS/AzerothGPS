@@ -771,6 +771,7 @@ def nav_env(env):
     load(lua, ns, "Data/Maps.lua", "Data/Roads.lua", "Data/Transports.lua", "Router.lua", "Nav.lua")
     ns.Nav.LATER_PER_CALL = 100  # the whole route in one call (see test_stretches_between_stops_fill_in)
     ns.Router.WARM = False  # no background warm-up (nothing pumps it here)
+    ns.Nav.FUN = False  # (always "Working out the route...": test_working_out_the_route_now_and_then_in_murloc)
     return lua, ns
 
 
@@ -5488,3 +5489,25 @@ def test_shared_map_data_is_taken_into_the_players_own(env):
     assert tuple(ns.Feedback.AddShared(trips, ways)) == (1, 1)
     assert tuple(ns.Feedback.AddShared(trips, ways)) == (0, 0)
     assert ns.db.feedback.trips[1].shared and ns.db.entrances[36][1][2] == -11208
+
+
+def test_working_out_the_route_now_and_then_in_murloc(nav_env):
+    # (asked) "Working out the route..." about one time in five in Murloc: picked once while it's being
+    # worked out (no flicker), again the next time
+    lua, ns = nav_env
+    N = ns.Nav
+    N.FUN = True
+    try:
+        lua.execute("AGPS_ROLLS = { 0.1, 2, 0.5 }; AGPS_I = 0")
+        N.Random = lua.eval("function(n) AGPS_I = AGPS_I + 1 return AGPS_ROLLS[AGPS_I] end")
+        murloc = N.WorkingText()
+        assert murloc == N.WORKING_FLAVORS[1].lines[2] and N.WorkingText() == murloc  # (the same, till a route)
+        # (a route found: the next time it's picked again, the plain line on a roll past the shares)
+        N.SetDestination(-600.0, -4180.0, 1, "Valley of Trials")
+        assert N.Status(-450.0, -4700.0, 1) and "Mrgl" not in N.Status(-450.0, -4700.0, 1)
+        lua.execute("AGPS_ROLLS = { 0.9 }; AGPS_I = 0")
+        assert N.WorkingText() == N.WORKING_TEXT
+        assert sum(f.share for f in N.WORKING_FLAVORS.values()) <= 0.5
+    finally:
+        N.FUN = False
+        N.Random = lua.eval("math.random")

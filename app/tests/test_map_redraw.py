@@ -15,7 +15,9 @@ ADDON = Path(__file__).resolve().parents[2] / "addon" / "AzerothGPS"
 def game():
     pytest.importorskip("lupa.lua51")
     from azerothgps.gameharness import start  # (the same harness `agps trip-sweep` runs)
-    return start()
+    lua, ns = start()
+    ns.Nav.FUN = False  # (always "Working out the route...", not now and then in Murloc)
+    return lua, ns
 
 
 def _redraw(lua, ns):

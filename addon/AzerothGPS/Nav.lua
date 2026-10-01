@@ -2509,6 +2509,34 @@ local function CheckArrival(px, py, cont)
   return false
 end
 
+-- "Working out the route...", and now and then said another way (asked, 2026-10-01): in Murloc about one
+-- time in five (N.WORKING_FLAVORS: each its share of the times and its lines). Picked once each time a
+-- route is being worked out (not every redraw: it would flicker), until there's a route. N.FUN = false:
+-- always the plain one (the tests).
+N.WORKING_TEXT = "Working out the route..."
+N.WORKING_FLAVORS = {
+  { share = 0.2, lines = { "Mrglglglgl... mrrgll mrgl...", "Aaaaaughibbrgubugbugrguburgle!",
+    "Mmmrrglllm... rrrgle mrgl?", "Mrrrggk! Mglrmglmglmgl..." } },
+}
+N.Random = math.random
+local working -- (the text picked while the route is being worked out)
+function N.WorkingText()
+  if not working then
+    working = N.WORKING_TEXT
+    if N.FUN ~= false then
+      local roll, at = N.Random(), 0
+      for _, f in ipairs(N.WORKING_FLAVORS) do
+        at = at + f.share
+        if roll < at then
+          working = f.lines[N.Random(#f.lines)]
+          break
+        end
+      end
+    end
+  end
+  return working
+end
+
 -- Text for the nav panel, or nil when there is no destination.
 function N.Status(px, py, cont)
   cont = N.PlayerLevel(cont)
@@ -2535,7 +2563,8 @@ function N.Status(px, py, cont)
   N.MaybeReorder(px, py, cont)
   local d = N.dest
   local r = N.Route(px, py, cont)
-  if not r then return N.warming and "Working out the route..." or "No way there found" end
+  if not r then return N.warming and N.WorkingText() or "No way there found" end
+  working = nil -- (the next time: picked again)
   local cur, walk, mount, mounted, ability = N.Speeds()
   local head = N.FormatDistance(r.length)
   local multi = #N.stops > 1
