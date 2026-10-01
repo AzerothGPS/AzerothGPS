@@ -141,9 +141,17 @@ def wall_opens(overrides_dir: Path) -> dict[int, list[dict]]:
     return out
 
 
+def dropped_times(overrides_dir: Path) -> set[int]:
+    """Drawn roads set aside on purpose (overrides/dropped_tracks.json: {"times": [...]}): never imported,
+    and listed as shipped so the addon forgets them (e.g. Undercity strokes drawn before they had a floor)."""
+    f = Path(overrides_dir) / "dropped_tracks.json"
+    return set(json.loads(f.read_text(encoding="utf-8")).get("times", [])) if f.exists() else set()
+
+
 def shipped_times(overrides_dir: Path) -> list[int]:
-    """The times of the drawn roads the overrides have (the addon drops those from its own list)."""
-    out = set()
+    """The times of the drawn roads the overrides have (the addon drops those from its own list), and
+    the dropped ones."""
+    out = set(dropped_times(overrides_dir))
     for f in sorted(Path(overrides_dir).glob("roads_*.geojson")):
         for feat in load_overrides(f)["features"]:
             props = feat.get("properties", {})
@@ -167,7 +175,10 @@ def import_tracks(wtf_account_dir: Path, overrides_dir: Path, per_continent: dic
     `per_continent` (if given) gets the count added per continent."""
     added = 0
     by_cont: dict[int, list[dict]] = {}
+    dropped = dropped_times(overrides_dir)
     for t in read_tracks(wtf_account_dir):
+        if t["time"] in dropped:
+            continue
         by_cont.setdefault(t["continent"], []).append(t)
     for cont, tracks in by_cont.items():
         path = overrides_path(overrides_dir, cont)
