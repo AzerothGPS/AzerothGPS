@@ -4,6 +4,7 @@ set, and the map redrawn. A redraw failing (caught in the game: nothing drawn af
 the route and the directions panel gone) fails here. (The flight-path detour line: `x, y = a and f()`
 left y nil, and every redraw failed.)"""
 
+import math
 from pathlib import Path
 
 import pytest
@@ -1281,6 +1282,48 @@ def test_a_routes_overview_out_of_a_city_shows_the_land_then_the_city(game):
         N.Clear()
         st.zoom = zoom
         lua.execute("GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
+def test_dragging_in_a_city_keeps_its_map_until_right_click(game):
+    # (reported, a third video: Ironforge's map dragged off the city flipped to the land, and zoomed out from
+    # there the city's map shrank into the black) in a city, its map wherever the view is dragged, zoomed
+    # out no further than CITY_MAX_ZOOM; right-click for the land around
+    lua, ns = game
+    G, st, R = ns.GPS, ns.settings.gps, ns.Router
+    zoom = st.zoom
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4840.0, -1100.0, 0, 501.7 "
+                "AGPS_ZONE_REAL = GetMinimapZoneText GetMinimapZoneText = function() return 'The Great Forge' end "
+                "AGPS_OLD_CURSOR = GetCursorPosition AGPS_CX, AGPS_CY = 300, 300 "
+                "GetCursorPosition = function() return AGPS_CX, AGPS_CY end")
+    frame = lua.globals().AzerothGPSFrame
+    try:
+        G.Follow()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is not None
+        frame._scripts.OnMouseDown(frame, "LeftButton")
+        lua.execute("AGPS_CX = 300 + 2500")
+        frame._scripts.OnUpdate(frame, 1)
+        frame._scripts.OnMouseUp(frame, "LeftButton")
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        x, y = G.ViewState()[0:2]
+        assert math.dist((x, y), (-4840.0, -1100.0)) > G.CITY_VIEW_YD and not R.CapitalAt(0, x, y)  # (far off the city)
+        assert G.inside is not None and G.cityMap
+        for _ in range(6):  # (the wheel: no further out than the city's map)
+            G.WheelZoom(2.0)
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+        assert st.zoom <= G.CITY_MAX_ZOOM and G.inside is not None
+        frame._scripts.OnMouseDown(frame, "RightButton")  # (the land around)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is None
+    finally:
+        st.zoom = zoom
+        lua.execute("GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText GetCursorPosition = AGPS_OLD_CURSOR "
                     "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
         G.Follow()
 

@@ -95,7 +95,8 @@ The addon is going public, so every change must keep it policy-safe:
     streets have art and district names too, and it looks worse than the terrain). In a city (a
     capital's own cells, down in an underground city) its inside map shows at any zoom, and the wheel
     zooms out no further than `CITY_MAX_ZOOM` (`G.cityMap`; zoomed further out on the way in, zoomed
-    in to it): right-click for the land around. The title (the coordinates line's place) names the
+    in to it): right-click for the land around. The view dragged anywhere keeps it (the drag's `free.pan`: dragged off
+    the city it flipped to the land); only right-click shows the land. The title (the coordinates line's place) names the
     city there (`G.CityMapAt`: the ground's zone is the land's, Dun Morogh over Ironforge).
   - `Layers.lua`: quests, quest areas, herbs and ore (gathered, hovered on the minimap,
     right-clicked without the profession, imported; unconfirmed until gathered), and city

@@ -2313,8 +2313,11 @@ function G.Update()
   local inCity = here and (ns.Nav.PlayerLevel(cont) ~= cont
     or (ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(cont, px, py)) or false)
   -- (in a capital with an inside map, Ironforge: its map while looking over the city, not only round the
-  -- player: panning there flipped to the outside, a video 2026-10-01)
-  local overCity = here and not onMe and inCity and G.OverCity(cont, px, py, cx, cy)
+  -- player: panning there flipped to the outside, a video 2026-10-01; and wherever the player drags the
+  -- view: dragged off the city it flipped to the land, then zoomed out into the black, a third video.
+  -- Right-click for the land, as on the player)
+  local overCity = here and not onMe and inCity
+    and (free.pan and not free.interior or G.OverCity(cont, px, py, cx, cy))
   -- (the route's tour zoomed out past the city's map, a route out of the city: the land around, then the
   -- city's map again as it comes back to the player; it zoomed out over the city's map into the black,
   -- asked 2026-10-01)
@@ -2342,8 +2345,8 @@ function G.Update()
   else
     G.shownInside = nil
   end
-  -- (the city's map on the player: zoomed out no further than CITY_MAX_ZOOM, G.WheelZoom)
-  G.cityMap = place and inCity and not free or false
+  -- (the city's map on the player, or dragged off them: zoomed out no further than CITY_MAX_ZOOM, G.WheelZoom)
+  G.cityMap = place and inCity and (not free or free.pan) or false
   -- (its map shown, the capital's grid and its map: the title names the city anywhere in it, the rock
   -- between its halls too, G.InfoParts)
   G.cityGrid, G.cityGridMap = nil, nil
@@ -5937,7 +5940,7 @@ function G.Init()
       if drag.moved or dx * dx + dy * dy > 9 then -- ignore clicks and tiny jitters
         drag.moved = true
         local x, y = G.PanCenter(drag.x, drag.y, dx, dy, drag.rot, drag.s)
-        free = { x = x, y = y, rot = drag.rot, cross = true, cont = view.cont, interior = free and free.interior }
+        free = { x = x, y = y, rot = drag.rot, cross = true, cont = view.cont, interior = free and free.interior, pan = true }
         recenter:Show()
         elapsed = 1 -- redraw this frame
       end
