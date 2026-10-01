@@ -2596,11 +2596,31 @@ function G.Update()
   G.UpdateInfo()
 end
 
+-- Where the coordinates line goes: with the window frame shown, its title bar, in place of
+-- "AzerothGPS" (asked, 2026-09-30; "AzerothGPS" when the line is empty); else the map's bottom.
+function G.PlaceInfo()
+  if not infoText then return end
+  local c = G.chrome
+  local title = c and c:IsShown() and (c.TitleContainer and c.TitleContainer.TitleText or c.TitleText)
+  if title then
+    local text = infoText:GetText()
+    title:SetText(text and text ~= "" and text or "AzerothGPS")
+    infoText:Hide()
+  else
+    infoText:Show()
+  end
+end
+
 -- The coordinates line (bottom): the spot under the mouse pointer while it's over the map,
 -- else the crosshair while panning, else the player. Runs ~10 times a second on its own
 -- (the map redraw is skipped when nothing moves, the pointer may still).
+local SetInfo
 function G.UpdateInfo()
   if not infoText then return end
+  SetInfo()
+  G.PlaceInfo()
+end
+SetInfo = function()
   local over = canvas:IsMouseOver() and not drag
   local x, y, mark
   if over then
@@ -2671,6 +2691,7 @@ function G.ApplySettings()
   local inset = framed and CHROME_PORTRAIT_INSET or 4
   if G.chrome then
     G.chrome:SetShown(framed)
+    G.PlaceInfo() -- (the coordinates in its title bar, or at the bottom without it)
     -- the portrait hangs over the map's top-left corner: the top panel starts right of it
     navPanel:SetPoint("TOPLEFT", inset, -4)
   end

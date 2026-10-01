@@ -787,3 +787,38 @@ def test_the_corner_logo_without_the_circle_and_back(game):
     finally:
         st.roundLogo = False
         lua.execute("GetPhysicalScreenSize = nil AGPS_W:Hide()")
+
+
+def test_the_coordinates_are_in_the_title_bar_with_the_window_frame(game):
+    # (asked) the zone and coordinates line from the map's bottom in the window frame's title bar,
+    # in place of "AzerothGPS"; without the frame, at the bottom as before
+    lua, ns = game
+    G = ns.GPS
+    chrome = G.chrome
+    lua.execute("""
+      AGPS_CHROME = CreateFrame("Frame", nil, UIParent)
+      AGPS_CHROME.TitleContainer = { TitleText = AGPS_CHROME:CreateFontString() }
+      AGPS_CHROME.TitleContainer.TitleText:SetText("AzerothGPS")
+    """)
+    fake = lua.eval("AGPS_CHROME")
+    title = fake.TitleContainer.TitleText
+    # (the other shown texts saying it: the bottom line)
+    elsewhere = lua.eval("""function(text)
+      local n = 0
+      for _, w in ipairs(AGPS_WIDGETS) do
+        if w._shown and w._text == text and w ~= AGPS_CHROME.TitleContainer.TitleText then n = n + 1 end
+      end
+      return n
+    end""")
+    try:
+        G.chrome = fake
+        G.UpdateInfo()
+        text = str(title._text)
+        assert text != "AzerothGPS" and "," in text  # (the zone, x, y)
+        assert elsewhere(text) == 0
+        fake.Hide(fake)
+        G.UpdateInfo()
+        assert elsewhere(text) == 1
+    finally:
+        G.chrome = chrome
+        G.UpdateInfo()
