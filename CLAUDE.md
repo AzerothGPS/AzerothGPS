@@ -445,7 +445,8 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   Check that a new test fails without the fix before trusting it.
 - **Game side:**
   - After `install-addon`, `/reload` picks up changed Lua.
-  - **New files, including images, need a full game restart.**
+  - **New Lua files (in the toc) need a full game restart.** New images have loaded after a
+    `/reload` (Media/CornerLogo<px>.tga, 2026-09-30): try `/reload` first.
   - Changed images usually need a restart too.
 - **Use the game's newer UI templates, with fallbacks.** Old art such as
   `UI-PlusButton-Up` is missing in this client. Prefer drawing simple controls yourself,
