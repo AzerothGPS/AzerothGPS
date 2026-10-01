@@ -50,6 +50,7 @@ STREET_SHARE = 0.6  # ... an edge with this share of its points so is a street
 STREET_MIN_YD = 25.0  # street pieces shorter than this (a patrol's turn in a doorway) don't count
 PLACE_REACH_YD = 60.0  # a place's way starts at the city's road this near it
 PATH_SOURCES = ("cmangos-classic-db", "azerothcore")
+CUT_MARGIN_YD = 20.0  # the land's roads are cut this far inside a capital's grid (roads.build.cut_capitals), not up to its gates
 
 
 def terrain_liquids(cd: ClientData, cont: int, box) -> list:
@@ -97,6 +98,43 @@ def terrain_liquids(cd: ClientData, cont: int, box) -> list:
                             if X1 <= x1 and X0 >= x0 and Y1 <= y1 and Y0 >= y0:
                                 out.append(([(X0, Y0), (X1, Y0), (X1, Y1), (X0, Y1)], float(mx)))
     return out
+
+
+def drawn_fixes(g, cap: Capital, inside, log=print, touches=None) -> dict:
+    """The roads drawn and erased in game (overrides/roads_<continent>.geojson) that lie mostly over
+    the city (inside(x, y)), applied to its roads (roads.graph.apply_overrides, a city's rules: a
+    drawn road joins the city's roads near its ends); an erasure touching the city anywhere
+    (touches(x, y)). The drawn roads stay among the land's too (roads.build.cut_capitals leaves them)."""
+    import json
+    import tempfile
+
+    from .paths import RESOURCES
+    from .roads.graph import apply_overrides
+
+    src = RESOURCES / "overrides" / f"roads_{cap.cont}.geojson"
+    if not src.exists():
+        return {}
+    doc = json.loads(src.read_text(encoding="utf-8"))
+    mine = []
+    for f in doc.get("features", []):
+        c = f["geometry"]["coordinates"]
+        if not c:
+            continue
+        # (an erasure anywhere over the city, its edge too: the city's roads run out to its gates; a
+        # drawn road only when mostly over its core, where the land's are cut)
+        if f.get("properties", {}).get("op") == "remove" and touches is not None:
+            if any(touches(p[0], p[1]) for p in c):
+                mine.append(f)
+        elif sum(1 for p in c if inside(p[0], p[1])) >= 0.5 * len(c):
+            mine.append(f)
+    if not mine:
+        return {}
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "fixes.geojson"
+        path.write_text(json.dumps({"type": "FeatureCollection", "features": mine}), encoding="utf-8")
+        stats = apply_overrides(g, path, city=True)
+    log(f"  {cap.name}: {len(mine)} drawn fixes over the city: {stats}")
+    return stats
 
 
 def patrol_points(cont: int, inside, data_dir=None) -> np.ndarray:
@@ -540,6 +578,15 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
                     keep.add(eid)
                     terminals += [e.a, e.b]
         u["streets"] = streets(g, patrol_points(cap.cont, inside), terminals, log, cap.name, keep=keep)
+        # the roads drawn in game over the city (erasures too): on its own roads, as the addon had them
+        # (over its core: the same cells the land's roads are cut over, roads.build.capital_cores)
+        core = ndimage.binary_erosion(ndimage.binary_fill_holes(np.isin(cells, (OPEN, CLOSED, FLOOR_UNDER))),
+                                      iterations=int(CUT_MARGIN_YD / CELL))
+
+        def in_core(x, y):
+            r, c = u["world_to_px"](x, y)
+            return 0 <= r < H and 0 <= c < W and bool(core[r, c])
+        u["drawn"] = drawn_fixes(g, cap, in_core, log, touches=inside)
 
     joins = []
     for patch, lst in sorted(by_patch.items()):

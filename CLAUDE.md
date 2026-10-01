@@ -214,10 +214,14 @@ The addon is going public, so every change must keep it policy-safe:
     `STREET_*`), the shortest ways between every two of its gates, places (CityPlaces, the check's,
     the named areas) and lifts, and the city edges the floors under others join; the rest dropped.
     The terrain's water over the city (`terrain_liquids`, MH2O) counts like the models' (no floor
-    under it). The land's roads are cut where they run over a model-built capital's own cells
-    (`roads.build.cut_capitals`, in `finish_continent`: Stormwind, Ironforge, Orgrimmar; not the
-    cities on their own ground; roads drawn in game stay), so rebuild the roads after `capitals
-    --write`, then the buildings (`agps buildings --write`). Floors under
+    under it). The land's roads are cut where they run over a model-built capital's core
+    (`roads.build.cut_capitals` / `capital_cores`, in `finish_continent`: its own cells less
+    `CUT_MARGIN_YD` in from its outer edge, so the roads up to its gates stay; Stormwind, Ironforge,
+    Orgrimmar, not the cities on their own ground). Roads drawn in game stay among the land's whole,
+    and `capitals.drawn_fixes` puts them on the capital's roads too: a drawn road mostly over its core,
+    an erasure touching it anywhere (the watcher's import alone left a city's erasures unapplied).
+    After road edits: roads (`reapply_overrides`), then `capitals --write`, then `buildings
+    --write`, then `terrain-hpa`. Floors under
     the grid's (a street under a bridge, the Cleft of Shadow under the Drag, a hall's ground
     floor) are levels of their own, laid over it like a cave's (`_under<n>` grids, `cave =
     true`, `split` = a height between the two: `Router.CaveDown` takes the player as down
@@ -413,6 +417,9 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
     Lua 5.1 with a stand-in for the game's UI (`app/azerothgps/gameharness.py` + `wowmock.lua`: add what a new game call needs there). In the game a redraw
     failing is caught and nothing after the failing line is drawn (no route, no panel).
   - `test_lua_lint.py`'s `truncated_and_or`: `x, y = a and f()` (only f's first value).
+  - Gap links between far-apart road pieces are picked from samples by place (`Bridges`,
+    `BRIDGE_SAMPLE_YD`), not node number: roads edited in one city once changed a route across
+    the continent (`test_offroad_joins_the_road_partway_along`).
 
   Check that a new test fails without the fix before trusting it.
 - **Game side:**

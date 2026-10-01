@@ -685,6 +685,7 @@ R.BRIDGE_SHORT_CITY = 40 -- ... up to this inside a city's ruins up top (walls: 
 R.BRIDGE_MAX_PER_NODE = 6 -- the short links kept per node (the nearest)
 R.BRIDGE_BUCKET = 250 -- yards: gap links are looked for in the buckets around a node
 R.BRIDGE_SAMPLE = 60 -- nodes per group of pieces tried when joining groups far apart
+R.BRIDGE_SAMPLE_YD = 250 -- ... about that many, a node per square these yards wide or a multiple (by place)
 -- `short`: the short links' reach (0 for none: a city's own level, joined by its stairs);
 -- `nearOverlay(x, y)`: whether a spot is inside a city's ruins (short links shorter there);
 -- `skip[n]`: nodes left out (true: inside a cave, joined to the rest by its way out), or
@@ -810,12 +811,32 @@ local function Bridges(nodes, adj, short, nearOverlay, skip, zs)
     end
   end
   if #order > 1 then
+    -- (a group's sample by place, not by node number: a node per square, the one nearest its middle,
+    -- the squares sized from the group's extent in whole BRIDGE_SAMPLE_YD steps; so roads edited in one
+    -- city don't renumber another's sample, and its far links, across the continent)
     local samples = {}
     for gi, gr in ipairs(order) do
       local g = groups[gr]
-      local step = math.max(1, math.ceil(#g / R.BRIDGE_SAMPLE))
+      local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+      for _, n in ipairs(g) do
+        local x, y = nodes[n * 2 - 1], nodes[n * 2]
+        x0, x1, y0, y1 = math.min(x0, x), math.max(x1, x), math.min(y0, y), math.max(y1, y)
+      end
+      local span = math.max(x1 - x0, y1 - y0) / math.sqrt(R.BRIDGE_SAMPLE)
+      local cell = math.max(1, math.ceil(span / R.BRIDGE_SAMPLE_YD)) * R.BRIDGE_SAMPLE_YD
+      local rep = {}
+      for _, n in ipairs(g) do
+        local x, y = nodes[n * 2 - 1], nodes[n * 2]
+        local cx, cy = math.floor(x / cell), math.floor(y / cell)
+        local mx, my = (cx + 0.5) * cell, (cy + 0.5) * cell
+        local d = (x - mx) ^ 2 + (y - my) ^ 2
+        local k = cx * 65536 + cy
+        local r = rep[k]
+        if not r or d < r[2] then rep[k] = { n, d } end
+      end
       local sm = {}
-      for k = 1, #g, step do sm[#sm + 1] = g[k] end
+      for _, r in pairs(rep) do sm[#sm + 1] = r[1] end
+      table.sort(sm)
       samples[gi] = sm
     end
     local far = {}
@@ -2714,6 +2735,7 @@ R.WARM_TERRAIN_YD = 800
 -- Whether `cont`'s road graph is built (or it has no roads): drawing the road network waits for
 -- it (built in the background by WarmUp) rather than building it all at once in a frame.
 function R.GraphReady(cont) return graphs[cont] ~= nil end
+function R.DebugGraph(cont) return graphs[cont] end -- (for tests and checks)
 R.Breathe = Breathe -- (long loops elsewhere that may run inside the background work: GPSFrame's road index)
 
 function R.WarmUp(cont, x, y)

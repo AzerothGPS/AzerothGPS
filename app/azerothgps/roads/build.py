@@ -136,35 +136,55 @@ def capital_cells(continent: int) -> list:
     return out
 
 
+def capital_cores(continent: int) -> list:
+    """capital_cells' own cells less a CUT_MARGIN_YD band round their edge (the grid takes in the
+    ground at the gates: the land's roads up to a gate are the way in, its gate roads join them there):
+    [(tx0, ty0, cell, bool array)]."""
+    from scipy import ndimage
+
+    from ..capitals import CUT_MARGIN_YD
+
+    out = []
+    for tx0, ty0, cell, rows in capital_cells(continent):
+        W = max(len(r) for r in rows)
+        own = np.zeros((len(rows), W), bool)
+        for i, r in enumerate(rows):
+            own[i, :len(r)] = np.isin(np.asarray(r), (0, 2, 3))
+        # (the margin at its outer edge only: ground inside it left to the land's grid, a park, isn't an edge)
+        own = ndimage.binary_fill_holes(own)
+        out.append((tx0, ty0, cell, ndimage.binary_erosion(own, iterations=max(1, int(CUT_MARGIN_YD / cell)))))
+    return out
+
+
 def cut_capitals(g: RoadGraph, continent: int) -> float:
     """The land's roads (traced from the ground's textures, and NPCs' paths) cut where they run over
     a capital's own cells: the capital's own roads (Data/Capitals.lua, its streets) are the way there,
     and the two drawn over each other were a jumble (Stormwind's, some over its harbor's water). Roads
-    drawn in game (overrides) stay. The yards cut."""
-    grids = capital_cells(continent)
+    drawn in game stay (capitals.drawn_fixes puts those over a city on its roads too). The yards cut."""
+    grids = capital_cores(continent)
     if not grids:
         return 0.0
     T = adt.TILE_YD
 
     def own(x, y) -> bool:
-        for tx0, ty0, cell, rows in grids:
+        for tx0, ty0, cell, core in grids:
             k = T / cell
             c = int(np.floor(((32 - y / T) - tx0) * k))
             r = int(np.floor(((32 - x / T) - ty0) * k))
-            if 0 <= r < len(rows) and 0 <= c < len(rows[r]) and rows[r][c] in (0, 2, 3):
+            if 0 <= r < core.shape[0] and 0 <= c < core.shape[1] and core[r, c]:
                 return True
         return False
 
     cut = 0.0
     for eid, e in list(g.edges.items()):
-        if e.source == "override":
-            continue
         P = np.asarray(e.pts, float)
         dense = []
         for a, b in zip(P[:-1], P[1:]):
             n = max(1, int(np.ceil(np.hypot(*(b - a)) / 2.0)))
             dense += [tuple(a + (b - a) * t) for t in np.linspace(0, 1, n, endpoint=False)]
         dense.append(tuple(P[-1]))
+        if e.source == "override":
+            continue  # (roads drawn in game stay whole: over a city, capitals.drawn_fixes adds them to its roads too)
         inside = [own(x, y) for x, y in dense]
         if not any(inside):
             continue
