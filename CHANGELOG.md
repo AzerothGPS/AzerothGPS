@@ -66,7 +66,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - The Deeprun Tram has its map (it was blank), with its name in the title.
 - A zeppelin to Zephras Isle had no line on the map (on a trip hopping two zeppelins by the isle, only one ride showed).
 - **On a road, routes keep to it** unless a way across country onto another road saves a fair bit (riding Mulgore's road, the route kept swapping between the road and a shortcut over the fields).
-- In the capitals, routes no longer climb onto a ledge or balcony with no way up and jump back down (Ironforge's Mystic Ward, to its Mage trainer).
+- In the capitals, routes no longer climb onto a ledge or balcony and jump back down to a trainer under it (Ironforge's Mystic Ward and Hall of Mysteries: its Mage and Priest trainers): a city place is reached by the roads on its own floor.
 - **Thunder Bluff's lifts:** routes into and out of the city take them (they weren't joined to Mulgore's road), and the directions say "Take the lift up" (or down), as in Undercity.
 - While riding (or walking) past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...": it stays shown now while it's worked out again.
 - A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.

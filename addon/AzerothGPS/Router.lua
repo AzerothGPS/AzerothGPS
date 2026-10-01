@@ -1115,6 +1115,7 @@ function BuildGraph(cont)
   -- drops off ledges (a city's, a cave's): one way, a to b, and no part of the network's
   -- joining up. By road (the edge itself), as the numbers change below.
   local dropOf, caveOf = {}, {}
+  local nodeZ = {} -- (a capital's road nodes' floor heights, its data's `nz`: a stop with a height on its floor)
   local noBridge = {} -- (a cave's nodes inside it: joined to the rest only by its roads out)
   -- (the continent's roads with its overlays merged in don't depend on the player's drawn roads
   -- or walls: worked out once and kept, so an edit rebuilds only what they change; copies of the
@@ -1128,6 +1129,7 @@ function BuildGraph(cont)
     for k, v in pairs(merged.dropOf) do dropOf[k] = v end
     for k, v in pairs(merged.caveOf) do caveOf[k] = v end
     noBridge = merged.noBridge
+    nodeZ = merged.nodeZ
   else
   for ei, h in pairs(ns.RoadDrops and ns.RoadDrops[cont] or {}) do
     if edges[ei] then dropOf[edges[ei]] = h end
@@ -1182,6 +1184,9 @@ function BuildGraph(cont)
       if extra.drops and extra.drops[k] then dropOf[c] = extra.drops[k] end
       if extra.cave then caveOf[c] = true end
     end
+    for i, h in ipairs(extra.nz or {}) do
+      if h ~= 0 then nodeZ[base + i] = h end
+    end
     if extra.cave then
       for i = 1, #extra.n / 2 do noBridge[base + i] = true end
       for _, j in ipairs(extra.bridge or {}) do noBridge[base + j] = "short" end
@@ -1190,7 +1195,7 @@ function BuildGraph(cont)
     nodes, edges = n2, e2
   end
   local keep = { roads = roads, overlays = overlays, nOverlays = overlays and #overlays or 0,
-    nodes = {}, edges = {}, dropOf = {}, caveOf = {}, noBridge = noBridge }
+    nodes = {}, edges = {}, dropOf = {}, caveOf = {}, noBridge = noBridge, nodeZ = nodeZ }
   for i = 1, #nodes do keep.nodes[i] = nodes[i] end
   for i = 1, #edges do keep.edges[i] = edges[i] end
   for k, v in pairs(dropOf) do keep.dropOf[k] = v end
@@ -1354,7 +1359,7 @@ function BuildGraph(cont)
   end
   P1("router: build roads: gap links", pt)
   local g = { adj = adj, n = nodes, e = edges, count = #nodes / 2, bridges = bridges, drops = drops, side = side,
-    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones, z = zs }
+    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones, z = zs, nz = next(nodeZ) and nodeZ or nil }
   -- (an underground city's floors over floors: the roads' heights near a spot, for the road and wall
   -- tools' floor (GPSFrame.OtherFloor, FloorText); not a dungeon's, where they can't be used)
   local lvl = ns.CityLevels and ns.CityLevels[cont]
@@ -2063,6 +2068,26 @@ function R.CaveLevel(g, cont, list, down, wayIn, x, y)
   return keep(list) or (x and keep(R.NearestEdgesAll(cont, x, y))) or list
 end
 
+-- Of `list` (NearestEdges'), the roads on the floor of height z: a capital's (its nodes' floor heights,
+-- g.nz) within STOP_FLOOR_Z of it (not one with none known, the land's), within STOP_FLOOR_REACH more than the
+-- nearest road (a stop with no road on its floor near: as the nearest, not a far one: Ironforge's
+-- Paladin trainer on a balcony with no road went 481 yd straight); `list` when none is.
+R.STOP_FLOOR_Z, R.STOP_FLOOR_REACH = 8, 40
+function R.OnFloor(g, list, z)
+  local out, near = {}, math.huge
+  for _, c in ipairs(list) do near = math.min(near, c.dist or math.huge) end
+  for _, c in ipairs(list) do
+    local e = g.e[c.edge]
+    local za, zb = g.nz[e[1]], g.nz[e[2]]
+    -- (only a capital's roads, with their heights: not the land's over it, Dun Morogh's over Ironforge)
+    if ((za and math.abs(za - z) <= R.STOP_FLOOR_Z) or (zb and math.abs(zb - z) <= R.STOP_FLOOR_Z))
+        and (c.dist or math.huge) <= near + R.STOP_FLOOR_REACH then
+      out[#out + 1] = c
+    end
+  end
+  return out[1] and out or list
+end
+
 -- Whether (x, y) is on a capital's own cells (Data/Capitals.lua: its grid over the continent's).
 function R.CapitalAt(cont, x, y)
   local P = ns.Passability
@@ -2569,6 +2594,10 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       table.sort(list, function(p, q) return p.dist < q.dist end)
     end
   end
+  -- a capital's stop with a height (a city place's: its NPC's): onto the roads on its floor, not the
+  -- nearest, on a balcony or a walk over it (Ironforge's Priest trainer under the Hall of Mysteries'
+  -- balcony: up its stairs and down, 2026-10-01)
+  if not layered and g.nz and opts and opts.tz then ts = R.OnFloor(g, ts, opts.tz) end
   -- a city: roads on the same floor as the start or the stop (the nearest may be on a
   -- walk right above or below)
   local H = not layered and grid and grid.slack and ns.Nav and ns.Nav.CityHeight

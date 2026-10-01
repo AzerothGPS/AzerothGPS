@@ -274,6 +274,12 @@ The addon is going public, so every change must keep it policy-safe:
     roads partway (`Router`'s `JOIN_ALONG_MAX` joins skip capitals, cities and caves); `route-check` leaves out trips from or to a capital's
     own cells (its flat walk can't judge levels and lifts). `agps capitals` renders each (floors under others
     purple, their roads cyan) into `data/debug/capitals/` with `summary.txt`; `--write` writes
+    Each capital's road node has its floor's height (the entry's `nz`, the game's; `g.nz` in the graph,
+    not `g.z`: not a level with heights): a stop with a height (a city place's) takes the roads on its
+    floor (`Router.OnFloor`: `STOP_FLOOR_Z`, within `STOP_FLOOR_REACH` of the nearest; never the land's
+    over the city). Pieces left only by drops, with no way up onto them, are left out
+    (`capitals.hanging_pieces`). `capitals --check` routes with each place's height and gives each route's
+    `climb` over both its ends ("^").
     the file, `--check` routes from outside the gate to every place (CityPlaces, the check's
     own, each named area of the models) and walks the routes in 3D over the floors
     (`capitals.walk_3d`; "!" marks a jump between levels or a long last leg).

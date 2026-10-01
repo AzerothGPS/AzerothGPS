@@ -1054,9 +1054,10 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
         def roads(label, parts, cave):
             """One entry of the overlays: the parts (nodes, edges, drops, joins, bridge or None,
             extra yards per edge) one after the other, their node numbers moved on."""
-            n_all, e_all, joins, bridge, drops, lifts = [], [], [], [], {}, set()
-            for nodes, edges, dr, jn, br, extra in parts:
+            n_all, e_all, joins, bridge, drops, lifts, nz = [], [], [], [], {}, set(), []
+            for nodes, edges, dr, jn, br, extra, heights in parts:
                 base = len(n_all)
+                nz += heights
                 for i, (a, b, pts) in enumerate(edges):
                     pts = [tuple(int(round(v)) for v in nodes[a])] + [(int(round(x)), int(round(y))) for x, y in pts[1:-1]] + \
                         [tuple(int(round(v)) for v in nodes[b])]
@@ -1077,6 +1078,9 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                 return
             out.append(f"  overlays[#overlays + 1] = {{ capital = {_lua_str(label)},{' cave = true,' if cave else ''}")
             out.append("  n = {" + ",".join(f"{x:.0f},{y:.0f}" for x, y in n_all) + "},")
+            # (each node's floor height, the game's: a stop with a height takes a road on its floor,
+            # Router's `nz`, not one on a balcony over it: Ironforge's Priest trainer, 2026-10-01)
+            out.append("  nz = {" + ",".join("0" if h is None else f"{h:.0f}" for h in nz) + "},")
             out.append("  e = {")
             for i, (a, b, length, pts) in enumerate(e_all):
                 src = 3 if i in drops else 5 if i in lifts else 0  # (5: a lift, its top to its foot: Router.SOURCE_LIFT)
@@ -1108,16 +1112,25 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
         # (one entry for the capitals' roads on the land's level, then one like the caves' for
         # those under others and a city under a mountain's: their joins may end on the first's)
         land, under = [], []
+
+        def heights_at(uu, pts):  # (each point's floor height: uu's top floor there, the game's)
+            out_ = []
+            for x, y in pts:
+                r, c = uu["world_to_px"](x, y)
+                ok = 0 <= r < uu["H"] and 0 <= c < uu["W"] and np.isfinite(uu["top"][r, c])
+                out_.append(float(uu["top"][r, c]) if ok else None)
+            return out_
         for u in lst:
             nodes, edges, drops = cave_roads(u)
+            hs = heights_at(u, nodes)
             order = {nid: i for i, nid in enumerate(sorted(u["graph"].nodes))}
             joins = [order[j] for j, q in u["joins"] if q is not None and j in order]
             lift_yd = {i: LIFT_SECONDS * 7 for i, e in enumerate(u["graph"].edges.values()) if e.source == "lift"}
             if u["capital"].indoor:  # (like a cave's: gap links only at its gates, not into the mountain)
                 bridge = sorted({order[j] for j in u["mouths"] if j in order} | set(joins))
-                under.append((nodes, edges, drops, joins, bridge, lift_yd))
+                under.append((nodes, edges, drops, joins, bridge, lift_yd, hs))
             else:
-                land.append((nodes, edges, drops, joins, None, lift_yd))
+                land.append((nodes, edges, drops, joins, None, lift_yd, hs))
             log(f"  {u['capital'].name}: {len(nodes)} road nodes, {len(edges)} roads, {len(joins)} joined")
             un = u.get("under")
             if un and un["graph"].edges:
@@ -1130,7 +1143,7 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                         udrops[len(uedges)] = int(float(e.source[5:]))
                     uedges.append((order[e.a], order[e.b], [tuple(q) for q in e.pts]))
                 # (no gap links to or from them: a straight line there may be up or down a level)
-                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}))
+                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}, heights_at(un["low"], unodes)))
         roads("capitals", land, cave=False)
         roads("capitals (under others, in a mountain)", under, cave=True)
         out.append("end")
@@ -1200,9 +1213,12 @@ def check_routes(built: list, log=print) -> list:
     for u in built:
         cap = u["capital"]
         start = cap.outside or cap.gates[0]
+        heights = place_heights(cap)
         for name, x, y in map_places(cap, u):
             R.Reset()
-            r = R.Route(cap.cont, *start, x, y, lua.table(offroad=False))
+            # (with the place's height, as the game's stop has it: Router.OnFloor)
+            z = heights.get(name)
+            r = R.Route(cap.cont, *start, x, y, lua.table(offroad=False, tz=z) if z is not None else lua.table(offroad=False))
             pts, kinds = _pts(r)
             road = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
                        for i, k in enumerate(kinds) if k == 0)
@@ -1243,6 +1259,17 @@ def map_places(cap: Capital, u: dict | None = None) -> list:
         for u_, v_, name in re.findall(r"\{ ([\d.]+), ([\d.]+), \"([^\"]+)\"(?:, -?[\d.]+)? \}", m.group(1)):
             out.append((name, maxX - float(v_) / 100 * (maxX - minX), maxY - float(u_) / 100 * (maxY - minY)))
     return out
+
+
+def place_heights(cap: Capital) -> dict:
+    """The city's places' heights (Data/CityPlaces.lua's 4th value, their NPCs'): {name: z}."""
+    import re
+
+    from .paths import ADDON_DIR
+
+    text = (ADDON_DIR / "Data" / "CityPlaces.lua").read_text(encoding="utf-8")
+    m = re.search(r"\[%d\] = \{ city = [^\n]*\n(.*?)\n  \}," % cap.ui_map, text, re.S)
+    return {name: float(z) for name, z in re.findall(r"\{ [\d.]+, [\d.]+, \"([^\"]+)\", (-?[\d.]+) \}", m.group(1))} if m else {}
 
 
 def render_debug(u: dict, out_dir, scale: int = 2) -> None:

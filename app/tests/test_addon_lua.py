@@ -5128,3 +5128,25 @@ def test_a_ride_to_zephras_isle_is_drawn_too(nav_env):
         assert rides, "the zeppelin to the isle: drawn"
     finally:
         N.Clear()
+
+
+def test_a_capital_stop_with_a_height_takes_the_road_on_its_floor(capitals_env):
+    # (asked: Ironforge's trainers "need to go up stairs and back down") the Priest trainer stands on the
+    # ground floor under the Hall of Mysteries' balcony: its nearest road was up there (stairs up, a step
+    # down); the capitals' roads have their floors' heights (`nz`) and a stop with a height (the NPC's)
+    # takes a road on its floor
+    lua, ns = capitals_env
+    R = ns.Router
+    b = ns.Maps[1455].bounds
+    tx, ty = b[3] - 0.090 * (b[3] - b[1]), b[4] - 0.244 * (b[4] - b[2])  # (the Priest trainer, 24.4, 9.0)
+    edges, g = R.Edges(0)
+    assert g.nz  # (the capitals' road heights)
+    r = R.Route(0, *IRONFORGE_OUTSIDE, tx, ty, lua.table(offroad=False, tz=501.2))
+    pts, _ = route_pts(r)
+    high = []
+    for x, y in pts:
+        for n in range(1, len(g.n) // 2 + 1):
+            h = g.nz[n]
+            if h and h > 515 and abs(g.n[2 * n - 1] - x) < 1 and abs(g.n[2 * n] - y) < 1:
+                high.append((round(x), round(y), h))
+    assert not high, high  # (not up on the balcony)
