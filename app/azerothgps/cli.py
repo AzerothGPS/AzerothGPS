@@ -52,6 +52,33 @@ def cmd_roads(args) -> int:
     return 0
 
 
+def _override_keys(folder: Path) -> set:
+    """The drawn fixes in overrides/roads_*.geojson, as keys (continent, first points)."""
+    keys = set()
+    for f in folder.glob("roads_*.geojson"):
+        for feat in json.loads(f.read_text(encoding="utf-8")).get("features", []):
+            keys.add((f.stem, json.dumps(feat["geometry"]["coordinates"][:2])))
+    return keys
+
+
+def _touches_capital(folder: Path, before: set) -> bool:
+    """Whether a drawn fix new since `before` lies over a capital's map (its roads take them)."""
+    from .capitals import CAPITALS
+    from .cityplaces import map_bounds
+
+    maps = map_bounds()
+    for f in folder.glob("roads_*.geojson"):
+        for feat in json.loads(f.read_text(encoding="utf-8")).get("features", []):
+            if (f.stem, json.dumps(feat["geometry"]["coordinates"][:2])) in before:
+                continue
+            for cap in CAPITALS:
+                cont, b = maps[cap.ui_map]
+                if f.stem == f"roads_{cont}" and any(b[0] <= p[0] <= b[2] and b[1] <= p[1] <= b[3]
+                                                    for p in feat["geometry"]["coordinates"]):
+                    return True
+    return False
+
+
 def cmd_watch_roads(args) -> int:
     """Each time the game writes the saved variables (a /reload, logging out): the roads drawn
     in game that are new go into overrides/ and the road data, and the addon is installed
@@ -71,6 +98,7 @@ def cmd_watch_roads(args) -> int:
         if cur != last:
             try:
                 per: dict = {}
+                before = _override_keys(RESOURCES / "overrides")
                 n = import_tracks(wtf, RESOURCES / "overrides", per)
                 last = cur
                 if n:
@@ -83,6 +111,18 @@ def cmd_watch_roads(args) -> int:
                         (ADDON_DIR / "Data" / "Cities.lua").write_text(cities_lua(_client(args)), encoding="utf-8",
                                                                        newline="\n")
                     write_roads_lua(DATA, ADDON_DIR)
+                    # (over a capital: its roads take the drawn fixes too, capitals.drawn_fixes; then the
+                    # buildings, whose cells a road keeps open)
+                    if _touches_capital(RESOURCES / "overrides", before):
+                        from .buildings import FILE as BFILE, buildings_lua
+                        from .capitals import build_all, capitals_lua
+
+                        print(f"{time.strftime('%H:%M:%S')} over a capital: its roads again (a few minutes)")
+                        cd = _client(args)
+                        built = build_all(cd, DATA, log=lambda *a: None)
+                        (ADDON_DIR / "Data" / "Capitals.lua").write_text(capitals_lua(cd, log=lambda *a: None, built=built),
+                                                                         encoding="utf-8", newline="\n")
+                        BFILE.write_text(buildings_lua(cd, log=lambda *a: None)[0], encoding="utf-8", newline="\n")
                     cmd_install_addon(args)
                     print(f"{time.strftime('%H:%M:%S')} in the road data: /reload in game to load it")
             except Exception as e:  # (e.g. read while the game was still writing it: again next time)
