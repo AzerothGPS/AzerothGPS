@@ -1686,7 +1686,7 @@ end
 
 -- Road segments bucketed on a SEG_BUCKET grid, with how far along its edge each starts:
 -- [key] = { { edge, i (index of the segment's first point in e), along }, ... }
-local SEG_BUCKET = 200
+local SEG_BUCKET = 50
 local function SegIndex(g)
   if g.segIndex then return g.segIndex end
   local idx = {}
@@ -1710,7 +1710,10 @@ local function SegIndex(g)
   return g.segIndex
 end
 
-R.NEAREST_MAX_RINGS = 60 -- SEG_BUCKET rings searched (12 km) before scanning everything
+R.NEAREST_MAX_RINGS = 240 -- SEG_BUCKET rings searched (12 km) before scanning everything
+R.NEAREST_ENOUGH = 32 -- ... or once this many edges are found and the next ring is past the farthest of them
+-- (the routes try ENTRY_CANDIDATES of them; a dense city, Stormwind, has thousands within ENTRY_SLACK,
+-- and gathering and sorting them all made a reroute there a frame's time)
 
 -- The closest point of the road edges near (x, y) to it, nearest first: every edge within
 -- ENTRY_SLACK of the nearest one (enough for getting on/off the road).
@@ -1733,10 +1736,20 @@ function R.NearestEdges(cont, x, y, z)
   local bx, by = math.floor(x / SEG_BUCKET), math.floor(y / SEG_BUCKET)
   local best, bestD = {}, nil
   local seen = {}
+  -- (counted apart: over a mine up top, the nearest may all be its tunnels, which CaveLevel then leaves
+  -- out; enough of each before stopping early)
+  local count, land, caved = 0, 0, 0
   for ring = 0, R.NEAREST_MAX_RINGS do
     Breathe(ring + 1, 2)
     -- cells beyond this ring are at least (ring) buckets away
     if bestD and (ring - 1) * SEG_BUCKET > bestD + R.ENTRY_SLACK then break end
+    if count >= R.NEAREST_ENOUGH and ring >= 2 and land >= R.ENTRY_CANDIDATES
+        and (caved == 0 or caved >= R.ENTRY_CANDIDATES) then
+      local ds = {}
+      for _, b in pairs(best) do ds[#ds + 1] = b.d2 end
+      table.sort(ds)
+      if ((ring - 1) * SEG_BUCKET) ^ 2 > ds[R.NEAREST_ENOUGH] then break end
+    end
     for kx = bx - ring, bx + ring do
       for ky = by - ring, by + ring do
         if math.max(math.abs(kx - bx), math.abs(ky - by)) == ring then
@@ -1752,6 +1765,10 @@ function R.NearestEdges(cont, x, y, z)
               local ez = z and R.EdgeZ(g, ei, at)
               if not (ez and math.abs(ez - z) > R.LAYER_Z) then
                 local b = best[ei]
+                if not b then
+                  count = count + 1
+                  if g.cave[ei] then caved = caved + 1 else land = land + 1 end
+                end
                 if not b or d2 < b.d2 then
                   best[ei] = { edge = ei, px = ax + (cx - ax) * t, py = ay + (cy - ay) * t, d2 = d2, along = at }
                 end
