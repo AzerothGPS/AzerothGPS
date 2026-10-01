@@ -5052,3 +5052,4 @@ def test_the_map_windows_title_is_centered(env):
     pts = chrome.TitleContainer.pts
     (a1, x1, y1), (a2, x2, y2) = [(pts[i][1], pts[i][4], pts[i][5]) for i in (1, 2)]
     assert (a1, a2) == ("TOPLEFT", "TOPRIGHT") and x1 == -x2 and y1 == y2 == -1
+

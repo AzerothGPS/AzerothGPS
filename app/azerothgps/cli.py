@@ -181,6 +181,15 @@ def cmd_gen_addon_data(args) -> int:
     return 0
 
 
+def cmd_media(args) -> int:
+    from .media import make
+    from .paths import REPO
+
+    files = make(ADDON_DIR / "Media", REPO / "assets")
+    print(f"wrote {len(files)} portraits in {ADDON_DIR / 'Media'} (new files: a full game restart)")
+    return 0
+
+
 def cmd_buildings(args) -> int:
     """Buildings as cells routes don't walk through: --render X Y R a picture of those around a spot
     (data/debug/buildings/), --write Data/Buildings.lua."""
@@ -526,6 +535,9 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("gen-addon-data", help="write addon/AzerothGPS/Data/*.lua from the client")
     client_args(sp)
     sp.set_defaults(fn=cmd_gen_addon_data)
+
+    sp = sub.add_parser("media", help="the addon's own art from assets/: the logo's round portrait in sizes (Media/)")
+    sp.set_defaults(fn=cmd_media)
 
     sp = sub.add_parser("buildings", help="buildings as ground routes don't walk through (Data/Buildings.lua)")
     client_args(sp)

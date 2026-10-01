@@ -488,6 +488,8 @@ ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
 ev:RegisterEvent("PLAYER_REGEN_DISABLED")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+pcall(ev.RegisterEvent, ev, "UI_SCALE_CHANGED")
+pcall(ev.RegisterEvent, ev, "DISPLAY_SIZE_CHANGED")
 
 -- A spell's name and icon, whichever API this client has (C_Spell in newer clients,
 -- GetSpellInfo / GetSpellTexture in older ones).
@@ -517,10 +519,47 @@ end
 
 -- The AzerothGPS logo in the round portrait of a frame made from the game's
 -- PortraitFrameTemplate (the map, the options window). `file`: another image in Media.
+-- The logo in a window's round portrait, pre-scaled (Media/Portrait<px>.tga, `agps media`,
+-- app/azerothgps/media.py): the size nearest the pixels the portrait covers on this screen, shown
+-- 1:1 (one picture shrunk by the graphics card looked soft). The portrait keeps its size and place.
+-- Fitted again when the window shows and when the UI's scale or the screen changes.
+ns.PORTRAIT_PX = { 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 256, 288 } -- (media.py's)
+local portraits = {}
+function ns.PortraitPx(units, effScale)
+  local ppu = 1 -- screen pixels per UI unit
+  if GetPhysicalScreenSize then
+    local ok, _, h = pcall(GetPhysicalScreenSize)
+    if ok and h and h > 0 then ppu = h / 768 * (effScale or 1) end
+  end
+  local want, px = units * ppu, ns.PORTRAIT_PX[1]
+  for _, s in ipairs(ns.PORTRAIT_PX) do
+    if math.abs(s - want) < math.abs(px - want) then px = s end
+  end
+  return px
+end
+function ns.FitPortrait(p)
+  local w = p.GetWidth and p:GetWidth() or 0
+  local px = ns.PortraitPx(w and w > 0 and w or 62, p.GetEffectiveScale and p:GetEffectiveScale() or 1)
+  local pot = 1
+  while pot < px do pot = pot * 2 end
+  p:SetTexture("Interface\\AddOns\\AzerothGPS\\Media\\Portrait" .. px)
+  p:SetTexCoord(0, px / pot, 0, px / pot)
+  if p.SetSnapToPixelGrid then p:SetSnapToPixelGrid(true) end
+  return px
+end
+function ns.FitPortraits()
+  for _, p in ipairs(portraits) do ns.FitPortrait(p) end
+end
 function ns.SetLogoPortrait(f, file)
-  local logo = "Interface\\AddOns\\AzerothGPS\\Media\\" .. (file or "Logo")
   local p = f.GetPortrait and f:GetPortrait() or (f.PortraitContainer and f.PortraitContainer.portrait)
-  if p then p:SetTexture(logo) end
+  if not p then return end
+  if file then -- (another picture: as it is)
+    p:SetTexture("Interface\\AddOns\\AzerothGPS\\Media\\" .. file)
+    return
+  end
+  portraits[#portraits + 1] = p
+  ns.FitPortrait(p)
+  if f.HookScript then f:HookScript("OnShow", function() ns.FitPortrait(p) end) end
 end
 
 -- In combat: the map and arrow switch to their combat opacity, or hide (options).
@@ -571,5 +610,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     end
   elseif event == "PLAYER_REGEN_ENABLED" then
     CombatChanged(false)
+  elseif event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
+    ns.FitPortraits() -- (the portraits' pixels changed)
   end
 end)

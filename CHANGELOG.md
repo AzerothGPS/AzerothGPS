@@ -57,6 +57,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **The capitals' roads are their streets:** Stormwind's (and Ironforge's, Orgrimmar's, Thunder Bluff's and Darnassus's) roads were a jumble over every floor, some running out over the water; they now follow the streets the city guards walk, with ways to every trainer, bank, inn and flight master. Undercity's are as they were.
 - Stormwind's map switched between the city's own map and the terrain as you zoomed: Stormwind now keeps the terrain map. Elsewhere, a building's inside map shows only indoors (at any zoom).
 - The map window's title is centered (it sat a little right of the middle).
+- The logo in the map's and the options window's round portrait is sharp: drawn at the size your screen shows it, not shrunk by the graphics card.
 - A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.

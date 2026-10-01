@@ -708,3 +708,43 @@ def test_a_zeppelin_dock_that_is_a_stop_still_shows_its_timer(game):
         st.zoom = zoom
         N.Clear()
         lua.execute("AGPS_NS.Taxi.TransportTimes = AGPS_TT AGPS_T = AGPS_T + 1")
+
+
+def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
+    # (asked: the logo in the round portrait looked soft, one 128-pixel picture shrunk by the graphics card)
+    # the pre-scaled size nearest the pixels the 62-unit portrait covers, shown 1:1
+    import numpy as np
+    from PIL import Image
+
+    from azerothgps.media import PORTRAIT_PX, on_canvas, portrait
+
+    lua, ns = game
+    assert list(ns.PORTRAIT_PX.values()) == list(PORTRAIT_PX)
+    for (w, h), scale, want in (((2560, 1440), 0.64, 72), ((1920, 1080), 1.0, 80), ((3840, 2160), 1.0, 176)):
+        lua.execute(f"GetPhysicalScreenSize = function() return {w}, {h} end")
+        assert ns.PortraitPx(62, scale) == want
+    lua.execute("GetPhysicalScreenSize = nil")
+    assert ns.PortraitPx(62, 1.0) == 64  # (unknown: a pixel a unit)
+    tex = lua.eval("""(function()
+      local t = {}
+      function t:GetWidth() return 62 end
+      function t:GetEffectiveScale() return 0.64 end
+      function t:SetTexture(f) self.file = f end
+      function t:SetTexCoord(...) self.coords = { ... } end
+      function t:SetSnapToPixelGrid(v) self.snap = v end
+      return t
+    end)()""")
+    lua.execute("GetPhysicalScreenSize = function() return 2560, 1440 end")
+    try:
+        assert ns.FitPortrait(tex) == 72
+    finally:
+        lua.execute("GetPhysicalScreenSize = nil")
+    assert str(tex.file).endswith("Portrait72") and tex.snap
+    assert [tex.coords[i] for i in range(1, 5)] == [0, 72 / 128, 0, 72 / 128]
+    # the files: each size as made from assets/logo.png (`agps media`), at 128 the look of before
+    media, logo = ADDON / "Media", ADDON.parents[1] / "assets" / "logo.png"
+    for px in PORTRAIT_PX:
+        f = media / f"Portrait{px}.tga"
+        assert f.exists(), f"{f.name} missing: run `agps media`"
+        same = np.array_equal(np.asarray(Image.open(f).convert("RGBA")), np.asarray(on_canvas(portrait(logo, px))))
+        assert same, f"{f.name} is stale: run `agps media`"
