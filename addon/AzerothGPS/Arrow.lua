@@ -12,6 +12,7 @@ local ARROW_FILE = "Interface\\Minimap\\MinimapArrow"
 local TEXT_EVERY = 0.25 -- seconds between text updates (the arrow itself turns every frame)
 
 local frame, arrow, slot, bang, dist, line1, line2, line3, line4, grip, stale
+local useBtn -- the route's first step a hearthstone or teleport: its button where the arrow is (GPSFrame's NewUseButton)
 local SPRINT_ICON = "Interface\\Icons\\Ability_Rogue_Sprint" -- the quest route button's
 local QUEST_ICON = "Interface\\GossipFrame\\AvailableQuestIcon" -- the "!" in a quest area
 local rows = {} -- the later stops, as many as fit the window's height
@@ -129,9 +130,22 @@ function RenderLines(lines)
   return true
 end
 
+-- (the arrow's use button, in the arrow's place)
+local function PlaceUse(b) b:SetPoint("CENTER", slot, "CENTER") end
+local function SetUse(t)
+  local G = ns.GPS
+  if useBtn and G and G.SetUseButton then G.SetUseButton(useBtn, t, PlaceUse) end
+end
+A.SetUse = SetUse
+
 local function UpdateText(px, py, cont)
   local N = ns.Nav
   ns.Nav.Status(px, py, cont) -- keeps the route current and advances stops, even with the GPS hidden
+  -- the route starting with a hearthstone or teleport from here (its step 1): said as that, with its
+  -- button where the arrow is (asked, 2026-10-01: the turns of the walk after it were shown instead,
+  -- out of step with the steps), the walk after it next
+  local use = N.route and N.dest and not N.route.flying and not (N.questing and N.dest) and N.UseNow and N.UseNow() or nil
+  SetUse(use)
   if N.questing and N.dest then return QuestText(px, py, cont) end
   arrow:SetSize(58, 58)
   arrow:SetAlpha(1)
@@ -155,7 +169,7 @@ local function UpdateText(px, py, cont)
     path, maneuvers = nil, nil
     return false
   end
-  if r.flying then -- in the air: where it lands and when; turns resume after landing
+  if r.flying or use then -- in the air: where it lands and when; turns resume after landing (or the teleport)
     path, maneuvers = nil, {}
   else
     path = ns.Turns.Path(r)
@@ -182,6 +196,10 @@ local function UpdateText(px, py, cont)
     line2:SetText("lands in " .. N.FormatTime(r.flying.seconds))
     arrow:SetRotation(0)
     arrow:SetVertexColor(0.6, 0.8, 1)
+  elseif use then
+    line1:SetText("Use " .. tostring(use[8]))
+    line2:SetText(use[10] and use[10] ~= "" and ("to " .. use[10]) or "")
+    arrow:Hide() -- (its button there instead: click it)
   elseif m then
     -- what to do now, then the maneuver: "Continue straight, then slight right in 13 yd" (shorter when
     -- the window is too narrow for it on one line)
@@ -204,6 +222,10 @@ local function UpdateText(px, py, cont)
     N.FormatDistance(r.walkYards), eta, #N.stops > 1 and string.format("  |cff9d9d9d(1/%d)|r", #N.stops) or ""))
   local nxt = maneuvers[2]
   line4:SetText(nxt and string.format("Then: %s in %s", nxt.text, N.FormatDistance(nxt.dist - (m and m.dist or 0))) or "")
+  if use then -- (then the steps' second: the walk from where it lands)
+    local steps = N.Steps()
+    line4:SetText(steps[2] and ("Then: " .. steps[2]) or "")
+  end
   -- the later stops, each with its distance and time from the stop before it
   local questLines = {}
   FitRows(0)
@@ -435,6 +457,8 @@ function A.Init()
   slot:SetPoint("LEFT", 8, 0)
   arrow:SetPoint("CENTER", slot, "CENTER")
   ns.SetIcon(arrow, "atlas:" .. ARROW_ATLAS, ARROW_FILE)
+  -- (the route's first step a hearthstone or teleport: its button in the arrow's place, as the map's)
+  if ns.GPS and ns.GPS.NewUseButton then useBtn = ns.GPS.NewUseButton("AzerothGPSArrowUseButton", frame, 40) end
   bang = frame:CreateTexture(nil, "ARTWORK")
   bang:SetSize(40, 40)
   bang:SetPoint("CENTER", arrow, "CENTER")

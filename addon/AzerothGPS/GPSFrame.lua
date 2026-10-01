@@ -2829,7 +2829,8 @@ function G.Update()
   navPanel:SetHeight(navText:GetStringHeight() + 12 + (steps ~= "" and stepsText:GetStringHeight() + 4 or 0))
   -- closed with its X: hidden until the route changes (unless the X clears the route)
   navPanel:SetShown(status ~= nil and navClosedAt ~= ns.Nav.Version() and not G.Held())
-  G.UpdateUseButton(navPanel:IsShown() and not hidden and ns.Nav.UseNow() or nil)
+  -- (not while the steps are collapsed: asked, 2026-10-01; the arrow window has its own)
+  G.UpdateUseButton(navPanel:IsShown() and not hidden and not collapsed and ns.Nav.UseNow() or nil)
   -- (a dungeon's floor and route note: under the panel while it shows, not under its text)
   if fl.bar and fl.bar:IsShown() then G.PlaceFloorBar() end
   ns.PerfEnd("redraw: text", pt)
@@ -4271,11 +4272,12 @@ function G.Redraw() elapsed = 1 end
 -- the game's rule for using items and spells: it can't be changed in combat, so it's hidden as
 -- combat starts and set again after; and it's the UI's own child, not the map's (the map may
 -- hide in combat, which a secure child would block), placed on the panel out of combat.
-function G.MakeUseButton(panel)
-  if G.useBtn or not CreateFrame then return end
-  local ok, b = pcall(CreateFrame, "Button", "AzerothGPSUseButton", UIParent, "SecureActionButtonTemplate")
-  if not ok or not b then return end
-  b:SetSize(24, 24)
+-- (Another: the arrow window's, where its arrow is, Arrow.lua: G.NewUseButton, G.SetUseButton.)
+function G.NewUseButton(name, panel, size)
+  if not CreateFrame then return nil end
+  local ok, b = pcall(CreateFrame, "Button", name, UIParent, "SecureActionButtonTemplate")
+  if not ok or not b then return nil end
+  b:SetSize(size or 24, size or 24)
   b:RegisterForClicks("AnyUp", "AnyDown") -- (either setting of "cast on key down")
   b.icon = b:CreateTexture(nil, "ARTWORK")
   b.icon:SetAllPoints()
@@ -4306,7 +4308,11 @@ function G.MakeUseButton(panel)
       b.key = nil
     end
   end)
-  G.useBtn = b
+  return b
+end
+function G.MakeUseButton(panel)
+  if G.useBtn then return end
+  G.useBtn = G.NewUseButton("AzerothGPSUseButton", panel, 24)
 end
 
 -- What the use button uses: `t`, a teleport row with item or spell (Nav.UseNow), or nil (hidden).
@@ -4318,8 +4324,9 @@ function G.UseKey(t)
   return nil
 end
 
-function G.UpdateUseButton(t)
-  local b = G.useBtn
+-- Button `b` set for teleport row `t` (nil: hidden), put in its place by `place(b)` (cleared first).
+-- Not in combat (a secure button: hidden as combat starts, set again after).
+function G.SetUseButton(b, t, place)
   if not b or (InCombatLockdown and InCombatLockdown()) then return end
   local key = G.UseKey(t)
   if key == b.key then return end
@@ -4343,11 +4350,14 @@ function G.UpdateUseButton(t)
   b.icon:SetTexture(tex or 134400)
   b.what, b.to = t[8], t[10]
   b:ClearAllPoints()
-  b:SetPoint("BOTTOMRIGHT", b.panel, "BOTTOMRIGHT", -5, 5)
+  place(b)
   b:SetFrameStrata(b.panel:GetFrameStrata())
   b:SetFrameLevel(b.panel:GetFrameLevel() + 20)
   b:Show()
 end
+-- The directions panel's: at its corner.
+local function PlaceUse(b) b:SetPoint("BOTTOMRIGHT", b.panel, "BOTTOMRIGHT", -5, 5) end
+function G.UpdateUseButton(t) G.SetUseButton(G.useBtn, t, PlaceUse) end
 
 -- Near the next stop (option): the map zooms in smoothly for the last yards, and back out
 -- once you're there (or move away, or zoom yourself). Only while following the player.

@@ -279,6 +279,44 @@ def test_an_overlay_draws_icons_until_removed(game):
     G.Update()
     assert not _shown(lua, lambda w: w._tex == 136777)
 
+def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
+    # (reported, screenshot) the route's step 1 "Use your Hearthstone" while the arrow window gave the turns
+    # of the walk after it; asked: its button in the arrow window too, and the map's hidden while the
+    # steps are collapsed
+    lua, ns = game
+    N, G, st = ns.Nav, ns.GPS, ns.settings.gps
+    N.SetStops(lua.eval("{ { x = -1441, y = -2332, cont = 0 } }"), False, "red")
+    lua.execute("AGPS_T = 800")
+    G.Update()
+    real = N.UseNow
+    hearth = lua.eval("{ 0, 2254, 293, 0, -8900, -160, 10, 'your Hearthstone', '', 'Northshire Valley', 'your Hearthstone', use = true, item = 6948 }")
+    N.UseNow = lua.eval("function(t) return function() return t end end")(hearth)
+    arrowWin = lua.globals().AzerothGPSArrow
+    try:
+        st.stepsCollapsed = False
+        lua.execute("AGPS_T = 801")
+        G.Update()
+        assert G.useBtn._shown
+        arrowWin._scripts.OnUpdate(arrowWin, 1)
+        btn = lua.globals().AzerothGPSArrowUseButton
+        assert btn._shown and btn._attr["item"] == "item:6948"
+        texts = [str(w._text) for w in lua.eval("AGPS_WIDGETS").values() if w._kind == "FontString" or w._text]
+        assert "Use your Hearthstone" in texts and "to Northshire Valley" in texts
+        assert not any(t.startswith("Straight") or t.startswith("Continue straight") for t in texts if t)
+        st.stepsCollapsed = True  # (the map's steps collapsed: its button hidden; the arrow's stays)
+        lua.execute("AGPS_T = 802")
+        G.Update()
+        assert not G.useBtn._shown and btn._shown
+    finally:
+        N.UseNow = real
+        st.stepsCollapsed = False
+        lua.execute("AGPS_T = 803")
+        G.Update()
+        arrowWin._scripts.OnUpdate(arrowWin, 1)
+    assert not lua.globals().AzerothGPSArrowUseButton._shown and not G.useBtn._shown
+    N.Clear()
+
+
 def test_every_popup_window_is_made_with_ns_window():
     # (asked) every popup in the map window's art style without its logo, by default: none built by hand
     # (only the map, the arrow window and the options window, which has the logo, make their own)
