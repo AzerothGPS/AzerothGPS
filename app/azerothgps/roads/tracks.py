@@ -8,6 +8,26 @@ from pathlib import Path
 from ..savedvars.parser import load_savedvariables
 
 SV_NAME = "AzerothGPS.lua"
+WALL_FLOOR_Z = 8.0  # Passability.WALL_FLOOR_Z: a wall eraser takes out the walls drawn within this of its height
+
+
+def floor_of(t: dict) -> dict:
+    """A drawn edit's floor, where floors lie over each other (the addon's Record `z`, `indoors`,
+    `down`: the player's height, whether indoors, and down in a cave or under a capital's floor), as
+    feature properties: only those it has."""
+    out = {}
+    if t.get("z") is not None:
+        out["z"] = round(float(t["z"]), 1)
+    if t.get("indoors") is not None:
+        out["indoors"] = bool(t["indoors"])
+    if t.get("down"):
+        out["down"] = True
+    return out
+
+
+class WallLine(list):
+    """A wall's points ([x, y] pairs), with its floor's height `z` when it has one."""
+    z: float | None = None
 
 
 def read_tracks(wtf_account_dir: Path) -> list[dict]:
@@ -26,27 +46,36 @@ def read_tracks(wtf_account_dir: Path) -> list[dict]:
                 "time": int(t.get("time", 0)),
                 "area": bool(t.get("area")),
                 "coords": [[pts[i], pts[i + 1]] for i in range(0, len(pts) - 1, 2)],
+                **floor_of(t),
             })
     return tracks
 
 
 def parse_shared(text: str) -> list[dict]:
-    """Roads from the share page's "Copy road data" text (Feedback.RoadsText), as tracks."""
+    """Roads from the share page's "Copy road data" text (Feedback.RoadsText), as tracks: "R op continent
+    time [z=height] [indoors=1|0] [down=1] x,y x,y ..."."""
     out = []
     for line in text.splitlines():
         parts = line.split()
         if len(parts) < 6 or parts[0] != "R" or parts[1] not in ("add", "remove", "area", "wall", "unwall", "unwallarea"):
             continue
+        fl, rest = {}, parts[4:]
+        while rest and "=" in rest[0]:
+            k, _, v = rest.pop(0).partition("=")
+            fl[k] = v
         try:
             cont, t = int(parts[2]), int(parts[3])
-            coords = [[float(a) for a in p.split(",")] for p in parts[4:]]
+            coords = [[float(a) for a in p.split(",")] for p in rest]
+            floor = floor_of({"z": float(fl["z"]) if "z" in fl else None,
+                              "indoors": (fl["indoors"] == "1") if "indoors" in fl else None,
+                              "down": fl.get("down") == "1"})
         except ValueError:
             continue
         if len(coords) < 2 or any(len(c) != 2 for c in coords):
             continue
         op = {"area": "remove", "unwallarea": "unwall"}.get(parts[1], parts[1])
         out.append({"continent": cont, "op": op, "area": parts[1] in ("area", "unwallarea"),
-                    "zone": "shared", "time": t, "coords": coords})
+                    "zone": "shared", "time": t, "coords": coords, **floor})
     return out
 
 
@@ -68,7 +97,7 @@ def import_shared(text: str, overrides_dir: Path, per_continent: dict | None = N
             doc["features"].append({
                 "type": "Feature",
                 "properties": {"op": t["op"], "source": "recorded", "zone": t["zone"], "time": t["time"], "trim": True,
-                               **({"area": True} if t["area"] else {})},
+                               **({"area": True} if t["area"] else {}), **floor_of(t)},
                 "geometry": {"type": "LineString", "coordinates": t["coords"]},
             })
             new += 1
@@ -84,7 +113,8 @@ def import_shared(text: str, overrides_dir: Path, per_continent: dict | None = N
 def walls(overrides_dir: Path) -> dict[int, list[list[float]]]:
     """The walls drawn in game per continent (or city level), as the addon has them
     (Passability.WallLines): each "wall" in order, an "unwall" taking out the walls near it
-    (or inside it, drawn as a loop). { continent: [ [x, y, x, y, ...], ... ] }"""
+    (or inside it, drawn as a loop) on its floor (both drawn within WALL_FLOOR_Z of each other's
+    height, when both have one). { continent: [ WallLine([[x, y], ...]), ... ] }"""
     import math
 
     def in_loop(poly, x, y):
@@ -116,10 +146,14 @@ def walls(overrides_dir: Path) -> dict[int, list[list[float]]]:
             props = feat.get("properties", {})
             line = feat["geometry"]["coordinates"]
             if props.get("op") == "wall":
-                ws.append(line)
+                w = WallLine(line)
+                w.z = props.get("z")
+                ws.append(w)
             elif props.get("op") == "unwall":
-                area = props.get("area")
-                ws = [w for w in ws if not any(in_loop(line, x, y) if area else near(line, x, y) for x, y in w)]
+                area, z = props.get("area"), props.get("z")
+                ws = [w for w in ws if not (
+                    (z is None or w.z is None or abs(w.z - z) <= WALL_FLOOR_Z)
+                    and any(in_loop(line, x, y) if area else near(line, x, y) for x, y in w))]
         if ws:
             out[cont] = ws
     return out
@@ -194,7 +228,7 @@ def import_tracks(wtf_account_dir: Path, overrides_dir: Path, per_continent: dic
             doc["features"].append({
                 "type": "Feature",
                 "properties": {"op": t["op"], "source": "recorded", "zone": t["zone"], "time": t["time"], "trim": True,
-                               **({"area": True} if t.get("area") else {})},
+                               **({"area": True} if t.get("area") else {}), **floor_of(t)},
                 "geometry": {"type": "LineString", "coordinates": t["coords"]},
             })
             added += 1

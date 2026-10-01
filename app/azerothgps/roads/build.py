@@ -98,7 +98,10 @@ def finish_continent(g: RoadGraph, continent: int, out: Path, extra: dict, log=p
     from .npcpaths import apply_paths
 
     pa = apply_paths(g, RESOURCES / "overrides" / f"paths_{continent}.geojson")
-    ov = apply_overrides(g, RESOURCES / "overrides" / f"roads_{continent}.geojson")
+    # (an erasure drawn down in a cave or under a capital's floor erases those roads, not the land's
+    # over them: the addon's floor rule, Router.WithTracks)
+    ov = apply_overrides(g, RESOURCES / "overrides" / f"roads_{continent}.geojson",
+                         keep=lambda p: not (p.get("down") and p.get("op") == "remove"))
     cut = cut_capitals(g, continent)
     log(f"  [{continent}] graph: {len(g.nodes)} nodes, {len(g.edges)} edges, "
         f"{g.total_length() / 1000:.1f}k yd; paths {pa}; overrides {ov}; cut in the capitals {cut:.0f} yd")

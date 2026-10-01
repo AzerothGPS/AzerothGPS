@@ -640,3 +640,71 @@ def test_capitals_show_their_districts_names(game):
     pois = lua.table()
     G.CityLabelPois(pois, 0, -8832.0, 625.0, 0, 0.1, 200.0, 2000.0)
     assert len(pois) == 0  # (zoomed far out: none)
+
+
+def test_the_road_tools_tell_your_floor_and_draw_the_others_faint(game):
+    # (asked: "any place editing roads/walls that have floors like undercity need a current floor
+    # indicator") down in Undercity at a walkway over a road, the tools' hint says which floor you're
+    # on, and the other floor's roads draw faint; up on the walkway, the other way round
+    lua, ns = game
+    G, R = ns.GPS, ns.Router
+    lua.execute("""
+      AGPS_MAP_REAL, AGPS_ZONE_REAL = AGPS_MAP, GetMinimapZoneText
+      AGPS_MAP = 1458
+      GetMinimapZoneText = function() return "Trade Quarter" end
+    """)
+    x, y = 1593.5, 157.3  # (a walkway at -43.5 over a road at -62)
+    try:
+        R.Edges(10001)
+        faint = {}
+        for z in (-61.0, -44.0):
+            lua.execute(f"AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = {x}, {y}, 0, {z} AGPS_T = AGPS_T + 1")
+            G.SetRoadMode(True)
+            G.Update()
+            assert "of 2 here" in str(G.floorLine) and "Trade Quarter" in str(G.floorLine)
+            segs = G.LayoutRoads(x, y, 10001, 0, 60.0, 200.0)
+            alphas = [segs[i][6] for i in range(1, len(segs) + 1)]
+            assert any(a is None for a in alphas) and any(a == G.OTHER_FLOOR_ALPHA for a in alphas)
+            faint[z] = {i for i, a in enumerate(alphas) if a is not None}
+            G.SetRoadMode(False)
+        assert faint[-61.0] != faint[-44.0]
+        assert G.FloorText() is not None and G.ToolFloor(10001) is None  # (the tools off: nothing faint)
+    finally:
+        G.SetRoadMode(False)
+        lua.execute("AGPS_MAP, GetMinimapZoneText = AGPS_MAP_REAL, AGPS_ZONE_REAL "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+
+
+def test_a_zeppelin_dock_that_is_a_stop_still_shows_its_timer(game):
+    # (asked) a stop on a dock hid the dock with its icon, and its countdown went with it: the countdown
+    # stays under the stop's marker
+    import math
+    lua, ns = game
+    G, N, st = ns.GPS, ns.Nav, ns.settings.gps
+    brill = (2254.0, 293.0)
+    docks = [(math.hypot(t[2 + 3 * k] - brill[0], t[3 + 3 * k] - brill[1]), t[2 + 3 * k], t[3 + 3 * k])
+             for t in ns.Transports.values() for k in (0, 1) if t[8] == "zeppelin" and t[1 + 3 * k] == 0]
+    _, x, y = min(docks)
+    lua.execute("AGPS_TT = AGPS_NS.Taxi.TransportTimes AGPS_NS.Taxi.TransportTimes = function() return 130, 200, 10 end")
+    zoom = st.zoom
+
+    def shown():  # (that dock's button: its timer, its icon; a tower has a dock for each zeppelin)
+        b = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dock and w._shown and w.wx == x and w.wy == y]
+        if not b:
+            return False, None
+        return bool(b[0].timer and b[0].timer._shown and b[0].timer._text == "2:10"), bool(b[0].icon._shown)
+
+    try:
+        st.zoom = 900.0
+        N.Clear()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert shown() == (True, True)
+        N.SetStops(lua.eval(f"{{ {{ x = {x}, y = {y}, cont = 0, name = 'Zeppelin', tex = 'Interface\\AddOns\\AzerothGPS\\Media\\Zeppelin' }} }}"))
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert shown() == (True, False)  # (its countdown under the stop's marker; its icon hidden there)
+    finally:
+        st.zoom = zoom
+        N.Clear()
+        lua.execute("AGPS_NS.Taxi.TransportTimes = AGPS_TT AGPS_T = AGPS_T + 1")

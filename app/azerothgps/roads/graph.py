@@ -505,6 +505,64 @@ DRAWN_CITY = {"trim": 4.0, "snap": 8.0, "min_run": 6.0, "cut": 12.0, "along_min"
               "min_piece": 3.0}  # (a city's levels overlap)
 ALONG_COS = 0.866
 STUB_YD = 15.0  # a cut road's dead-end stub shorter than this goes (Router.TRACK_STUB)
+FLOOR_STACK_YD = 8.0  # Router.FLOOR_STACK_YD
+LAYER_Z = 5.0  # Router.LAYER_Z
+
+
+def _closest(pts: np.ndarray, p) -> tuple[float, float]:
+    """Distance from p to the polyline pts, and yards along it to the nearest point (the first)."""
+    a, b = pts[:-1], pts[1:]
+    ab = b - a
+    L = np.hypot(*ab.T)
+    L2 = np.where(L > 0, L * L, 1)
+    t = np.clip(((p - a) * ab).sum(axis=1) / L2, 0, 1)
+    d = np.hypot(*(a + ab * t[:, None] - p).T)
+    i = int(np.argmin(d))
+    return float(d[i]), float(L[:i].sum() + L[i] * t[i])
+
+
+class LayerFloors:
+    """Floors over floors on a level with heights, for a drawn edit made at height `z` (as the addon's
+    Router.WithTracks has it): of the roads within FLOOR_STACK_YD (or the edit's reach) of a spot on the
+    edit, it changes those about at the height (LAYER_Z) of the one nearest `z` (where one floor alone is
+    there, that one). `nz`: each node's height (a road's changes evenly between its ends); the nodes the
+    edit makes get theirs there too. The floors are those of the roads as they were when it's made (one
+    the edit has cut away already doesn't make the floor over it the only one there)."""
+
+    def __init__(self, g: "RoadGraph", nz: dict, z: float):
+        self.g, self.nz, self.z = g, nz, float(z)
+        self.before = [(e, e.pts.copy(), e.pts.min(axis=0), e.pts.max(axis=0)) for e in g.edges.values() if len(e.pts) >= 2]
+
+    def edge_height(self, e: Edge, along: float):
+        za, zb = self.nz.get(e.a), self.nz.get(e.b)
+        if za is None or zb is None:
+            return za if za is not None else zb
+        return za + (zb - za) * max(0.0, min(1.0, along / max(e.length, 1.0)))
+
+    def floor_here(self, x: float, y: float, r: float | None = None):
+        p = np.array([x, y])
+        hs = []
+        r = max(r or 0.0, FLOOR_STACK_YD)
+        for e, pts, lo, hi in self.before:
+            if lo[0] - r > x or hi[0] + r < x or lo[1] - r > y or hi[1] + r < y:
+                continue
+            d, along = _closest(pts, p)
+            if d <= r:
+                h = self.edge_height(e, along)
+                if h is not None:
+                    hs.append(h)
+        return min(hs, key=lambda h: abs(h - self.z)) if hs else None
+
+    def ok(self, e: Edge, x: float, y: float, along: float, r: float | None = None) -> bool:
+        """Whether road e (`along` yards along it) is on the edit's floor under its spot (x, y)."""
+        h = self.edge_height(e, along)
+        f = self.floor_here(x, y, r) if h is not None else None
+        return f is None or abs(h - f) <= LAYER_Z
+
+    def height(self, x: float, y: float) -> float:
+        """A new node's height there: the floor nearest the edit's, else its own."""
+        f = self.floor_here(x, y)
+        return f if f is not None else self.z
 
 
 def _attach(g: RoadGraph, p: np.ndarray, snap: float = SNAP_YD) -> int:
@@ -535,10 +593,11 @@ def _in_polygon(poly: np.ndarray, p) -> bool:
     return inside
 
 
-def cut_under(g: RoadGraph, line, reach: float, parallel: bool = False, area: bool = False) -> list[int]:
+def cut_under(g: RoadGraph, line, reach: float, parallel: bool = False, area: bool = False, floor=None) -> list[int]:
     """Cut the stretches of road within `reach` of `line` (or of any of a list of lines) out
     of the edges they're on; the rest of each edge stays (split where it was cut). Returns
-    the new road ends (nodes). `parallel`: only where the road runs about parallel to it."""
+    the new road ends (nodes). `parallel`: only where the road runs about parallel to it.
+    `floor` (LayerFloors): only the roads on its floor, and the new ends get their heights."""
     from skimage.measure import approximate_polygon
 
     lines = [np.asarray(line, np.float64)] if not isinstance(line, list) else [np.asarray(x, np.float64) for x in line]
@@ -549,16 +608,23 @@ def cut_under(g: RoadGraph, line, reach: float, parallel: bool = False, area: bo
                 if not ((e.pts.max(axis=0) < lo).any() or (e.pts.min(axis=0) > hi).any())]
         if not near:
             continue
-        dense, dirs = [e.pts[0]], [e.pts[1] - e.pts[0]]
+        dense, dirs, dal = [e.pts[0]], [e.pts[1] - e.pts[0]], [0.0]
+        along = 0.0
         for a, b in zip(e.pts[:-1], e.pts[1:]):
-            m = max(1, int(np.ceil(np.hypot(*(b - a)) / 2)))
+            L = float(np.hypot(*(b - a)))
+            m = max(1, int(np.ceil(L / 2)))
             dense.extend(a + (b - a) * (k / m) for k in range(1, m + 1))
             dirs.extend([b - a] * m)
+            dal.extend(along + L * k / m for k in range(1, m + 1))
+            along += L
         dense = np.asarray(dense)
         if area:  # (the lines are loops: the road inside them goes)
             under = np.array([any(_in_polygon(x, q) for x in near) for q in dense])
         else:
             under = np.array([any(_under(q, r, x, reach, parallel) for x in near) for q, r in zip(dense, dirs)])
+        if floor is not None:  # (on the edit's floor under it: the line's nearest spot, in a loop the road's own)
+            under = np.array([bool(u) and floor.ok(e, *(q if area else _under_spot(q, r, near, reach, parallel)), al, reach)
+                              for u, q, r, al in zip(under, dense, dirs, dal)])
         if not under.any():
             continue
         g.remove_edge(eid)
@@ -576,6 +642,10 @@ def cut_under(g: RoadGraph, line, reach: float, parallel: bool = False, area: bo
             if len(run) >= 2:
                 a = e.a if i == 0 else g.add_node(run[0])
                 b = e.b if j == n - 1 else g.add_node(run[-1])
+                if floor is not None:  # (the cut ends: the road's heights there)
+                    for x, k, new in ((a, i, i != 0), (b, j, j != n - 1)):
+                        if new:
+                            floor.nz[x] = floor.edge_height(e, dal[k])
                 ends += [x for x, new in ((a, i != 0), (b, j != n - 1)) if new]
                 g.cut_nodes = getattr(g, "cut_nodes", set()) | {x for x, new in ((a, i != 0), (b, j != n - 1)) if new}
                 g.add_edge(a, b, approximate_polygon(run, 0.5), e.source)
@@ -600,6 +670,27 @@ def _under(p: np.ndarray, r: np.ndarray, line: np.ndarray, reach: float, paralle
     return bool(ok.any())
 
 
+def _under_spot(p: np.ndarray, r: np.ndarray, lines, reach: float, parallel: bool):
+    """The spot on `lines` that p (on a road going r) is under, as _under finds it (the first)."""
+    for line in lines:
+        if len(line) < 2:
+            if np.hypot(*(p - line[0])) <= reach:
+                return line[0]
+            continue
+        a, b = line[:-1], line[1:]
+        ab = b - a
+        L2 = (ab ** 2).sum(axis=1)
+        t = np.clip(((p - a) * ab).sum(axis=1) / np.where(L2 > 0, L2, 1), 0, 1)
+        q = a + ab * t[:, None]
+        ok = np.hypot(*(q - p).T) <= reach
+        if parallel:
+            nv, nr = np.sqrt(L2), np.hypot(*r)
+            ok &= (nv > 0) & (nr > 0) & (np.abs(ab @ r) / np.where(nv * nr > 0, nv * nr, 1) >= ALONG_COS)
+        if ok.any():
+            return q[int(np.argmax(ok))]
+    return p
+
+
 def _dist_to_polyline(p: np.ndarray, line: np.ndarray) -> float:
     a, b = line[:-1], line[1:]
     ab = b - a
@@ -608,7 +699,7 @@ def _dist_to_polyline(p: np.ndarray, line: np.ndarray) -> float:
     return float(np.hypot(*(a + ab * t[:, None] - p).T).min())
 
 
-def apply_overrides(g: RoadGraph, path: Path, city: bool = False) -> dict:
+def apply_overrides(g: RoadGraph, path: Path, city: bool = False, floors=None, keep=None) -> dict:
     """Apply hand-made fixes from a GeoJSON FeatureCollection.
 
     Each feature is a LineString in world yards ([X, Y] pairs, as shown in the
@@ -617,6 +708,8 @@ def apply_overrides(g: RoadGraph, path: Path, city: bool = False) -> dict:
       "remove" - delete road edges lying within 10 yd of this line
     Roads drawn in game (properties.source "recorded") go on in their order after the
     hand-made removes, as the addon has them (DRAWN; DRAWN_CITY on a `city` level).
+    `floors(props)`: a drawn edit's floor (LayerFloors) on a level with floors over floors, or None.
+    `keep(props)`: only the features it passes.
     """
     stats = {"added": 0, "removed": 0}
     if not Path(path).exists():
@@ -640,21 +733,24 @@ def apply_overrides(g: RoadGraph, path: Path, city: bool = False) -> dict:
     g.drop_isolated_nodes()
     for f in feats:
         props = f.get("properties", {})
+        if keep is not None and not keep(props):
+            continue
         drawn = props.get("source") == "recorded"
         line = np.asarray(f["geometry"]["coordinates"], np.float64)
         if len(line) < 2:
             continue
+        floor = floors(props) if floors is not None and drawn else None
         if props.get("op") == "remove":
             if drawn:
                 if props.get("area"):
-                    stats["removed"] += len(cut_under(g, line, 0.0, area=True))
+                    stats["removed"] += len(cut_under(g, line, 0.0, area=True, floor=floor))
                 else:
-                    stats["removed"] += len(cut_under(g, line, par["cut"]))
+                    stats["removed"] += len(cut_under(g, line, par["cut"], floor=floor))
             continue
         if props.get("op") != "add":
             continue
         if drawn:  # (truth: as the addon has it)
-            stats["added"] += add_drawn(g, line, par)
+            stats["added"] += add_drawn(g, line, par, floor)
             continue
         # Recorded tracks often ride along known roads too; keep only the new parts.
         pieces = off_network_runs(g, line) if props.get("trim") else [line]
@@ -734,10 +830,10 @@ def off_network_runs(g: RoadGraph, line: np.ndarray, trim: float | None = None,
     return runs
 
 
-def _attach_drawn(g: RoadGraph, p: np.ndarray, reach: float, only: set | None = None):
+def _attach_drawn(g: RoadGraph, p: np.ndarray, reach: float, only: set | None = None, floor=None):
     """As the addon's attach: the node at the nearest point of the roads (of `only` if
-    given) within `reach`, an edge's end if that's within 3 yd along it, else the edge split
-    there (both halves join `only`). (node, point) or (None, None)."""
+    given; on `floor`'s floor) within `reach`, an edge's end if that's within 3 yd along it,
+    else the edge split there (both halves join `only`). (node, point) or (None, None)."""
     best = None
     for eid, e in g.edges.items():
         if only is not None and eid not in only:
@@ -751,7 +847,9 @@ def _attach_drawn(g: RoadGraph, p: np.ndarray, reach: float, only: set | None = 
         d = np.hypot(*(q - p).T)
         i = int(np.argmin(d))
         if best is None or d[i] < best[0]:
-            best = (float(d[i]), eid, i, q[i], float(L[:i].sum() + L[i] * t[i]), float(L.sum()))
+            along = float(L[:i].sum() + L[i] * t[i])
+            if floor is None or floor.ok(e, p[0], p[1], along, reach):
+                best = (float(d[i]), eid, i, q[i], along, float(L.sum()))
     if best is None or best[0] > reach:
         return None, None
     _, eid, seg, q, along, total = best
@@ -761,18 +859,22 @@ def _attach_drawn(g: RoadGraph, p: np.ndarray, reach: float, only: set | None = 
     if along > total - 3:
         return e.b, g.nodes[e.b]
     before = set(g.edges)
+    h = floor.edge_height(e, along) if floor is not None else None
     n = g.split_edge(eid, seg, q)
+    if floor is not None:
+        floor.nz[n] = h
     if only is not None:
         only.discard(eid)
         only.update(set(g.edges) - before)
     return n, q
 
 
-def add_drawn(g: RoadGraph, line: np.ndarray, par: dict) -> int:
+def add_drawn(g: RoadGraph, line: np.ndarray, par: dict, floor=None) -> int:
     """A road drawn in game, as the addon has it (Router.WithTracks): where it runs along a
     road (close, about parallel, for a while, or at its ends) it replaces that stretch and
     the road's cut ends join it; where it crosses a road it's split and joined there; its
-    ends join a road within par["snap"]. Returns the edges added."""
+    ends join a road within par["snap"]. `floor` (LayerFloors): only that floor's roads, and
+    its new nodes at that floor's height. Returns the edges added."""
     own = [True]
     dense = [line[0]]
     for a, b in zip(line[:-1], line[1:]):
@@ -785,22 +887,35 @@ def add_drawn(g: RoadGraph, line: np.ndarray, par: dict) -> int:
     lo, hi = P.min(axis=0) - par["trim"], P.max(axis=0) + par["trim"]
 
     def near_segments():
-        segs = [np.hstack([e.pts[:-1], e.pts[1:]]) for e in g.edges.values()
-                if not ((e.pts.max(axis=0) < lo).any() or (e.pts.min(axis=0) > hi).any())]
-        if not segs:
+        es = [e for e in g.edges.values()
+              if not ((e.pts.max(axis=0) < lo).any() or (e.pts.min(axis=0) > hi).any())]
+        if not es:
             return None
-        S = np.vstack(segs)
-        return S[:, :2], S[:, 2:] - S[:, :2]
+        S = np.vstack([np.hstack([e.pts[:-1], e.pts[1:]]) for e in es])
+        # (each segment's road and yards along it to its start: the floor check)
+        owner = [e for e in es for _ in range(len(e.pts) - 1)]
+        start = np.concatenate([np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(e.pts, axis=0).T))[:-1]]) for e in es])
+        return S[:, :2], S[:, 2:] - S[:, :2], owner, start
+
+    reach_used = max(par["trim"], par["cross"])
 
     def nearest(segs, pt):
         if segs is None:
             return np.inf, np.zeros(2)
-        a, v = segs
+        a, v, owner, start = segs
         L2 = (v ** 2).sum(axis=1)
         t = np.clip(((pt - a) * v).sum(axis=1) / np.where(L2 > 0, L2, 1), 0, 1)
         d = np.hypot(*(a + v * t[:, None] - pt).T)
-        i = int(np.argmin(d))
-        return float(d[i]), v[i]
+        if floor is None:
+            i = int(np.argmin(d))
+            return float(d[i]), v[i]
+        # (the nearest on the edit's floor; only those near enough to matter)
+        for i in np.argsort(d, kind="stable"):
+            if d[i] > reach_used:
+                break
+            if floor.ok(owner[i], pt[0], pt[1], float(start[i] + np.sqrt(L2[i]) * t[i]), par["trim"]):
+                return float(d[i]), v[i]
+        return np.inf, np.zeros(2)
 
     segs = near_segments()
     along = np.zeros(M, bool)
@@ -821,7 +936,7 @@ def add_drawn(g: RoadGraph, line: np.ndarray, par: dict) -> int:
             j = k + 1
         else:
             j += 1
-    cut_ends = cut_under(g, along_lines, par["trim"], parallel=True) if along_lines else []
+    cut_ends = cut_under(g, along_lines, par["trim"], parallel=True, floor=floor) if along_lines else []
     segs = near_segments()
     cd = [nearest(segs, P[q])[0] for q in range(M)]
     splits = []
@@ -847,12 +962,16 @@ def add_drawn(g: RoadGraph, line: np.ndarray, par: dict) -> int:
             keep = [s0] + [i for i in range(s0 + 1, s1) if own[i] and np.hypot(*(P[i] - P[s0])) >= 2
                            and np.hypot(*(P[i] - P[s1])) >= 2] + [s1]
             pts = P[keep].copy()
-            na, pa = _attach_drawn(g, pts[0], par["snap"] if s0 == 0 else par["cross"] + 1)
-            nb, pb = _attach_drawn(g, pts[-1], par["snap"] if s1 == M - 1 else par["cross"] + 1)
+            na, pa = _attach_drawn(g, pts[0], par["snap"] if s0 == 0 else par["cross"] + 1, floor=floor)
+            nb, pb = _attach_drawn(g, pts[-1], par["snap"] if s1 == M - 1 else par["cross"] + 1, floor=floor)
             if na is None:
                 na = g.add_node(pts[0])
+                if floor is not None:
+                    floor.nz[na] = floor.height(*pts[0])
             if nb is None:
                 nb = g.add_node(pts[-1])
+                if floor is not None:
+                    floor.nz[nb] = floor.height(*pts[-1])
             if na != nb:
                 before = set(g.edges)
                 g.add_edge(na, nb, pts, "override")
@@ -870,7 +989,7 @@ def add_drawn(g: RoadGraph, line: np.ndarray, par: dict) -> int:
         if ce in joined or ce not in g.nodes or deg.get(ce) != 1:
             continue
         joined.add(ce)
-        nm, pm = _attach_drawn(g, g.nodes[ce], par["trim"] + 4, mine)
+        nm, pm = _attach_drawn(g, g.nodes[ce], par["trim"] + 4, mine, floor=floor)
         if nm is not None and nm != ce:
             before = set(g.edges)
             g.add_edge(ce, nm, [g.nodes[ce], pm], "override")

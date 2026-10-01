@@ -33,6 +33,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
 - **More roads** on Eastern Kingdoms, drawn in game.
 - **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
+- **Editing floors over floors** (Undercity, the floors under Orgrimmar's Drag and Stormwind's bridges, caves and mines): a road or wall you draw or erase changes only the floor you're standing on. Where one floor is under the stroke, that one changes. While the tools are on, the hint under the map says which floor you're on ("Your floor (Trade Quarter): 2 of 3 here"), and the other floors' roads and walls are faint.
 - **For other addons:** API versions 3 to 8 (HoldMap, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
@@ -55,6 +56,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - Talking to a guard in Stormwind, Ironforge or Darnassus showed only the place you asked for: now all of that city's places show (trainers, the bank, the inn, the flight master and more), as in the Horde capitals.
 - **The capitals' roads are their streets:** Stormwind's (and Ironforge's, Orgrimmar's, Thunder Bluff's and Darnassus's) roads were a jumble over every floor, some running out over the water; they now follow the streets the city guards walk, with ways to every trainer, bank, inn and flight master. Undercity's are as they were.
 - Stormwind's map switched between the city's own map and the terrain as you zoomed: Stormwind now keeps the terrain map. Elsewhere, a building's inside map shows only indoors (at any zoom).
+- A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.
 - Roads vanished from the map when zoomed out (road and wall tools).

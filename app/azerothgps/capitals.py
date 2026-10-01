@@ -152,11 +152,15 @@ def city_labels(cd: ClientData, cap: Capital, u: dict, box) -> list:
     return out
 
 
-def drawn_fixes(g, cap: Capital, inside, log=print, touches=None) -> dict:
+def drawn_fixes(g, cap: Capital, inside, log=print, touches=None, under=None, under_at=None, over_under=None) -> dict:
     """The roads drawn and erased in game (overrides/roads_<continent>.geojson) that lie mostly over
     the city (inside(x, y)), applied to its roads (roads.graph.apply_overrides, a city's rules: a
     drawn road joins the city's roads near its ends); an erasure touching the city anywhere
-    (touches(x, y)). The drawn roads stay among the land's too (roads.build.cut_capitals leaves them)."""
+    (touches(x, y)). The drawn roads stay among the land's too (roads.build.cut_capitals leaves them).
+    Floors over floors (an edit's floor: the addon's Router.WithTracks): one drawn down under the
+    city's floor (`down`), mostly where its floors under others are (under_at(x, y)), goes on their
+    roads (`under`, build_under's) instead; one drawn up over a city under a mountain (a floor, not
+    down: mostly over_under(x, y), its floor under walkable ground) on neither."""
     import json
     import tempfile
 
@@ -167,25 +171,43 @@ def drawn_fixes(g, cap: Capital, inside, log=print, touches=None) -> dict:
     if not src.exists():
         return {}
     doc = json.loads(src.read_text(encoding="utf-8"))
-    mine = []
+    mine, below = [], []
+
+    def mostly(fn, c):
+        return fn is not None and sum(1 for p in c if fn(p[0], p[1])) >= 0.5 * len(c)
+
     for f in doc.get("features", []):
         c = f["geometry"]["coordinates"]
         if not c:
             continue
+        props = f.get("properties", {})
+        floored = props.get("z") is not None or props.get("indoors") is not None
+        if props.get("down") and under and mostly(under_at, c):
+            below.append(f)
+            continue
+        if floored and not props.get("down") and cap.indoor and mostly(over_under, c):
+            continue
         # (an erasure anywhere over the city, its edge too: the city's roads run out to its gates; a
         # drawn road only when mostly over its core, where the land's are cut)
-        if f.get("properties", {}).get("op") == "remove" and touches is not None:
+        if props.get("op") == "remove" and touches is not None:
             if any(touches(p[0], p[1]) for p in c):
                 mine.append(f)
-        elif sum(1 for p in c if inside(p[0], p[1])) >= 0.5 * len(c):
+        elif mostly(inside, c):
             mine.append(f)
-    if not mine:
-        return {}
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "fixes.geojson"
-        path.write_text(json.dumps({"type": "FeatureCollection", "features": mine}), encoding="utf-8")
-        stats = apply_overrides(g, path, city=True)
-    log(f"  {cap.name}: {len(mine)} drawn fixes over the city: {stats}")
+    stats = {}
+    for feats, graph, what in ((mine, g, "over the city"), (below, under and under["graph"], "under its floors")):
+        if not feats:
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixes.geojson"
+            path.write_text(json.dumps({"type": "FeatureCollection", "features": feats}), encoding="utf-8")
+            st = apply_overrides(graph, path, city=True)
+        log(f"  {cap.name}: {len(feats)} drawn fixes {what}: {st}")
+        for k, v in st.items():
+            stats[k] = stats.get(k, 0) + v
+    if below:  # (its ways out that an erasure took away)
+        under["joins"] = [j for j in under["joins"] if j in under["graph"].nodes]
+        under["bridge"] = [m for m in under["bridge"] if m in under["graph"].nodes]
     return stats
 
 
@@ -639,7 +661,16 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         def in_core(x, y):
             r, c = u["world_to_px"](x, y)
             return 0 <= r < H and 0 <= c < W and bool(core[r, c])
-        u["drawn"] = drawn_fixes(g, cap, in_core, log, touches=inside)
+
+        def cell_is(arr, value):
+            def at(x, y):
+                r, c = u["world_to_px"](x, y)
+                return 0 <= r < H and 0 <= c < W and bool(arr[r, c] == value)
+            return at
+        un = u["under"]
+        u["drawn"] = drawn_fixes(g, cap, in_core, log, touches=inside, under=un,
+                                 under_at=cell_is(un["zone"], True) if un else None,
+                                 over_under=cell_is(cells, FLOOR_UNDER))
 
     joins = []
     for patch, lst in sorted(by_patch.items()):

@@ -48,7 +48,8 @@ function F.RoadRecorded(track)
   local pts = {}
   for i, v in ipairs(track.pts) do pts[i] = v end
   Push(Store().roads, { op = track.op, continent = track.continent, zone = track.zone, pts = pts,
-    time = track.time, area = track.area, build = Build(), addon = ns.VERSION }, F.MAX_ROADS)
+    time = track.time, area = track.area, z = track.z, indoors = track.indoors, down = track.down, build = Build(),
+    addon = ns.VERSION }, F.MAX_ROADS)
 end
 
 -- ... and took one back: not shared either.
@@ -131,6 +132,10 @@ function F.RoadsText()
     local op = t.op == "remove" and (t.area and "area" or "remove")
       or t.op == "wall" and "wall" or t.op == "unwall" and (t.area and "unwallarea" or "unwall") or "add"
     local out = { "R", op, tostring(t.continent or 0), tostring(t.time or 0) }
+    -- (its floor, where floors lie over each other: "z=<height>", "indoors=1|0", "down=1")
+    if t.z then out[#out + 1] = string.format("z=%.1f", t.z) end
+    if t.indoors ~= nil then out[#out + 1] = t.indoors and "indoors=1" or "indoors=0" end
+    if t.down then out[#out + 1] = "down=1" end
     for i = 1, #t.pts - 1, 2 do out[#out + 1] = string.format("%.1f,%.1f", t.pts[i], t.pts[i + 1]) end
     lines[#lines + 1] = table.concat(out, " ")
   end

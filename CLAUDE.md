@@ -124,6 +124,21 @@ The addon is going public, so every change must keep it policy-safe:
     addon then drops (`Record.Prune`). Drawn roads draw like any road, before and after
     they're in the data. The offline rules match the addon's
     (`graph.DRAWN`, `DRAWN_CITY`); keep them in step.
+    **Floors over floors** (Undercity's level with heights; on a continent, a cave's or a capital's
+    floor under walkable ground, their grids' 3): a stroke records the player's floor (`G.EditFloor`:
+    `z`, `indoors`, and `down` on a continent, only for a stroke over a capital's or cave's grid), and
+    changes that floor's roads only (`Router.WithTracks`' `onFloor`: of the roads within the edit's reach
+    or `FLOOR_STACK_YD` of the stroke's spot, as they were before the stroke, those about at the height
+    of the one nearest the player's; on a continent `CaveFloorOK`). Split and cut roads keep their cave
+    and drop marks (`roads.cave`/`roads.drop`), and a road drawn down in a cave is one of its roads.
+    Walls with a floor cut only that floor's roads (`Passability.CrossesWall`/`WallHit`'s `ok`), and a
+    wall eraser takes out walls drawn within `WALL_FLOOR_Z` of its height. With the tools on, the hint
+    says the player's floor (`G.FloorText`, `G.FloorHere`, kept up to date by `G.RefreshFloorHint`)
+    and other floors' roads and walls draw faint (`G.OtherFloor`: the graph's `otherFloors`, made in
+    BuildGraph from `floorsAt` for an underground city). Offline: `roads.graph.LayerFloors`
+    (`cities.py`), `capitals.drawn_fixes` (a `down` edit over a floor under the city goes on those
+    roads), `finish_continent` (a `down` erasure leaves the land's roads); imports and the share text
+    carry `z`, `indoors`, `down`.
   - `Feedback.lua`: opt-in road and trip data.
   - `Options.lua`: the paged options window and the minimap button.
   - `Config.lua`: slash commands.

@@ -4113,6 +4113,215 @@ def test_walls_in_the_road_data_text(nav_env, tmp_path):
     assert walls(tmp_path) == {}  # (the wall is inside the erase loop)
 
 
+# Floors over floors (reported: Undercity strokes drawn before they had a floor erased 222 pieces across
+# floors): an edit changes the floor nearest the player's height under it, as recorded with it.
+UC_STACK = (1593.5, 157.3)  # (a walkway at -43.5 over a road at -62, 2.3 yd apart: the game's heights)
+
+
+def road_heights_near(lua, n, e, zs, x, y, r):
+    """The heights of the roads in e within r of (x, y), at their nearest points."""
+    out = []
+    for i in range(1, len(e) + 1):
+        ed = e[i]
+        best, along = None, 0.0
+        for k in range(5, len(ed) - 2, 2):
+            ax, ay, cx, cy = ed[k], ed[k + 1], ed[k + 2], ed[k + 3]
+            vx, vy = cx - ax, cy - ay
+            L2 = vx * vx + vy * vy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / L2))
+            d = math.hypot(ax + vx * t - x, ay + vy * t - y)
+            if best is None or d < best[0]:
+                best = (d, along + math.sqrt(L2) * t)
+            along += math.sqrt(L2)
+        if best and best[0] <= r:
+            za, zb = zs[ed[1]], zs[ed[2]]
+            h = za if zb is None else zb if za is None else za + (zb - za) * max(0.0, min(1.0, best[1] / max(ed[3], 1)))
+            out.append(h)
+    return out
+
+
+def edges_near(g, x, y, r):
+    """The roads of graph g (their numbers) with a point within r of (x, y)."""
+    out = []
+    for ei in range(1, len(g.e) + 1):
+        ed = g.e[ei]
+        for k in range(5, len(ed) - 2, 2):
+            ax, ay, cx, cy = ed[k], ed[k + 1], ed[k + 2], ed[k + 3]
+            vx, vy = cx - ax, cy - ay
+            L2 = vx * vx + vy * vy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / L2))
+            if math.hypot(ax + vx * t - x, ay + vy * t - y) <= r:
+                out.append(ei)
+                break
+    return out
+
+
+def uc_erase(lua, ns, UC, z):
+    """Undercity's roads after a short erase stroke across UC_STACK, drawn at height z (None: no floor)."""
+    x, y = UC_STACK
+    t = lua.table(op="remove", continent=UC, time=1, pts=lua.table(x - 3, y - 3, x + 3, y + 3))
+    if z is not None:
+        t.z = z
+    roads = ns.Roads[UC]
+    n, e, zs = ns.Router.WithTracks(lua.table(n=roads.n, e=roads.e, z=roads.z), lua.table(t), UC)
+    return road_heights_near(lua, n, e, zs, x, y, 3)
+
+
+def test_an_undercity_erasure_takes_out_only_the_floor_it_was_drawn_on(nav_env):
+    lua, ns, UC = undercity_env(nav_env)
+    x, y = UC_STACK
+    roads = ns.Roads[UC]
+    before = road_heights_near(lua, roads.n, roads.e, roads.z, x, y, 3)
+    assert any(abs(h + 62) < 1 for h in before) and any(abs(h + 43.5) < 1 for h in before)
+    # (no floor: both, as before floors were recorded)
+    assert not any(abs(h + 62) < 1 or abs(h + 43.5) < 1 for h in uc_erase(lua, ns, UC, None))
+    # down on the lower road: it goes, the walkway over it stays
+    low = uc_erase(lua, ns, UC, -61.0)
+    assert not any(abs(h + 62) < 1 for h in low) and any(abs(h + 43.5) < 1 for h in low)
+    # up on the walkway: it goes, the road under it stays
+    high = uc_erase(lua, ns, UC, -44.0)
+    assert any(abs(h + 62) < 1 for h in high) and not any(abs(h + 43.5) < 1 for h in high)
+
+
+def test_a_floor_cut_first_doesnt_leave_the_floor_over_it_as_the_only_one(nav_env):
+    # (the floors under an erasure are those before it: once the road down there was cut, the walkway
+    # 3 yd over it was the only road near and went too; tests/test_roads.py has the same offline)
+    lua, ns, UC = undercity_env(nav_env)
+    roads = lua.eval("""{ n = { 0,0, 0,100, 3,0, 3,100 }, z = { 0, 0, 20, 20 },
+      e = { { 1,2,100,0, 0,0, 0,50, 0,100 }, { 3,4,100,0, 3,0, 3,50, 3,100 } } }""")
+    for z, gone in ((1.0, {0}), (19.0, {3})):
+        t = lua.table(op="remove", continent=UC, time=1, z=z, pts=lua.table(-5, 50, 8, 50))
+        n, e, zs = ns.Router.WithTracks(roads, lua.table(t), UC)
+        cut = {x for x in (0, 3) if not edges_near(lua.table(e=e), x, 50, 0.5)}
+        assert cut == gone, (z, cut)
+
+
+def test_an_undercity_road_drawn_on_a_floor_joins_that_floor_at_its_height(nav_env):
+    lua, ns, UC = undercity_env(nav_env)
+    x, y = UC_STACK
+    roads = ns.Roads[UC]
+    # a road drawn from the spot out 30 yd, by someone down on the lower road: its end at the spot
+    # joins the lower road (at -62), not the walkway 2 yd over it
+    for z, want in ((-61.0, -62.0), (-44.0, -43.5)):
+        t = lua.table(op="add", continent=UC, time=1, z=z, pts=lua.table(x, y, x + 20, y - 22))
+        n, e, zs = ns.Router.WithTracks(lua.table(n=roads.n, e=roads.e, z=roads.z), lua.table(t), UC)
+        mine = [e[i] for i in range(1, len(e) + 1) if e[i][4] == ns.Router.SOURCE_RECORDED]
+        assert mine
+        ends = [zs[ed[k]] for ed in mine for k in (1, 2)
+                if math.hypot(n[2 * ed[k] - 1] - x, n[2 * ed[k]] - y) < 4]
+        assert ends and all(h is not None and abs(h - want) < 2 for h in ends), (z, ends)
+
+
+def test_down_in_the_cleft_an_erasure_takes_out_the_cleft_road_not_the_drag_over_it(nav_env):
+    # (Orgrimmar's Cleft of Shadow under the Drag: a floor under the capital's, its roads a cave's)
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    x, y = 1672.0, -4302.0  # (a Cleft road 1.4 yd under a Drag street; split 15.5)
+    v = R.CaveDown(1, x, y, None, 5.0), R.CaveDown(1, x, y, None, 30.0)
+    assert v == (True, False)
+
+    def after(z):
+        R.Reset()
+        t = lua.table(op="remove", continent=1, time=1, pts=lua.table(x - 2, y - 2, x + 2, y + 2))
+        if z is not None:
+            t.z = z
+        ns.db.tracks = lua.table(t)
+        edges, g = R.Edges(1)
+        near = {True: 0, False: 0}
+        for ei in edges_near(g, x, y, 2):
+            near[bool(g.cave[ei])] += 1
+        return near
+
+    assert after(None) == {True: 0, False: 0} and after(5.0) != after(30.0)  # (no floor: both)
+    ns.db.tracks = lua.table()
+    R.Reset()
+    edges, g = R.Edges(1)
+    assert {bool(g.cave[ei]) for ei in edges_near(g, x, y, 2)} == {True, False}  # (both there before)
+    down, up = after(5.0), after(30.0)
+    assert down[True] == 0 and down[False] > 0
+    assert up[True] > 0 and up[False] == 0
+    ns.db.tracks = lua.table()
+    R.Reset()
+
+
+def test_a_road_drawn_down_in_the_cleft_and_the_cave_roads_it_splits_stay_the_caves(nav_env):
+    # (the pieces of a cave's road a drawn road split were the land's: a route up top could start on
+    # them); a road drawn down there is the cave's own
+    lua, ns, UC = undercity_env(nav_env)
+    R = ns.Router
+    x, y = 1672.0, -4302.0
+    R.Reset()
+    ns.db.tracks = lua.table(lua.table(op="add", continent=1, time=1, z=5.0, pts=lua.table(x, y, x + 6, y + 9)))
+    edges, g = R.Edges(1)
+    mine = [ei for ei in range(1, len(g.e) + 1) if g.e[ei][4] == R.SOURCE_RECORDED]
+    assert mine and all(g.cave[ei] for ei in mine)
+    split = [ei for ei in edges_near(g, x, y, 0.5) if g.e[ei][4] != R.SOURCE_RECORDED]
+    assert split and all(g.cave[ei] for ei in split)
+    ns.db.tracks = lua.table()
+    R.Reset()
+
+
+def test_walls_on_floors_over_floors(nav_env):
+    lua, ns, UC = undercity_env(nav_env)
+    P, R = ns.Passability, ns.Router
+    x, y = UC_STACK
+    wall = lambda z, t: lua.table(op="wall", continent=UC, time=t, z=z, pts=lua.table(x - 6, y + 6, x + 6, y - 6))
+    # a wall drawn down on the lower road cuts that road, not the walkway over it
+    ns.db.tracks = lua.table(wall(-61.0, 1))
+    P.RefreshWalls()
+    R.Reset()
+    edges, g = R.Edges(UC)
+    hs = road_heights_near(lua, g.n, g.e, g.z, x, y, 1.5)
+    assert not any(abs(h + 62) < 1 for h in hs) and any(abs(h + 43.5) < 1 for h in hs)
+    # an eraser takes out the walls on its own floor only
+    ns.db.tracks = lua.table(wall(-61.0, 1), wall(-44.0, 2),
+                             lua.table(op="unwall", continent=UC, time=3, z=-44.0, pts=lua.table(x - 6, y + 6, x + 6, y - 6)))
+    lines = P.WallLines(UC)
+    assert len(lines) == 1 and lines[1].fl.z == -61.0
+    ns.db.tracks = lua.table()
+    P.RefreshWalls()
+    R.Reset()
+
+
+def test_the_road_tools_show_which_floor_you_edit(nav_env):
+    lua, ns, UC = undercity_env(nav_env)
+    G, R = ns.GPS, ns.Router
+    x, y = UC_STACK
+    lua.execute("GetMinimapZoneText = function() return 'Trade Quarter' end")
+    edges, g = R.Edges(UC)
+    for z, want in ((-61.0, (1, 2)), (-44.0, (2, 2))):
+        lua.execute(f"UnitPosition = function() return {x}, {y}, {z}, 0 end")
+        assert tuple(G.FloorHere()) == want
+        G.roadMode = True
+        text = G.FloorText()
+        assert f"{want[0]} of 2 here" in text and "Trade Quarter" in text
+        # the other floor's roads faint, its own not
+        near = [ei for ei in edges_near(g, x, y, 3) if g.otherFloors[ei]]
+        lo = next(ei for ei in near if abs(g.otherFloors[ei].h + 62) < 0.5)
+        hi = next(ei for ei in near if abs(g.otherFloors[ei].h + 43.5) < 1)
+        assert G.OtherFloor(g, lo, UC, z, None) == (z > -50)
+        assert G.OtherFloor(g, hi, UC, z, None) == (z < -50)
+    G.roadMode = False
+
+
+def test_floors_in_the_road_data_text_and_the_import(nav_env, tmp_path):
+    lua, ns = nav_env
+    lua.execute('GetBuildInfo = function() return "1.60.1", "70009" end')
+    load(lua, ns, "Feedback.lua")
+    ns.db = lua.eval("""{ tracks = {
+      { op = 'remove', continent = 10001, time = 5, z = -61.04, indoors = true, pts = { 1, 2, 3, 4 } },
+      { op = 'add', continent = 1, time = 6, z = 5, down = true, pts = { 1, 2, 3, 4 } } } }""")
+    text, n = ns.Feedback.RoadsText()
+    lines = text.split("\n")
+    assert "R remove 10001 5 z=-61.0 indoors=1 1.0,2.0 3.0,4.0" in lines and "R add 1 6 z=5.0 down=1 1.0,2.0 3.0,4.0" in lines
+    from azerothgps.roads.tracks import import_shared, load_overrides, parse_shared
+    got = parse_shared(text)
+    assert [(t.get("z"), t.get("indoors"), t.get("down")) for t in got] == [(-61.0, True, None), (5.0, None, True)]
+    assert import_shared(text, tmp_path) == 2
+    props = [f["properties"] for f in load_overrides(tmp_path / "roads_10001.geojson")["features"]]
+    assert props[0]["z"] == -61.0 and props[0]["indoors"] is True
+
+
 def test_zone_of_a_city_is_the_zone_around_it(env):
     lua, ns = env
     load(lua, ns, "Data/Maps.lua", "Layers.lua")

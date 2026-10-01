@@ -42,11 +42,13 @@ def roads_lua(data_dir: Path, continents=None) -> str:
 
     ws = walls(RESOURCES / "overrides")
     out.append("-- walls drawn in game (what can't be walked through, like a mountain): per continent, point lists")
+    out.append("-- (z: the height it was drawn at, where floors lie over each other: Passability.SameWallFloor)")
     out.append("ns.Walls = {")
     for cont in sorted(ws):
         out.append(f"  [{cont}] = {{")
         for w in ws[cont]:
-            out.append("    {" + ",".join(f"{x:g},{y:g}" for x, y in w) + "},")
+            z = getattr(w, "z", None)
+            out.append("    {" + ",".join(f"{x:g},{y:g}" for x, y in w) + (f", z = {z:g}" if z is not None else "") + "},")
         out.append("  },")
     out.append("}")
     from .tracks import wall_opens

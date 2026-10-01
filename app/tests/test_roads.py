@@ -201,6 +201,80 @@ def test_drawn_roads_go_on_in_order_as_in_game(tmp_path):
     assert g.total_length() > 300 - 30 + 190
 
 
+def two_floors():
+    """A road at height 0 and one 3 yd beside it at height 20 (a walkway over it), each node's height."""
+    g = line_graph(((0, 0), (0, 100)), ((3, 0), (3, 100)))
+    nz = {0: 0.0, 1: 0.0, 2: 20.0, 3: 20.0}
+    return g, nz
+
+
+def test_a_drawn_edit_with_a_floor_changes_that_floors_roads_only(tmp_path):
+    # (as the addon's Router.WithTracks: Undercity's floors over floors, cities.py)
+    from azerothgps.roads.graph import LayerFloors
+
+    rec = {"source": "recorded", "trim": True}
+    erase = {"type": "Feature", "properties": {"op": "remove", "time": 1, **rec},
+             "geometry": {"type": "LineString", "coordinates": [[-5, 50], [8, 50]]}}
+
+    def left(z):
+        g, nz = two_floors()
+        f = json.loads(json.dumps(erase))
+        if z is not None:
+            f["properties"]["z"] = z
+        path = tmp_path / "roads_10001.geojson"
+        path.write_text(json.dumps({"type": "FeatureCollection", "features": [f]}))
+        apply_overrides(g, path, city=True, floors=lambda p: LayerFloors(g, nz, p["z"]) if "z" in p else None)
+        from azerothgps.roads.graph import _dist_to_polyline
+        cut = {x for x in (0, 3) if not any(_dist_to_polyline(np.array([x, 50.0]), e.pts) < 0.5 for e in g.edges.values())}
+        return cut, nz
+
+    assert left(None)[0] == {0, 3}  # (no floor: both, as before)
+    cut, nz = left(1.0)
+    assert cut == {0}  # (down on the road: the walkway over it stays)
+    assert all(abs(nz[n]) < 0.01 for n in nz if n > 3)  # (the cut ends at the road's height)
+    assert left(19.0)[0] == {3}
+
+
+def test_a_drawn_road_with_a_floor_joins_that_floor(tmp_path):
+    from azerothgps.roads.graph import LayerFloors
+
+    g, nz = two_floors()
+    path = tmp_path / "roads_10001.geojson"
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"op": "add", "time": 1, "source": "recorded", "trim": True, "z": 19.0},
+         "geometry": {"type": "LineString", "coordinates": [[1.5, 40], [40, 40], [40, 80]]}}]}))
+    apply_overrides(g, path, city=True, floors=lambda p: LayerFloors(g, nz, p["z"]))
+    ov = [e for e in g.edges.values() if e.source == "override"]
+    assert ov
+    start = next(n for e in ov for n in (e.a, e.b) if np.hypot(*(g.nodes[n] - (1.5, 40))) < 3)
+    assert abs(g.nodes[start][0] - 3) < 0.01 and nz[start] == 20.0  # (onto the walkway, at its height)
+
+
+def test_walls_and_wall_erasers_on_their_floors(tmp_path):
+    from azerothgps.roads.tracks import walls
+
+    rec = {"source": "recorded"}
+    line = [[0, 0], [0, 20]]
+    (tmp_path / "roads_10001.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"op": "wall", "time": 1, "z": -62.0, **rec}, "geometry": {"type": "LineString", "coordinates": line}},
+        {"type": "Feature", "properties": {"op": "wall", "time": 2, "z": -43.0, **rec}, "geometry": {"type": "LineString", "coordinates": line}},
+        {"type": "Feature", "properties": {"op": "unwall", "time": 3, "z": -44.0, **rec}, "geometry": {"type": "LineString", "coordinates": line}},
+    ]}))
+    ws = walls(tmp_path)[10001]
+    assert len(ws) == 1 and ws[0].z == -62.0  # (the eraser was up on the other floor's)
+
+
+def test_an_erasure_down_in_a_cave_leaves_the_land_roads_over_it(tmp_path):
+    # (roads.build.finish_continent: a `down` erasure is the cave's or the floor under a capital's)
+    g = line_graph(((0, 0), (0, 100)))
+    path = tmp_path / "roads_1.geojson"
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"op": "remove", "time": 1, "source": "recorded", "down": True, "z": 5.0},
+         "geometry": {"type": "LineString", "coordinates": [[-5, 50], [5, 50]]}}]}))
+    apply_overrides(g, path, keep=lambda p: not (p.get("down") and p.get("op") == "remove"))
+    assert len(g.edges) == 1
+
+
 def test_shipped_times_list_the_drawn_roads_in_the_overrides(tmp_path):
     from azerothgps.roads.tracks import shipped_times
 

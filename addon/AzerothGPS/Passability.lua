@@ -157,24 +157,60 @@ local function NearLine(line, x, y, r)
   return false
 end
 
+-- A wall's floor (drawn where floors lie over each other: Record's `z`, `indoors`; a shipped one's
+-- `z`, `indoors`): { z, indoors }, or nil.
+local function WallFloor(w)
+  if w.fl then return w.fl end
+  if w.z or w.indoors ~= nil then
+    w.fl = { z = w.z, indoors = w.indoors }
+    return w.fl
+  end
+  return nil
+end
+-- Whether a wall and a wall eraser (their floors, either nil: any) are on the same floor: drawn
+-- within WALL_FLOOR_Z of each other's height (a floor over another is further). (roads/tracks.py's
+-- walls does the same offline.)
+P.WALL_FLOOR_Z = 8
+function P.SameWallFloor(cont, x, y, a, b)
+  if not (a and b and a.z and b.z) then return true end
+  return math.abs(a.z - b.z) <= P.WALL_FLOOR_Z
+end
+-- (a drawn wall's points with its floor, made once per stroke: its saved points stay as they are)
+local floorLines = setmetatable({}, { __mode = "k" })
+local function DrawnLine(t)
+  if t.z == nil and t.indoors == nil then return t.pts end
+  local c = floorLines[t.pts]
+  if not c then
+    c = { fl = { z = t.z, indoors = t.indoors } }
+    for i = 1, #t.pts do c[i] = t.pts[i] end
+    floorLines[t.pts] = c
+  end
+  return c
+end
+
 -- The walls on `cont`: the shipped ones, then the player's drawn ones in order (an erase
--- stroke, "unwall", takes out the walls near it, or inside it when drawn as a loop). Each a
--- flat point list.
+-- stroke, "unwall", takes out the walls near it, or inside it when drawn as a loop; on its floor
+-- only). Each a flat point list (`fl`: its floor, when it has one).
 function P.WallLines(cont)
   local out = {}
-  for _, w in ipairs(ns.Walls and ns.Walls[cont] or {}) do out[#out + 1] = w end
+  for _, w in ipairs(ns.Walls and ns.Walls[cont] or {}) do
+    WallFloor(w)
+    out[#out + 1] = w
+  end
   local shipped = ns.RoadTracksIn or {}
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do
     if t.continent == cont and t.pts and #t.pts >= 4 and not shipped[t.time or -1] then
       if t.op == "wall" then
-        out[#out + 1] = t.pts
+        out[#out + 1] = DrawnLine(t)
       elseif t.op == "unwall" then
         local kept = {}
+        local efl = (t.z or t.indoors ~= nil) and { z = t.z, indoors = t.indoors } or nil
         for _, w in ipairs(out) do
           local under = false
           for i = 1, #w - 1, 2 do
             local x, y = w[i], w[i + 1]
-            if (t.area and InLoop(t.pts, x, y)) or (not t.area and NearLine(t.pts, x, y, P.WALL_UNDER_YD)) then
+            if ((t.area and InLoop(t.pts, x, y)) or (not t.area and NearLine(t.pts, x, y, P.WALL_UNDER_YD)))
+                and P.SameWallFloor(cont, x, y, w.fl, efl) then
               under = true
               break
             end
@@ -229,7 +265,7 @@ local function WallGrid(g, lines, opens)
           cells[r * 65536 + c] = true
         end
       end
-      local seg = { ax, ay, bx, by }
+      local seg = { ax, ay, bx, by, fl = w.fl }
       for kx = math.floor(math.min(ax, bx) / B), math.floor(math.max(ax, bx) / B) do
         for ky = math.floor(math.min(ay, by) / B), math.floor(math.max(ay, by) / B) do
           local key = kx * 65536 + ky
@@ -316,8 +352,9 @@ local function Orient(ax, ay, bx, by, cx, cy)
   return v > 1e-9 and 1 or v < -1e-9 and -1 or 0
 end
 
--- Where along the leg (x1, y1)-(x2, y2) it first meets a wall: 0..1, or nil.
-function P.WallHit(cont, x1, y1, x2, y2)
+-- Where along the leg (x1, y1)-(x2, y2) it first meets a wall: 0..1, or nil. (`ok(seg, x, y)`: only
+-- the walls it passes at the crossing (x, y): Router's floor check for a wall with a floor.)
+function P.WallHit(cont, x1, y1, x2, y2, ok)
   EnsureWalls()
   local segs = wallSegs[cont]
   if not segs then return nil end
@@ -335,7 +372,8 @@ function P.WallHit(cont, x1, y1, x2, y2)
           if math.abs(den) > 1e-9 then
             local t = ((s[1] - x1) * ey - (s[2] - y1) * ex) / den
             local u = ((s[1] - x1) * dy - (s[2] - y1) * dx) / den
-            if t > 1e-9 and t <= 1 and u >= 0 and u <= 1 and (not best or t < best) then best = t end -- (at its end too: a crossing right on a point)
+            if t > 1e-9 and t <= 1 and u >= 0 and u <= 1 and (not best or t < best)
+                and (not ok or ok(s, x1 + dx * t, y1 + dy * t)) then best = t end -- (at its end too: a crossing right on a point)
           end
         end
       end
@@ -366,8 +404,16 @@ function P.HasWalls(cont)
   return wallSegs[cont] ~= nil and next(wallSegs[cont]) ~= nil
 end
 
--- Whether the leg (x1, y1)-(x2, y2) crosses a wall.
-function P.CrossesWall(cont, x1, y1, x2, y2)
+-- Whether any of `cont`'s walls has a floor (drawn where floors lie over each other).
+function P.WallFloors(cont)
+  for _, w in ipairs(P.WallLines(cont)) do
+    if w.fl then return true end
+  end
+  return false
+end
+
+-- Whether the leg (x1, y1)-(x2, y2) crosses a wall (`ok`: as WallHit's).
+function P.CrossesWall(cont, x1, y1, x2, y2, ok)
   EnsureWalls()
   local segs = wallSegs[cont]
   if not segs then return false end
@@ -380,7 +426,13 @@ function P.CrossesWall(cont, x1, y1, x2, y2)
           seen[s] = true
           local o1, o2 = Orient(x1, y1, x2, y2, s[1], s[2]), Orient(x1, y1, x2, y2, s[3], s[4])
           local o3, o4 = Orient(s[1], s[2], s[3], s[4], x1, y1), Orient(s[1], s[2], s[3], s[4], x2, y2)
-          if o1 ~= o2 and o3 ~= o4 and o1 ~= 0 and o2 ~= 0 then return true end
+          if o1 ~= o2 and o3 ~= o4 and o1 ~= 0 and o2 ~= 0 then
+            if not ok then return true end
+            local dx, dy, ex, ey = x2 - x1, y2 - y1, s[3] - s[1], s[4] - s[2]
+            local den = dx * ey - dy * ex
+            local t = math.abs(den) > 1e-9 and ((s[1] - x1) * ey - (s[2] - y1) * ex) / den or 0
+            if ok(s, x1 + dx * t, y1 + dy * t) then return true end
+          end
         end
       end
     end

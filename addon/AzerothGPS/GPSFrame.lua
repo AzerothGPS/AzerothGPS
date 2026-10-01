@@ -195,7 +195,7 @@ local function RoadIndex(cont)
         if y < minY then minY = y end
         if y > maxY then maxY = y end
       end
-      idx[#idx + 1] = { minX, maxX, minY, maxY, e }
+      idx[#idx + 1] = { minX, maxX, minY, maxY, e, ei }
     end
   end
   roadIndex[cont] = { g = g, idx = idx }
@@ -347,15 +347,17 @@ function G.LayoutWalls(px, py, cont, rot, zoom, half, edges)
   local s = half / zoom
   local reach = zoom * 1.5
   -- the walls first (drawn and shipped: never the ones left out), then the terrain's edges up to
-  -- MAX_SEGMENTS in all
+  -- MAX_SEGMENTS in all (the tools on: another floor's walls faint)
+  local tf = G.ToolFloor(cont)
   for _, w in ipairs(P.WallLines(cont)) do
     local lx, ly
+    local faint = tf and w.fl and P.SameWallFloor and not P.SameWallFloor(cont, w[1], w[2], w.fl, tf) or nil
     for i = 1, #w - 1, 2 do
       local wx, wy = w[i], w[i + 1]
       local dx, dy = Geo.ScreenOffset(px, py, wx, wy)
       dx, dy = Geo.Rotate(dx * s, dy * s, rot)
       if lx and (math.abs(wx - px) <= reach and math.abs(wy - py) <= reach or math.abs(dx) <= half * 2) then
-        segs[#segs + 1] = { lx, ly, dx, dy }
+        segs[#segs + 1] = { lx, ly, dx, dy, faint = faint }
       end
       lx, ly = dx, dy
     end
@@ -421,15 +423,18 @@ function G.PendingErases(cont)
       for i = 1, #pts - 1, 2 do
         x0, x1, y0, y1 = math.min(x0, pts[i]), math.max(x1, pts[i]), math.min(y0, pts[i + 1]), math.max(y1, pts[i + 1])
       end
-      out[#out + 1] = { pts = pts, area = t.area, reach = r, x0 = x0 - r, x1 = x1 + r, y0 = y0 - r, y1 = y1 + r, time = t.time }
+      out[#out + 1] = { pts = pts, area = t.area, reach = r, x0 = x0 - r, x1 = x1 + r, y0 = y0 - r, y1 = y1 + r, time = t.time,
+        floor = (t.z or t.indoors ~= nil) and { z = t.z, indoors = t.indoors } or nil }
     end
   end
   return out
 end
--- Whether (x, y) is under one of those erasures (made after `since`, when given).
-function G.UnderErase(list, x, y, since)
+-- Whether (x, y) is under one of those erasures (made after `since`, when given; `applies(er)`: the
+-- erasure is on the road's floor).
+function G.UnderErase(list, x, y, since, applies)
   for _, er in ipairs(list) do
-    if (not since or (er.time or 0) > since) and x >= er.x0 and x <= er.x1 and y >= er.y0 and y <= er.y1 then
+    if (not since or (er.time or 0) > since) and x >= er.x0 and x <= er.x1 and y >= er.y0 and y <= er.y1
+        and (not applies or applies(er)) then
       local pts = er.pts
       if er.area then
         if ns.Router and ns.Router.InPolygon and ns.Router.InPolygon(pts, x, y) then return true end
@@ -446,6 +451,127 @@ function G.UnderErase(list, x, y, since)
     end
   end
   return false
+end
+-- Floors over floors, while the road or wall tools are on (Router.WithTracks: an edit changes the
+-- roads of the player's floor only): the other floors' roads and walls draw faint, and the hint says
+-- which floor the player is on.
+G.OTHER_FLOOR_ALPHA = 0.22
+-- The player's floor for an edit on `level`: their height (to a tenth of a yard) and whether they're
+-- indoors, when they're on that level and it has floors over floors (a level with heights, or a
+-- continent with caves and capitals' floors under others); nil otherwise. With the stroke's points
+-- `pts` on a continent: only a stroke over a capital's or a cave's grid has one, and `down` (third):
+-- its middle down in a cave or on a floor under a capital's (for the data's build, roads/graph.py).
+function G.EditFloor(level, pts)
+  local N = ns.Nav
+  local x, _, inst, z = Geo.PlayerWorld()
+  if not (x and N and N.PlayerLevel) or N.PlayerLevel(inst) ~= level then return nil end
+  local roads = ns.Roads and ns.Roads[level]
+  local layered = roads and roads.z
+  if not (layered or (ns.CityHalls and ns.CityHalls[level])) then return nil end
+  z = N.PlayerZ and N.PlayerZ()
+  z = z and math.floor(z * 10 + 0.5) / 10
+  local indoors = N.Indoors and N.Indoors()
+  if layered or not pts then return z, indoors end
+  local P, R = ns.Passability, ns.Router
+  if not (P and P.OverlayRaw and R and R.CaveDown) then return nil end
+  local over = false
+  for i = 1, #pts - 1, 2 do
+    if P.OverlayRaw(level, pts[i], pts[i + 1]) ~= nil then
+      over = true
+      break
+    end
+  end
+  if not over then return nil end
+  local k = math.floor(#pts / 4) * 2 + 1
+  local v, o = P.OverlayRaw(level, pts[k], pts[k + 1])
+  return z, indoors, (v ~= nil and o and o.cave and R.CaveDown(level, pts[k], pts[k + 1], indoors, z)) or nil
+end
+-- ... as { z, indoors } while the tools are on (else nil).
+function G.ToolFloor(level)
+  if not (G.roadMode or G.wallMode) then return nil end
+  local z, indoors = G.EditFloor(level)
+  if z == nil and indoors == nil then return nil end
+  return { z = z, indoors = indoors }
+end
+-- Whether road `ei` of graph `g` (on `cont`) is on another floor than the one someone at height `z`
+-- (indoors or not) edits there, at the road's middle (the graph's `otherFloors` on a level with
+-- heights; where a cave's or a capital's floor lies under walkable ground, by CaveDown).
+local caveMids = setmetatable({}, { __mode = "k" }) -- [graph] = { [ei] = { x, y } over such a floor, or false }
+function G.OtherFloor(g, ei, cont, z, indoors)
+  local R = ns.Router
+  if not (g and R and R.NearestHeight) then return false end
+  if g.otherFloors then
+    local m = g.otherFloors[ei]
+    if not (m and z) then return false end
+    local f = R.NearestHeight(m.hs, z)
+    return f ~= nil and math.abs(m.h - f) > R.LAYER_Z
+  end
+  local P = ns.Passability
+  if not (g.cave and g.e and P and P.OverlayRaw) then return false end
+  local c = caveMids[g]
+  if not c then
+    c = {}
+    caveMids[g] = c
+  end
+  local m = c[ei]
+  if m == nil then
+    m = false
+    local e = g.e[ei]
+    if e then
+      local x, y = R.EdgeMiddle(e)
+      local v, o = P.OverlayRaw(cont, x, y)
+      if v == 3 and o and o.cave then m = { x, y } end
+    end
+    c[ei] = m
+  end
+  if not m then return false end
+  return not R.CaveFloorOK(cont, m[1], m[2], g.cave[ei], z, indoors)
+end
+-- The player's floor where they stand: its number counting up and how many lie over each other there
+-- (the roads' heights within Router.FLOOR_STACK_YD, apart by more than LAYER_Z; down in a cave or
+-- under a capital's floor, 1 of 2), on a level with floors over floors; nil elsewhere.
+function G.FloorHere()
+  local N, R, P = ns.Nav, ns.Router, ns.Passability
+  local x, y, inst, z = Geo.PlayerWorld()
+  if not (x and N and N.PlayerLevel and R and R.DebugGraph) then return nil end
+  local level = N.PlayerLevel(inst)
+  local g = R.DebugGraph(level)
+  z = N.PlayerZ and N.PlayerZ()
+  if g and g.floorsAt then
+    local hs = g.floorsAt(x, y)
+    table.sort(hs)
+    local floors = {}
+    for _, h in ipairs(hs) do
+      local f = floors[#floors]
+      if f and h - f.hi <= R.LAYER_Z then f.hi = h else floors[#floors + 1] = { lo = h, hi = h } end
+    end
+    if #floors < 2 or not z then return 1, 1 end
+    local best, bd = 1, nil
+    for i, f in ipairs(floors) do
+      local d = z < f.lo and f.lo - z or z > f.hi and z - f.hi or 0
+      if not bd or d < bd then best, bd = i, d end
+    end
+    return best, #floors
+  end
+  if level ~= inst or not (P and P.OverlayRaw and R.CaveDown) then return nil end
+  local v, o = P.OverlayRaw(inst, x, y)
+  if v == nil then return nil end
+  if v == 3 and o and o.cave then
+    return R.CaveDown(inst, x, y, N.Indoors and N.Indoors(), z) and 1 or 2, 2
+  end
+  return 1, 1
+end
+-- The hint's floor line while the tools are on, or nil where floors don't lie over each other.
+function G.FloorText()
+  local i, n = G.FloorHere()
+  if not i then return nil end
+  local ok, sub = pcall(GetMinimapZoneText)
+  local where = ok and type(sub) == "string" and sub ~= "" and " (" .. sub .. ")" or ""
+  if n < 2 then
+    return "|cffffd100Your floor" .. where .. ": the only one here|r  |cff9d9d9d(edits change your floor's roads only)|r"
+  end
+  return string.format("|cffffd100Your floor%s: %d of %d here, counting up|r  |cff9d9d9d(edits change it only; other floors faint)|r",
+    where, i, n)
 end
 local roadCoarse = {} -- [cont] = { zoom, k }: the spacing that fitted last
 function G.LayoutRoads(px, py, cont, rot, zoom, half)
@@ -476,6 +602,14 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
     erases = G.PendingErases(cont)
     if #erases == 0 then erases = nil end
   end
+  -- (the tools on where floors lie over each other: the other floors' roads faint; an erasure not
+  -- drawn into the network yet takes out its own floor's roads only)
+  local fg = (stale or roadIndex[cont] or {}).g
+  local tf = fg and G.ToolFloor(cont)
+  local ei -- (the road being laid: its number in fg)
+  local function applies(er)
+    return not (er.floor and ei and G.OtherFloor(fg, ei, cont, er.floor.z, er.floor.indoors))
+  end
   local function Lay(k)
     local out, seen = {}, {}
     local cell = G.ROAD_STEP_UI * k
@@ -487,10 +621,12 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
           local drawn = e[4] == 2 or e[4] == RECORDED
           if (round == 1) == drawn then
             local src = drawn and 0 or e[4]
+            ei = list == idx and b[6] or nil
+            local alpha = tf and ei and G.OtherFloor(fg, ei, cont, tf.z, tf.indoors) and G.OTHER_FLOOR_ALPHA or nil
             local lx, ly, lc -- last point kept (screen) and its grid cell
             local fx, fy, any -- the first point, and whether any line was kept
             for i = 5, #e, 2 do
-              if erases and G.UnderErase(erases, e[i], e[i + 1], e.time) then
+              if erases and G.UnderErase(erases, e[i], e[i + 1], e.time, fg and applies or nil) then
                 lx, ly, lc = nil, nil, nil -- (erased just now: gone at once, not after the rebuild)
               else
               local dx, dy = Geo.ScreenOffset(px, py, e[i], e[i + 1])
@@ -504,7 +640,7 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
                   any = true
                   if not seen[key] then
                     seen[key] = true
-                    out[#out + 1] = { lx, ly, dx, dy, src }
+                    out[#out + 1] = { lx, ly, dx, dy, src, alpha }
                     if #out >= G.MAX_SEGMENTS then return out, true end
                   end
                 end
@@ -516,7 +652,7 @@ function G.LayoutRoads(px, py, cont, rot, zoom, half)
                 local key = lc * 16777216 + lc
                 if not seen[key] then
                   seen[key] = true
-                  out[#out + 1] = { fx, fy, dx, dy, src }
+                  out[#out + 1] = { fx, fy, dx, dy, src, alpha }
                   if #out >= G.MAX_SEGMENTS then return out, true end
                 end
               end
@@ -1659,6 +1795,7 @@ local function DrawPois(pois, zoom)
         b.questID = nil
       end
       b:SetAlpha(p.dim and 0.35 or 1)
+      b.icon:SetShown(not p.under) -- (a dock under a stop: the stop's marker over it, its timer still under)
       b:ClearAllPoints()
       b:SetPoint("CENTER", poiLayer, "CENTER", p[2], p[3])
       b:Show()
@@ -2020,6 +2157,7 @@ function G.Update()
   pt = ns.PerfStart()
   segN = 0
   G.DrawInsetFrames(cx, cy, rot, s)
+  G.RefreshFloorHint() -- (the tools on: which floor the player is on, as they move)
   -- (the roads of the continent in view, the player's or another)
   local forced = not st.showRoads and G.ForcedRoadColor() or nil -- (asked for by another addon: Api.lua)
   -- (an underground city's map: its level's roads; not over another inside map, a building's)
@@ -2030,7 +2168,7 @@ function G.Update()
   local capitalInside = place and not artLevel and ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(viewCont, cx, cy)
   if (st.showRoads or G.roadMode or forced) and (not place or artLevel or capitalInside) then
     for _, sg in ipairs(G.LayoutRoads(cx, cy, inst or artLevel or viewCont, rot, zoom, half)) do
-      AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or nil)
+      AddSeg(sg[1], sg[2], sg[3], sg[4], forced or sg[5], forced and 4 or nil, forced and 0.9 or sg[6])
     end
   end
   -- walls (blood red): with the roads shown, or the road tools on
@@ -2067,7 +2205,9 @@ function G.Update()
   elseif G.ShowsWalls() then -- (inside maps too: a city's own floors and walls)
     local wc = artLevel or viewCont -- (the level shown: an underground city's on its map)
     -- (the terrain's impassable borders thinner, drawn walls thicker)
-    for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3) end
+    for _, sg in ipairs(G.LayoutWalls(cx, cy, wc, rot, zoom, half, true)) do
+      AddSeg(sg[1], sg[2], sg[3], sg[4], 7, sg.edge and 2 or 3, sg.faint and G.OTHER_FLOOR_ALPHA or nil)
+    end
   end
   -- Quest objective areas (Layers.lua), outlined in the minimap's blue, on their own layer.
   local layerMaps = { C_Map.GetBestMapForUnit("player"), browse }
@@ -2216,7 +2356,6 @@ function G.Update()
       local x, y = Geo.ToContinent(h.cont, h.x, h.y, viewCont)
       if x then under[#under + 1] = { x, y } end
     end
-    if not under[1] then return pois end
     local out = {}
     for _, p in ipairs(pois) do
       local drop = false
@@ -2225,7 +2364,9 @@ function G.Update()
           if (u[1] - p[5]) ^ 2 + (u[2] - p[6]) ^ 2 <= 9 then drop = true break end
         end
       end
-      if not drop then out[#out + 1] = p end
+      -- (a dock under a stop keeps its countdown under the stop's marker: its icon only goes)
+      if p[1] == 10 then p.under = drop or nil end
+      if not drop or p[1] == 10 then out[#out + 1] = p end
     end
     return out
   end
@@ -3459,12 +3600,26 @@ end
 -- The road tools: on until toggled off. On the map, left-drag draws a road, right-drag
 -- erases one (in red), middle-drag pans.
 function G.RoadHint()
+  local text
   if G.wallMode then
-    drawHint:SetText("|cffd02020Left-drag: draw a wall|r  ·  |cffb0b0b0Right-drag: erase walls (circle an area to erase them all)|r  ·  |cff9d9d9dMiddle-drag: pan|r")
+    text = "|cffd02020Left-drag: draw a wall|r  ·  |cffb0b0b0Right-drag: erase walls (circle an area to erase them all)|r  ·  |cff9d9d9dMiddle-drag: pan|r"
   else
-    drawHint:SetText("Left-drag: draw a road  ·  |cffff4040Right-drag: erase (circle an area to erase it all)|r  ·  |cff9d9d9dMiddle-drag: pan|r")
+    text = "Left-drag: draw a road  ·  |cffff4040Right-drag: erase (circle an area to erase it all)|r  ·  |cff9d9d9dMiddle-drag: pan|r"
   end
+  -- (where floors lie over each other: which one the player is on, the one their edits change)
+  G.floorLine = G.FloorText()
+  drawHint:SetText(G.floorLine and text .. "\n" .. G.floorLine or text)
   drawHint:Show()
+end
+-- The hint's floor line kept up to date as the player moves (a redraw, every FLOOR_HINT_SECONDS).
+G.FLOOR_HINT_SECONDS = 0.5
+local floorHintAt = 0
+function G.RefreshFloorHint()
+  if not (drawHint and (G.roadMode or G.wallMode) and not G.drawMode) then return end
+  local now = GetTime and GetTime() or 0
+  if now - floorHintAt < G.FLOOR_HINT_SECONDS then return end
+  floorHintAt = now
+  if G.FloorText() ~= G.floorLine then G.RoadHint() end
 end
 
 -- The tools off: the edits made with them into the road network now (Record.Apply), once.
@@ -3593,8 +3748,11 @@ function G.FinishRoad(line, erase, wall)
   -- an erase drawn as a loop (ending back near its start): the roads inside it go
   local area = erase and G.IsLoop(pts, len) or nil
   local op = wall and (erase and "unwall" or "wall") or (erase and "remove" or "add")
+  -- (the floor it's on, where floors lie over each other: the player's height and indoors or not,
+  -- when they're on that level; Router.WithTracks changes only that floor's roads)
+  local z, indoors, down = G.EditFloor(level, pts)
   local i = ns.Record.Save({ op = op, drawn = true, continent = level,
-    zone = info and info.name or "?", time = time(), pts = pts, area = area })
+    zone = info and info.name or "?", time = time(), pts = pts, area = area, z = z, indoors = indoors, down = down })
   if wall then
     ns.Print(string.format(erase and "erased the walls %s (#%d). /agps draw undo puts them back."
       or "saved your wall (#%d, %d yd): routes won't cross it now, roads included (leave a gap for a gate). /agps draw undo takes it back.",
