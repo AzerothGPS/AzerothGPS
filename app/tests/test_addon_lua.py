@@ -4291,25 +4291,23 @@ def test_walls_on_floors_over_floors(nav_env):
     R.Reset()
 
 
-def test_the_road_tools_show_which_floor_you_edit(nav_env):
+def test_the_road_tools_pick_the_floor_you_edit(nav_env):
+    # (the game gives addons no player height: the floor edited is picked, Shift + mouse wheel) the
+    # floors to pick from where the map is centered, and the other floor's roads faint
     lua, ns, UC = undercity_env(nav_env)
     G, R = ns.GPS, ns.Router
     x, y = UC_STACK
-    lua.execute("GetMinimapZoneText = function() return 'Trade Quarter' end")
     edges, g = R.Edges(UC)
-    for z, want in ((-61.0, (1, 2)), (-44.0, (2, 2))):
-        lua.execute(f"UnitPosition = function() return {x}, {y}, {z}, 0 end")
-        assert tuple(G.FloorHere()) == want
-        G.roadMode = True
-        text = G.FloorText()
-        assert f"{want[0]} of 2 here" in text and "Trade Quarter" in text
-        # the other floor's roads faint, its own not
-        near = [ei for ei in edges_near(g, x, y, 3) if g.otherFloors[ei]]
-        lo = next(ei for ei in near if abs(g.otherFloors[ei].h + 62) < 0.5)
-        hi = next(ei for ei in near if abs(g.otherFloors[ei].h + 43.5) < 1)
-        assert G.OtherFloor(g, lo, UC, z, None) == (z > -50)
-        assert G.OtherFloor(g, hi, UC, z, None) == (z < -50)
-    G.roadMode = False
+    floors = G.EditFloors(UC, x, y)
+    zs = [floors[i].z for i in range(1, len(floors) + 1)]
+    assert zs == sorted(zs) and len(zs) >= 2 and zs[0] < -50 and zs[-1] > -46  # (the road's floor, the walkway's)
+    near = [ei for ei in edges_near(g, x, y, 3) if g.otherFloors[ei]]
+    lo = next(ei for ei in near if abs(g.otherFloors[ei].h + 62) < 0.5)
+    hi = next(ei for ei in near if abs(g.otherFloors[ei].h + 43.5) < 1)
+    down, up = lua.table(z=-62.0), lua.table(z=-43.5)
+    assert not G.OtherFloor(g, lo, UC, down) and G.OtherFloor(g, hi, UC, down)
+    assert G.OtherFloor(g, lo, UC, up) and not G.OtherFloor(g, hi, UC, up)
+    assert not G.OtherFloor(g, lo, UC, None)  # (none picked: all floors)
 
 
 def test_floors_in_the_road_data_text_and_the_import(nav_env, tmp_path):
@@ -5090,3 +5088,25 @@ def test_out_of_stormwind_the_route_takes_the_gate_and_the_roads(capitals_env):
         pts_off.append(off)
         assert off < 300, (start, off, r.length)
         assert min(_seg_dist(p, q, (-9095.0, 412.0)) for p, q in zip(pts, pts[1:])) < 40  # (out by the gate)
+
+
+def test_on_a_road_a_shortcut_to_another_road_must_save_a_fair_bit(env):
+    # (reported, a video: riding Mulgore's road, the route swapped every few seconds between the road and a
+    # shortcut over the fields onto another road) on a road already, a leg off it costs LEAVE_ROAD_FACTOR
+    # a yard: from A, the L by B to C is 2000 yd; 300 yd across onto D and down it to C, 1905: kept on the L
+    lua, ns = env
+    load(lua, ns, "Router.lua")
+    lua.eval("function(src) return assert(load('local _, ns = ...; ' .. src)) end")("""
+      ns.Roads = { [1] = { n = { 0,0, 0,-1000, 400,-1000, 1000,-1000, 300,0 },
+        e = { {1,2,1000,0, 0,0, 0,-1000}, {2,3,400,0, 0,-1000, 400,-1000}, {3,4,600,0, 400,-1000, 1000,-1000},
+              {5,3,1005,0, 300,0, 400,-1000} } } }""")(None, ns)
+    R = ns.Router
+    R.Reset()
+    r = R.Route(1, 0.0, 0.0, 1000.0, -1000.0, lua.table(offroad=False))
+    pts, kinds = route_pts(r)
+    assert (0, -1000) in [tuple(round(v) for v in p) for p in pts]  # (by B: on the road it's on)
+    R.LEAVE_ROAD_FACTOR = 1.0
+    R.Reset()
+    r = R.Route(1, 0.0, 0.0, 1000.0, -1000.0, lua.table(offroad=False))
+    pts, kinds = route_pts(r)
+    assert (300, 0) in [tuple(round(v) for v in p) for p in pts]  # (without it: across to D)

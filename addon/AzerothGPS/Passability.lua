@@ -161,8 +161,8 @@ end
 -- `z`, `indoors`): { z, indoors }, or nil.
 local function WallFloor(w)
   if w.fl then return w.fl end
-  if w.z or w.indoors ~= nil then
-    w.fl = { z = w.z, indoors = w.indoors }
+  if w.z or w.indoors ~= nil or w.down ~= nil then
+    w.fl = { z = w.z, indoors = w.indoors, down = w.down }
     return w.fl
   end
   return nil
@@ -172,16 +172,18 @@ end
 -- walls does the same offline.)
 P.WALL_FLOOR_Z = 8
 function P.SameWallFloor(cont, x, y, a, b)
-  if not (a and b and a.z and b.z) then return true end
+  if not (a and b) then return true end
+  if a.down ~= nil and b.down ~= nil then return a.down == b.down end -- (over a cave's floor: picked)
+  if not (a.z and b.z) then return true end
   return math.abs(a.z - b.z) <= P.WALL_FLOOR_Z
 end
 -- (a drawn wall's points with its floor, made once per stroke: its saved points stay as they are)
 local floorLines = setmetatable({}, { __mode = "k" })
 local function DrawnLine(t)
-  if t.z == nil and t.indoors == nil then return t.pts end
+  if t.z == nil and t.indoors == nil and t.down == nil then return t.pts end
   local c = floorLines[t.pts]
   if not c then
-    c = { fl = { z = t.z, indoors = t.indoors } }
+    c = { fl = { z = t.z, indoors = t.indoors, down = t.down } }
     for i = 1, #t.pts do c[i] = t.pts[i] end
     floorLines[t.pts] = c
   end
@@ -204,7 +206,7 @@ function P.WallLines(cont)
         out[#out + 1] = DrawnLine(t)
       elseif t.op == "unwall" then
         local kept = {}
-        local efl = (t.z or t.indoors ~= nil) and { z = t.z, indoors = t.indoors } or nil
+        local efl = (t.z or t.indoors ~= nil or t.down ~= nil) and { z = t.z, indoors = t.indoors, down = t.down } or nil
         for _, w in ipairs(out) do
           local under = false
           for i = 1, #w - 1, 2 do

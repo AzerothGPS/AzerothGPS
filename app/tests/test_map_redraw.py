@@ -642,38 +642,43 @@ def test_capitals_show_their_districts_names(game):
     assert len(pois) == 0  # (zoomed far out: none)
 
 
-def test_the_road_tools_tell_your_floor_and_draw_the_others_faint(game):
+def test_the_road_tools_pick_the_floor_and_draw_the_others_faint(game):
     # (asked: "any place editing roads/walls that have floors like undercity need a current floor
-    # indicator") down in Undercity at a walkway over a road, the tools' hint says which floor you're
-    # on, and the other floor's roads draw faint; up on the walkway, the other way round
+    # indicator"; the game gives no player height, so the floor is picked) in Undercity at a walkway over a
+    # road, Shift + mouse wheel steps the floor edited; the hint says it, the other floors' roads draw faint,
+    # strokes record it; the tools off, all floors again
     lua, ns = game
     G, R = ns.GPS, ns.Router
     lua.execute("""
-      AGPS_MAP_REAL, AGPS_ZONE_REAL = AGPS_MAP, GetMinimapZoneText
+      AGPS_MAP_REAL = AGPS_MAP
       AGPS_MAP = 1458
-      GetMinimapZoneText = function() return "Trade Quarter" end
+      AGPS_SHIFT_REAL = IsShiftKeyDown
     """)
     x, y = 1593.5, 157.3  # (a walkway at -43.5 over a road at -62)
     try:
         R.Edges(10001)
+        lua.execute(f"AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = {x}, {y}, 0 AGPS_T = AGPS_T + 1")
+        G.SetRoadMode(True)
+        G.Update()
+        assert "all floors" in str(G.FloorText())
         faint = {}
-        for z in (-61.0, -44.0):
-            lua.execute(f"AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = {x}, {y}, 0, {z} AGPS_T = AGPS_T + 1")
-            G.SetRoadMode(True)
+        for step in range(2):
+            assert G.StepEditFloor(-1)  # (down a floor: from all floors, the top one)
             G.Update()
-            assert "of 2 here" in str(G.floorLine) and "Trade Quarter" in str(G.floorLine)
+            assert "Editing: floor" in str(G.floorLine)
             segs = G.LayoutRoads(x, y, 10001, 0, 60.0, 200.0)
             alphas = [segs[i][6] for i in range(1, len(segs) + 1)]
             assert any(a is None for a in alphas) and any(a == G.OTHER_FLOOR_ALPHA for a in alphas)
-            faint[z] = {i for i, a in enumerate(alphas) if a is not None}
-            G.SetRoadMode(False)
-        assert faint[-61.0] != faint[-44.0]
-        assert G.FloorText() is not None and G.ToolFloor(10001) is None  # (the tools off: nothing faint)
+            faint[step] = {i for i, a in enumerate(alphas) if a is not None}
+            z = G.EditFloor(10001, lua.table(x, y, x + 10, y))[0]
+            assert z == G.editFloor.z  # (a stroke's floor: the one picked)
+        assert faint[0] != faint[1]
+        G.SetRoadMode(False)
+        assert G.editFloor is None  # (the tools off: all floors next time)
     finally:
         G.SetRoadMode(False)
-        lua.execute("AGPS_MAP, GetMinimapZoneText = AGPS_MAP_REAL, AGPS_ZONE_REAL "
-                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
-
+        lua.execute("AGPS_MAP = AGPS_MAP_REAL IsShiftKeyDown = AGPS_SHIFT_REAL "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = 2254.0, 293.0, 0 AGPS_T = AGPS_T + 1")
 
 def test_a_zeppelin_dock_that_is_a_stop_still_shows_its_timer(game):
     # (asked) a stop on a dock hid the dock with its icon, and its countdown went with it: the countdown

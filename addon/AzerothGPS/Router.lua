@@ -30,6 +30,10 @@ R.ENTRY_CANDIDATES = 8 -- road edges tried for getting on and off the road netwo
 R.ENTRY_SLACK = 400 -- yards: candidates up to this much farther than the nearest road
 R.ON_ROAD_YD = 8 -- a straight leg this close to a road is drawn (and counted) as road
 R.ON_ROAD_MIN = 25 -- yards: shorter stretches along a road stay off-road
+-- On a road already (within ON_ROAD_YD): a leg off it across country onto another road costs this per
+-- yard, so a shortcut is taken only when it saves a fair bit (riding Mulgore's road, a shortcut over the
+-- fields and the road swapped every few seconds: a video, 2026-09-30)
+R.LEAVE_ROAD_FACTOR = 1.4
 R.NODE_LINKS = 8 -- offroad mode: straight shortcuts from each road node, one per direction
 R.NODE_LINK_MAX = 1500 -- yards
 R.LAYER_Z = 5 -- a dungeon's floors (roads with heights): a road this far above or below is another floor
@@ -261,11 +265,13 @@ end
 -- Whether a road at (x, y) on a continent's level, a cave's or a floor under a capital's (`cave`) or
 -- not, is on the floor of someone at height z (indoors or not) there; true where no floor lies over
 -- another.
-function R.CaveFloorOK(cont, x, y, cave, z, indoors)
+function R.CaveFloorOK(cont, x, y, cave, z, indoors, down)
   local P = ns.Passability
   if not (P and P.OverlayRaw) then return true end
   local v, o = P.OverlayRaw(cont, x, y)
   if v ~= 3 or not (o and o.cave) then return true end
+  -- (`down`: the floor picked, down under or up top)
+  if down ~= nil then return (cave and true or false) == down end
   return (cave and true or false) == R.CaveDown(cont, x, y, indoors, z)
 end
 -- The point of road `ed` nearest (x, y): distance squared, yards along it, the point, and its
@@ -511,7 +517,7 @@ function R.WithTracks(roads, tracks, cont)
       local f = h and floorHere(x, y, r)
       return not f or math.abs(h - f) <= R.LAYER_Z
     end
-    if caveOf then return R.CaveFloorOK(cont, x, y, caveOf[ed], fl.z, fl.indoors) end
+    if caveOf then return R.CaveFloorOK(cont, x, y, caveOf[ed], fl.z, fl.indoors, fl.down) end
     return true
   end
   -- (a new node's height, on a level with heights: the track's floor there)
@@ -527,7 +533,9 @@ function R.WithTracks(roads, tracks, cont)
     local P = ns.Passability
     if not (P and P.OverlayRaw) then return end
     local v, o = P.OverlayRaw(cont, x, y)
-    if v ~= nil and o and o.cave and R.CaveDown(cont, x, y, fl.indoors, fl.z) then caveOf[ed] = true end
+    local down = fl.down
+    if down == nil then down = R.CaveDown(cont, x, y, fl.indoors, fl.z) end
+    if v ~= nil and o and o.cave and down then caveOf[ed] = true end
   end
   -- the node at (x, y) on the network (within `reach`; of the edges in `only` if given; on the
   -- track's floor), splitting an edge if needed; nil if none is close
@@ -692,7 +700,7 @@ function R.WithTracks(roads, tracks, cont)
     local pts = t.pts
     -- (walls aren't roads: Passability has them)
     if wanted(t) then
-      fl = (t.z or t.indoors ~= nil) and { z = t.z, indoors = t.indoors } or nil
+      fl = (t.z or t.indoors ~= nil or t.down ~= nil) and { z = t.z, indoors = t.indoors, down = t.down } or nil
       heights = zs and fl and fl.z and R.FloorIndex(e, zs) or nil
       if t.op == "remove" then
         if t.area then cut({ pts }, 0, false, true) else cut({ pts }, R.TRACK_REMOVE_YD) end
@@ -1220,7 +1228,7 @@ function BuildGraph(cont)
         local f = h and R.NearestHeight(floorsAt(x, y), wf.z)
         return not f or math.abs(h - f) <= R.LAYER_Z
       end
-      return R.CaveFloorOK(cont, x, y, caveOf[cur], wf.z, wf.indoors)
+      return R.CaveFloorOK(cont, x, y, caveOf[cur], wf.z, wf.indoors, wf.down)
     end
     local kept = {}
     for k, ed in ipairs(edges) do
@@ -2696,9 +2704,16 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   -- Start: onto a nearby edge's closest point, then either way along it.
   local starts = {} -- (onto the roads: { edge, along, cost, leg }, for a way off the same edge further on)
+  local onRoad = false -- (the player on a road: another road across country only when it saves a fair bit)
+  if not layered and not offroad then
+    for _, c in ipairs(ss) do
+      if c.dist and c.dist <= R.ON_ROAD_YD then onRoad = true break end
+    end
+  end
   for i, c in ipairs(candidates(ss)) do
     local e = g.e[c.edge]
     local cost, leg = Leg(sx, sy, c.px, c.py, true, i <= R.WALK_AROUND_CANDIDATES, sz, layered and R.EdgeZ(g, c.edge, c.along))
+    if onRoad and c.dist and c.dist > R.ON_ROAD_YD then cost = cost * R.LEAVE_ROAD_FACTOR end
     starts[#starts + 1] = { edge = c.edge, along = c.along, cost = cost, leg = leg }
     relax(START, e[1], cost + part(c.edge, c.along), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = 0 } }))
     relax(START, e[2], cost + part(c.edge, math.max(0, e[3] - c.along)), Join(leg, { { kind = ROAD, edge = c.edge, from = c.along, to = e[3] } }))

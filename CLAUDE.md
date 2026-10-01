@@ -134,8 +134,10 @@ The addon is going public, so every change must keep it policy-safe:
     they're in the data. The offline rules match the addon's
     (`graph.DRAWN`, `DRAWN_CITY`); keep them in step.
     **Floors over floors** (Undercity's level with heights; on a continent, a cave's or a capital's
-    floor under walkable ground, their grids' 3): a stroke records the player's floor (`G.EditFloor`:
-    `z`, `indoors`, and `down` on a continent, only for a stroke over a capital's or cave's grid), and
+    floor under walkable ground, their grids' 3): the game gives no player height, so the floor edited
+    is picked (`G.editFloor`, Shift + mouse wheel with the tools on: `G.StepEditFloor` over
+    `G.EditFloors` at the map's middle, `FLOOR_PICK_YD`; all floors until then and after the tools are
+    off); a stroke records it (`G.EditFloor`: `z`, or `down`/`indoors` over a cave's floor), and
     changes that floor's roads only (`Router.WithTracks`' `onFloor`: of the roads within the edit's reach
     or `FLOOR_STACK_YD` of the stroke's spot, as they were before the stroke, those about at the height
     of the one nearest the player's; on a continent `CaveFloorOK`). Split and cut roads keep their cave

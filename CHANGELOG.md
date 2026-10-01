@@ -33,7 +33,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - **City places** a guard showed you can be double-clicked into stops, and a stop down in a city takes the lift.
 - **More roads** on Eastern Kingdoms, drawn in game.
 - **Road and wall tools:** the road tools show the road network while they're on (the wall tools already showed the walls), and "Show extracted roads" and "Show extracted walls" are one map button now, **Show Roads and Walls**, under Undo. Undo takes back your last road or wall change, whichever came last.
-- **Editing floors over floors** (Undercity, the floors under Orgrimmar's Drag and Stormwind's bridges, caves and mines): a road or wall you draw or erase changes only the floor you're standing on. Where one floor is under the stroke, that one changes. While the tools are on, the hint under the map says which floor you're on ("Your floor (Trade Quarter): 2 of 3 here"), and the other floors' roads and walls are faint.
+- **Editing floors over floors** (Undercity, the floors under Orgrimmar's Drag and Stormwind's bridges, caves and mines): with the road or wall tools on, **Shift + mouse wheel** picks the floor you edit, from the floors where the map is centered (the game doesn't tell addons your height). The hint under the map says which ("Editing: floor 2 of 3 here", or all floors), its roads and walls draw bright and the others faint, and what you draw or erase changes that floor only. Turning the tools off goes back to all floors.
 - **For other addons:** API versions 3 to 8 (HoldMap, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
@@ -64,6 +64,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - In a city with its own inside map (Ironforge, Undercity), zooming out stops at the city's map instead of turning to the land around it; right-click for the outside. Coming into the city zoomed far out, the map zooms in to it.
 - The map's title says the city you're in (Ironforge, not Dun Morogh).
 - The Deeprun Tram has its map (it was blank), with its name in the title.
+- **On a road, routes keep to it** unless a way across country onto another road saves a fair bit (riding Mulgore's road, the route kept swapping between the road and a shortcut over the fields).
 - **Thunder Bluff's lifts:** routes into and out of the city take them (they weren't joined to Mulgore's road), and the directions say "Take the lift up" (or down), as in Undercity.
 - While riding (or walking) past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...": it stays shown now while it's worked out again.
 - A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
