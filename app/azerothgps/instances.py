@@ -658,6 +658,9 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
             out.append(f'  "{height_runs("".join(height_char(z, z0, step) for z in row))}",')
         out.append("} }")
         nodes, edges, drops, zs = instance_roads(u)
+        from .roads.lifts import add_instance_lifts, wait_yards
+
+        lifts = add_instance_lifts(inst.map_id, nodes, edges, zs, log)  # (Gnomeregan's: roads/lifts.py)
         out.append(f"ns.Roads[{L}] = {{")
         out.append("  n = {" + ",".join(f"{x:.0f},{y:.0f}" for x, y in nodes) + "},")
         if zs:  # (each node's height: the floors over floors are told apart by it)
@@ -671,7 +674,10 @@ def instances_lua(cd: ClientData, built: list, log=print) -> str:
             if len(pts) == 1:
                 pts = pts * 2
             length = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(pts, pts[1:]))
-            out.append(f"    {{{a + 1},{b + 1},{length:.0f},{3 if i in drops else 0},\"{pack_points(pts)}\"}},")
+            if i in lifts:
+                length += wait_yards()  # (its wait and ride: Router.SOURCE_LIFT, 5)
+            src = 3 if i in drops else 5 if i in lifts else 0
+            out.append(f"    {{{a + 1},{b + 1},{length:.0f},{src},\"{pack_points(pts)}\"}},")
         out.append("  },")
         out.append("}")
         out.append(f"ns.RoadDrops[{L}] = {{ " + ", ".join(f"[{i + 1}] = {h}" for i, h in sorted(drops.items())) + " }")

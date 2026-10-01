@@ -30,7 +30,7 @@ def roads_lua(data_dir: Path, continents=None) -> str:
         out.append("    e = {")
         for e in doc["edges"]:
             pts = ",".join(f"{x:g},{y:g}" for x, y in e["pts"])
-            src = {"terrain": 0, "bridge": 1, "override": 2}.get(e.get("src"), 0)
+            src = {"terrain": 0, "bridge": 1, "override": 2, "lift": 5}.get(e.get("src"), 0)  # (5: Router.SOURCE_LIFT)
             out.append(f"      {{{e['a'] + 1},{e['b'] + 1},{e['len']:g},{src},{pts}}},")
         out.append("    },")
         out.append("  },")

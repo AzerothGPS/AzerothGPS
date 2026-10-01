@@ -20,7 +20,8 @@ class Edge:
     a: int
     b: int
     pts: np.ndarray  # (M, 2) world yards, pts[0] at node a, pts[-1] at node b
-    source: str = "terrain"  # "terrain" | "bridge" | "override"
+    source: str = "terrain"  # "terrain" | "bridge" | "override" | "lift"
+    wait: float = 0.0  # yards on top of its length in the written data ("len"): a lift's wait and ride
 
     @property
     def length(self) -> float:
@@ -227,7 +228,7 @@ class RoadGraph:
             **(extra or {}),
             "nodes": [[round(float(p[0]), 1), round(float(p[1]), 1)] for _, p in sorted(self.nodes.items())],
             "edges": [
-                {"a": ids[e.a], "b": ids[e.b], "len": round(e.length, 1), "src": e.source,
+                {"a": ids[e.a], "b": ids[e.b], "len": round(e.length + e.wait, 1), "src": e.source,
                  "pts": [[round(float(x), 1), round(float(y), 1)] for x, y in e.pts]}
                 for e in self.edges.values()
             ],

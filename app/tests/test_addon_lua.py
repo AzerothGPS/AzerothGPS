@@ -2340,6 +2340,24 @@ def _seg_dist(a, b, p):
 THUNDER_BLUFF_BELOW = (-1334.0, 176.0)  # (on Mulgore's road at the foot of the west lifts)
 
 
+def test_the_great_lift_is_taken_and_said(capitals_env):
+    # (asked: the lifts outside the capitals, roads/lifts.py) the Barrens down to Thousand Needles by the
+    # Great Lift: its road (source 5) taken, "Take the lift down"; up the other way. Before, the two roads'
+    # ends were joined by a straight link down the cliff
+    lua, ns = capitals_env
+    R = ns.Router
+    load(lua, ns, "Turns.lua")
+    for a, b, kind, text in (((-4550.0, -1720.0), (-4900.0, -1900.0), R.KIND_LIFT_DOWN, "Take the lift down"),
+                             ((-4900.0, -1900.0), (-4550.0, -1720.0), R.KIND_LIFT_UP, "Take the lift up")):
+        R.Reset()
+        r = R.Route(1, a[0], a[1], b[0], b[1], lua.table(offroad=False))
+        _, kinds = route_pts(r)
+        assert kind in kinds, (a, b)
+        part = lua.table(pts=r.pts, kinds=r.kinds, cont=1, stop=1)
+        ms = ns.Turns.Maneuvers(ns.Turns.Path(lua.table(parts=lua.table(part))))
+        assert any(str(ms[i].text) == text for i in range(1, len(ms) + 1)), text
+
+
 def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
     # From Mulgore up to the bank: up a lift (the mesas' cliffs are no way up), then along the
     # mesa's roads

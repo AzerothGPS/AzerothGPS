@@ -102,6 +102,9 @@ def finish_continent(g: RoadGraph, continent: int, out: Path, extra: dict, log=p
     # over them: the addon's floor rule, Router.WithTracks)
     ov = apply_overrides(g, RESOURCES / "overrides" / f"roads_{continent}.geojson",
                          keep=lambda p: not (p.get("down") and p.get("op") == "remove"))
+    from .lifts import add_land_lifts
+
+    add_land_lifts(g, continent, log)  # (the Great Lift, Freewind Post's: roads/lifts.py)
     cut = cut_capitals(g, continent)
     log(f"  [{continent}] graph: {len(g.nodes)} nodes, {len(g.edges)} edges, "
         f"{g.total_length() / 1000:.1f}k yd; paths {pa}; overrides {ov}; cut in the capitals {cut:.0f} yd")
