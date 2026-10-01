@@ -64,6 +64,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - In a city with its own inside map (Ironforge, Undercity), zooming out stops at the city's map instead of turning to the land around it; right-click for the outside. Coming into the city zoomed far out, the map zooms in to it.
 - The map's title says the city you're in (Ironforge, not Dun Morogh).
 - The Deeprun Tram has its map (it was blank), with its name in the title.
+- A zeppelin to Zephras Isle had no line on the map (on a trip hopping two zeppelins by the isle, only one ride showed).
 - **On a road, routes keep to it** unless a way across country onto another road saves a fair bit (riding Mulgore's road, the route kept swapping between the road and a shortcut over the fields).
 - **Thunder Bluff's lifts:** routes into and out of the city take them (they weren't joined to Mulgore's road), and the directions say "Take the lift up" (or down), as in Undercity.
 - While riding (or walking) past ground the addon was still checking, the route vanished every few seconds behind "Working out the route...": it stays shown now while it's worked out again.

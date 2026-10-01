@@ -95,11 +95,26 @@ local function InsetFraction(cont, x, y)
   end
 end
 
-function Geo.ToContinent(from, x, y, to)
+-- ... and back: world map fractions (u, v) to the isle's own coordinates (where they'd be if its inset's
+-- scale went on past its frame: a spot on another continent, far off its edge that way), or nil.
+local function FromInsetFraction(cont, u, v)
+  for _, it in ipairs(ns.GPS and ns.GPS.WORLD_INSETS or {}) do
+    local m = ns.Maps and ns.Maps[it.map]
+    local b = m and m.continent == cont and m.bounds
+    if b and it.u1 ~= it.u0 and it.v1 ~= it.v0 then
+      local iu, iv = (u - it.u0) / (it.u1 - it.u0), (v - it.v0) / (it.v1 - it.v0)
+      return b[3] - iv * (b[3] - b[1]), b[4] - iu * (b[4] - b[2])
+    end
+  end
+end
+
+-- `into`: into an isle's coordinates too (by its inset; Geo.IntoAny), else nil there (the public API's
+-- ToContinent: nil, as its callers expect).
+local function ToContinent(from, x, y, to, into)
   from, to = Geo.Base(from), Geo.Base(to)
   if from == to then return x, y end
   local a, b = Geo.WorldArtBounds(from), Geo.WorldArtBounds(to)
-  if not b then return nil end
+  if not b and not into then return nil end
   local u, v
   if a then
     u = (a[4] - y) / (a[4] - a[2])
@@ -108,5 +123,10 @@ function Geo.ToContinent(from, x, y, to)
     u, v = InsetFraction(from, x, y)
     if not u then return nil end
   end
+  if not b then return FromInsetFraction(to, u, v) end
   return b[3] - v * (b[3] - b[1]), b[4] - u * (b[4] - b[2])
 end
+function Geo.ToContinent(from, x, y, to) return ToContinent(from, x, y, to) end
+-- ... and into an isle shown as an inset too (a ride to it from another continent drawn: the zeppelin to
+-- Zephras Isle had no line, 2026-10-01).
+function Geo.IntoAny(from, x, y, to) return ToContinent(from, x, y, to, true) end

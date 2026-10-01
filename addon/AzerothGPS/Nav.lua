@@ -927,7 +927,7 @@ local function Stretch(cont, sx, sy, d, walk, opts, sz)
       local t = leg.ride
       local c1, x1, y1, c2, x2, y2 = t[1], t[2], t[3], t[4], t[5], t[6]
       if leg.from == 2 then c1, x1, y1, c2, x2, y2 = t[4], t[5], t[6], t[1], t[2], t[3] end
-      local bx, by = Geo.ToContinent(c2, x2, y2, c1)
+      local bx, by = Geo.IntoAny(c2, x2, y2, c1) -- (onto an isle shown as an inset too: Zephras Isle's)
       if t.use then -- a teleport: nothing to draw
       elseif t.pts then -- a flight: through its connecting stops (one continent)
         local kinds = {}

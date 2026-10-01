@@ -5110,3 +5110,21 @@ def test_on_a_road_a_shortcut_to_another_road_must_save_a_fair_bit(env):
     r = R.Route(1, 0.0, 0.0, 1000.0, -1000.0, lua.table(offroad=False))
     pts, kinds = route_pts(r)
     assert (300, 0) in [tuple(round(v) for v in p) for p in pts]  # (without it: across to D)
+
+
+def test_a_ride_to_zephras_isle_is_drawn_too(nav_env):
+    # (reported: on a hop by Zephras Isle's zeppelins, only one ride had its line) a ride's line is its
+    # boarding dock to its landing, both in the boarding continent's coordinates: the isle's weren't
+    # (an inset on the world map), and a ride from the land onto it wasn't drawn at all
+    lua, ns = nav_env
+    Geo, N = ns.Geo, ns.Nav
+    x, y = Geo.IntoAny(1, -800.0, 360.0, 2991)  # (Mulgore, in the isle's coordinates)
+    bx, by = Geo.IntoAny(2991, x, y, 1)
+    assert abs(bx + 800) < 0.5 and abs(by - 360) < 0.5  # (and back)
+    N.SetStops(lua.eval("{ { x = 2197.0, y = 772.0, cont = 2991, name = 'Isle' } }"), False, "red")
+    try:
+        r = N.Route(-800.0, 360.0, 1)
+        rides = [r.parts[i] for i in range(1, len(r.parts) + 1) if r.parts[i].kinds[1] == N.KIND_TRANSPORT]
+        assert rides, "the zeppelin to the isle: drawn"
+    finally:
+        N.Clear()
