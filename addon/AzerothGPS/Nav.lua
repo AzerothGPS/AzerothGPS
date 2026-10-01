@@ -1705,20 +1705,28 @@ end
 -- Once a route is worked out (settled, or 3 s on): walking through a zone too high for the
 -- player asks first (GPSFrame's ConfirmRedRoute); no clears the route.
 local redChecked, redSeenAt = nil, nil
-local redAsking -- (the stops' version while asked)
+local redAsking -- (RedKey() while asked)
+-- The route the check is about: the stops, and the rides left out of it (a ride removed is a route of its
+-- own, checked again: the tram removed, the walk round through Loch Modan asked nothing, 2026-10-01).
+local function RedKey()
+  local n = 0
+  for _ in pairs(N.skipRides or {}) do n = n + 1 end
+  return version .. ":" .. n
+end
 -- Whether "keep this route?" is being asked about it: it isn't drawn or followed until the answer is
 -- yes (asked 2026-10-01: the route through the zones showed while the popup asked about it).
-function N.RedAsking() return redAsking ~= nil and redAsking == version end
+function N.RedAsking() return redAsking ~= nil and redAsking == RedKey() end
 function N.CheckRedRoute(px, py, cont, now)
   local r = N.route
   local d = N.dest
-  if not r or not d or d.corpse or redChecked == version then return end
-  if redSeenAt == nil or redSeenAt[1] ~= version then redSeenAt = { version, now } end
+  local key = RedKey()
+  if not r or not d or d.corpse or redChecked == key then return end
+  if redSeenAt == nil or redSeenAt[1] ~= key then redSeenAt = { key, now } end
   if r.pending and now - redSeenAt[2] < 3 then return end
-  redChecked = version
+  redChecked = key
   local zones = N.RedOnRoute(r, px, py, cont)
   if not (zones and ns.GPS and ns.GPS.ConfirmRedRoute) then return end
-  redAsking = version
+  redAsking = key
   local asked = ns.GPS.ConfirmRedRoute(zones, function()
     redAsking = nil
     for _, z in ipairs(zones) do N.redOk[z.z] = true end

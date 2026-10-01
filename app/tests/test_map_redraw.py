@@ -1397,6 +1397,41 @@ def test_a_bigger_window_shows_more_of_the_map_not_the_map_bigger(game):
         st.zoom = zoom
 
 
+def test_removing_the_tram_asks_about_the_walk_through_zones_too_high(game):
+    # (reported: the tram works now, but removed from the route, no popup) Ironforge to Goldshire at level 1:
+    # by the tram, nothing asked; the tram removed, the walk round goes through zones too high: "Keep this
+    # route?", and it isn't drawn until kept
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    fac = ns.CharDB().faction
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4944.0, -1232.0, 0, nil "
+                "AGPS_LEVEL_REAL = UnitLevel UnitLevel = function() return 1 end "
+                "AGPS_ZONE_REAL = GetMinimapZoneText GetMinimapZoneText = function() return 'The Military Ward' end")
+    ns.CharDB().faction = "Alliance"
+    try:
+        N.Clear()
+        N.SetStops(lua.eval("{ { x = -9460, y = 60, cont = 0, name = 'Goldshire' } }"))
+        for _ in range(3):
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+        tram = [p for p in N.RidePins(N.route).values() if p.kind == "tram"]
+        assert tram and not N.RedAsking()  # (by the tram: no zone too high)
+        N.SkipRide(tram[0].ride, tram[0].hop, tram[0].title)
+        for _ in range(3):
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+        assert N.RedAsking()
+        assert _shown(lua, lambda w: w._text is not None and "too high for your level 1" in str(w._text))
+        G.confirmBox.no._scripts.OnClick(G.confirmBox.no)
+        assert len(N.stops) == 0
+    finally:
+        ns.CharDB().faction = fac
+        N.Clear()
+        lua.execute("UnitLevel = AGPS_LEVEL_REAL or UnitLevel GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
 def test_the_deeprun_tram_has_its_map(game):
     # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
     # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features
