@@ -2315,8 +2315,12 @@ function G.Update()
   -- (in a capital with an inside map, Ironforge: its map while looking over the city, not only round the
   -- player: panning there flipped to the outside, a video 2026-10-01)
   local overCity = here and not onMe and inCity and G.OverCity(cont, px, py, cx, cy)
+  -- (the route's tour zoomed out past the city's map, a route out of the city: the land around, then the
+  -- city's map again as it comes back to the player; it zoomed out over the city's map into the black,
+  -- asked 2026-10-01)
+  local touringOut = tour and zoom > G.CITY_MAX_ZOOM
   if st.interiors and not inst and not G.IsMapStyle(G.Style()) and not browse and here and (onMe or downCity or overCity)
-      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) then
+      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) and not touringOut then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)

@@ -1254,6 +1254,37 @@ def test_panning_in_a_city_keeps_its_map(game):
         G.Follow()
 
 
+def test_a_routes_overview_out_of_a_city_shows_the_land_then_the_city(game):
+    # (asked) in Ironforge, a route out to Kharanos: its overview zooms out over the land (not the city's
+    # map shrinking into the black), then back to the player, the city's map again
+    lua, ns = game
+    G, st, N = ns.GPS, ns.settings.gps, ns.Nav
+    zoom = st.zoom
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4840.0, -1100.0, 0, 501.7 "
+                "AGPS_ZONE_REAL = GetMinimapZoneText GetMinimapZoneText = function() return 'The Great Forge' end")
+    try:
+        N.Clear()
+        G.Follow()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is not None
+        G.AddStopAt(-5590.0, -480.0, "Kharanos")
+        G.ConfirmRoute()
+        assert len(N.stops) == 1
+        seen = []
+        _frames(lua, 3 + 1.5 + 2, fps=10)  # (the tour: hold, out, a while shown)
+        seen.append((G.inside is None, G.IsFree()))
+        assert G.inside is None and G.IsFree()  # (the land around, zoomed out)
+        _frames(lua, 4 + 1.5 + 1, fps=10)  # (the rest shown, back to the player)
+        assert not G.IsFree() and G.inside is not None, seen  # (following: the city's map again)
+    finally:
+        N.Clear()
+        st.zoom = zoom
+        lua.execute("GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
 def test_the_deeprun_tram_has_its_map(game):
     # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
     # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features
