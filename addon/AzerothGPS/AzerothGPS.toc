@@ -28,6 +28,7 @@ Data\Transit.lua
 Data\CityPlaces.lua
 Data\Hostile.lua
 Data\Zones.lua
+Data\Pins.lua
 Passability.lua
 Router.lua
 Nav.lua
@@ -39,6 +40,7 @@ Arrow.lua
 Taxi.lua
 Teleports.lua
 Record.lua
+Pins.lua
 Feedback.lua
 Options.lua
 Config.lua

@@ -131,6 +131,113 @@ def test_a_ride_is_left_out_of_this_route_by_its_pin(game):
     assert not N.skipRides[key]
     assert any(N.RideKey(p.ride) == key for p in _ride_pins(lua))
 
+def _shown(lua, test):
+    return [w for w in lua.eval("AGPS_WIDGETS").values() if w._shown and test(w)]
+
+
+def test_a_pin_is_made_with_shift_click_and_used_like_a_city_location(game):
+    # (asked) pinning (on by default): Shift + left-click on the map, "Create Pin", a name and an icon from
+    # the game's (as a macro's); the pin on the map, double-click for a stop like a city location,
+    # right-click to remove it; the option to hide pins
+    lua, ns = game
+    N, G, P = ns.Nav, ns.GPS, ns.Pins
+    N.Clear()
+    assert ns.settings.gps.pinning and ns.settings.gps.showCustomPins
+    lua.execute("AGPS_OLD_SHIFT, AGPS_OLD_CURSOR = IsShiftKeyDown, GetCursorPosition\n"
+                "IsShiftKeyDown = function() return true end\n"
+                "GetCursorPosition = function() return 300, 300 end")  # (the map's middle: the stand-in's canvas)
+    try:
+        frame = lua.globals().AzerothGPSFrame
+        frame._scripts.OnMouseDown(frame, "LeftButton")
+        frame._scripts.OnMouseUp(frame, "LeftButton")
+    finally:
+        lua.execute("IsShiftKeyDown, GetCursorPosition = AGPS_OLD_SHIFT, AGPS_OLD_CURSOR")
+    ask = _shown(lua, lambda w: w._text == "Create Pin" and w._scripts.OnUpdate)
+    assert len(ask) == 1
+    ask[0]._scripts.OnClick(ask[0])
+    dlg = lua.globals().AzerothGPSPinDialog
+    assert dlg._shown and len(P.Icons()) == 55  # (the game's macro icons: the stand-in's 30 and 25)
+    cells = [c for c in dlg.cells.values()]
+    cells[3]._scripts.OnClick(cells[3])  # (the fourth icon)
+    dlg.name._text = "Herb spot"
+    P.Confirm()
+    assert not dlg._shown
+    own = P.Own()
+    assert len(own) == 1 and own[1].name == "Herb spot" and own[1].icon == P.Icons()[4] and own[1].level == 0
+    lua.execute("AGPS_T = 500")
+    G.Update()
+    pins = _shown(lua, lambda w: w.pin is not None and w.pin.name == "Herb spot")
+    assert len(pins) == 1 and pins[0].icon._tex == P.Icons()[4] and pins[0].name == "Herb spot"
+    pins[0]._scripts.OnEnter(pins[0])  # (its tooltip)
+    # double-click: a stop there, with its name and icon (as a city location)
+    pins[0]._scripts.OnDoubleClick(pins[0])
+    lua.execute("AGPS_T = 501")
+    G.Update()
+    stop = _shown(lua, lambda w: w.pendingIndex == 1)
+    assert len(stop) == 1 and stop[0].icon._tex == P.Icons()[4]
+    G.RemovePending(1)
+    # right-click: "Remove?"
+    pins[0]._scripts.OnClick(pins[0], "RightButton")
+    ask = next(w for w in lua.eval("AGPS_WIDGETS").values() if w._text == "Remove?")
+    ask._scripts.OnClick(ask)
+    assert len(P.Own()) == 0
+    lua.execute("AGPS_T = 502")
+    G.Update()
+    assert not _shown(lua, lambda w: w.pin is not None)
+    # the option: pins hidden
+    P.Add(lua.eval("{ level = 0, x = 2254, y = 293, name = 'Brill' }"))
+    ns.settings.gps.showCustomPins = False
+    lua.execute("AGPS_T = 503")
+    G.Update()
+    assert not _shown(lua, lambda w: w.pin is not None)
+    ns.settings.gps.showCustomPins = True
+    lua.execute("AGPS_T = 504")
+    G.Update()
+    assert _shown(lua, lambda w: w.pin is not None)
+    P.Remove(P.Own()[1])
+    G.Follow()  # (the stop made from the pin left the map looking at it: back to following, for the tests after)
+    lua.execute("AGPS_T = 505")
+    G.Update()
+
+
+def test_a_pin_on_a_dungeons_floor_and_in_the_copied_map_data(game):
+    # (asked) a pin minds the floor it's made on: in a dungeon whose floors lie over each other, the dialog
+    # picks one (the floor the map shows first), the pin keeps its height and is faint on the other floors;
+    # it goes out with the map data (Copy Map Data...)
+    lua, ns = game
+    G, P = ns.GPS, ns.Pins
+    level = None
+    for lvl in sorted(int(k) for k in ns.Instances.keys()):
+        bosses = ns.Instances[lvl].bosses
+        if len(G.InstanceFloors(lvl)) >= 2 and bosses and bosses[1] and bosses[1][3]:
+            level = lvl
+            break
+    assert level, "no dungeon with floors over floors"
+    bands = G.InstanceFloors(level)
+    b = ns.Instances[level].bosses[1]
+    floors, pick = G.PinFloors(level, b[3], b[4])
+    assert len(floors) == len(bands) and floors[1].label == f"floor 1 of {len(bands)}, counting up"
+    spot = lua.eval("{}")
+    spot.level, spot.x, spot.y, spot.floors, spot.pick = level, b[3], b[4], floors, 0
+    P.OpenEditor(spot)
+    dlg = lua.globals().AzerothGPSPinDialog
+    assert dlg.floorText._shown and dlg.floorText._text == "Floor: every floor here"
+    P.StepFloor(1)
+    P.StepFloor(1)
+    assert dlg.floorText._text == f"Floor: floor 2 of {len(bands)}, counting up"
+    dlg.name._text = "Second floor"
+    p = P.Confirm()
+    assert p.level == level and bands[2][1] - 2 <= p.z <= bands[2][2]
+    far = lua.eval("{}")
+    far[1], far[2] = p.z + 40, p.z + 50  # (a floor well over it)
+    assert G.PinOffFloor(p, far) and not G.PinOffFloor(p, bands[2])
+    assert G.PinFloorLabel(p) == f"floor 2 of {len(bands)}, counting up"
+    text = ns.Feedback.RoadsText()[0]  # (the text, and its count of lines)
+    assert f"P add {level} {p.time} " in text and "name=Second floor" in text
+    P.Remove(p)
+    assert "Second floor" not in ns.Feedback.RoadsText()[0]
+
+
 def test_the_dev_hooks_for_sharing(game):
     # (the private dev addon, AzerothGPS_Dev: AzerothGPS_Extend runs its setup with ns; the one way
     # out, Import.io.send; messages in, Import.OnAddonMessage; the popup, Import.Offer)

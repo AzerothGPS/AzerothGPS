@@ -256,3 +256,6 @@ tostringall = function(...)
   for i = 1, select("#", ...) do out[i] = tostring((select(i, ...))) end
   return unpack(out, 1, select("#", ...))
 end
+-- (the icons a macro can have: the game fills the table it's given with file ids)
+GetMacroIcons = function(t) for i = 1, 30 do t[#t + 1] = 136000 + i end end
+GetMacroItemIcons = function(t) for i = 1, 25 do t[#t + 1] = 133000 + i end end

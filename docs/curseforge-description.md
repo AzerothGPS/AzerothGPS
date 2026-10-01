@@ -45,6 +45,7 @@ If a route misses a trail or walks you into a wall, draw the fix right on the ma
 - **Cities and caves:** every capital's streets, Undercity's floors and lifts, and 351 caves and mines.
 - **Dungeons and raids:** floor-by-floor maps, bosses in order, and a boss route.
 - **Keeping you alive:** routes steer around the other faction's towns and zones way above your level.
+- **Your own pins:** Shift-click the map to drop a pin with any icon from the game and a name. Double-click it later to route there, even on the right floor of a dungeon.
 - **Your group on the map:** party and raid members show up as round class icons in their class color. They don't need the addon.
 - **Turn-by-turn directions** with ETAs at your actual speed, on foot, mounted or in travel form.
 - **TomTom `/way`** import, and you can share routes with friends.

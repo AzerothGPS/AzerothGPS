@@ -74,6 +74,8 @@ ns.DEFAULTS = {
     shareRoads = false, -- keep the roads the player draws or erases for sharing
     devTools = false, -- the road tools on the map's buttons (Draw a road, Erase a road)
     wallTools = false, -- the wall tools on the map's buttons
+    pinning = true, -- Shift + left-click on the map: "Create Pin" (Pins.lua)
+    showCustomPins = true, -- the pins on the map (the player's and the shared ones)
     showWalls = false, -- draw the walls routes don't walk through (blood red)
     shareTrips = false, -- keep traces of trips clearly faster than estimated
   },
@@ -665,6 +667,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     Start("teleports", ns.Teleports and ns.Teleports.Init)
     Start("feedback", ns.Feedback and ns.Feedback.Init)
     Start("drawn roads", ns.Record and ns.Record.Prune)
+    Start("pins", ns.Pins and ns.Pins.Init)
     Start("options", ns.Options and ns.Options.Init)
     if InCombatLockdown() then CombatChanged(true) end -- logged in (or reloaded) mid-fight
     ns.started = true

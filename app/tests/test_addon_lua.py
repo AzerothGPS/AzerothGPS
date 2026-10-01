@@ -5302,3 +5302,65 @@ def test_a_capital_stop_with_a_height_takes_the_road_on_its_floor(capitals_env):
             if h and h > 515 and abs(g.n[2 * n - 1] - x) < 1 and abs(g.n[2 * n] - y) < 1:
                 high.append((round(x), round(y), h))
     assert not high, high  # (not up on the balcony)
+
+
+# ---- Pins (Pins.lua, app/azerothgps/pins.py) ------------------------------------------------------
+
+def test_pins_are_kept_shared_and_shipped(env, tmp_path):
+    # (asked) pins the player makes, exported with the map data like roads and walls: the share text's
+    # "P" lines read back offline, written into Data/Pins.lua for everyone; the player's own copy then
+    # dropped at login, and a shared one they remove hidden and its removal shared
+    from azerothgps.pins import merge_pins, parse_shared_pins, pins_lua
+
+    lua, ns = env
+    lua.execute("time = function() return 1790000000 end")
+    ns.db = lua.eval("{}")
+    load(lua, ns, "Pins.lua")
+    P = ns.Pins
+    map02 = r"Interface\Icons\INV_Misc_Map02"
+    first = lua.eval("{ level = 20036, x = -47.25, y = -785.5, z = 18.4 }")
+    first.icon, first.name = map02, "  Van Cleef's |cffff0000ship|r\n "
+    P.Add(first)
+    P.Add(lua.eval('{ level = 0, x = 1600, y = 240, down = true, icon = 136001, name = "" }'))
+    pins = P.All()
+    assert len(pins) == 2 and pins[1].time != pins[2].time  # (unique ids, made in the same second)
+    assert pins[1].name == "Van Cleef's cffff0000shipr"  # (one line, no escape codes)
+    assert pins[2].name == "Pin"
+    lines = [P.ShareLines()[i] for i in range(1, len(P.ShareLines()) + 1)]
+    assert lines[0] == ("P add 20036 1790000000 -47.2,-785.5 z=18.4 icon=" + map02 + " name=Van Cleef's cffff0000shipr")
+    assert lines[1] == "P add 0 1790000001 1600.0,240.0 down=1 icon=136001 name=Pin"
+    added, removed = parse_shared_pins("AzerothGPS roads 1 (addon 1.1.0)\n" + "\n".join(lines) + "\nR add 0 1 1,1 2,2\n")
+    assert [(p["level"], p["time"], p.get("z"), p.get("down"), p["icon"], p["name"]) for p in added] == [
+        (20036, 1790000000, 18.4, None, map02, "Van Cleef's cffff0000shipr"),
+        (0, 1790000001, None, True, 136001, "Pin")]
+    store = tmp_path / "pins.json"
+    assert merge_pins(added, removed, store, log=lambda *a: None) == 2
+    assert merge_pins(added, removed, store, log=lambda *a: None) == 0  # (each once)
+    # the data as shipped: the player's own copies dropped at login, the shared ones shown
+    from azerothgps.pins import load_pins
+
+    loader = lua.eval("function(src) return assert(load(src, '@Data/Pins.lua')) end")
+    loader(pins_lua(load_pins(store)))("AzerothGPS", ns)
+    assert ns.PinsIn[1790000000] and ns.SharedPins[1].shipped and ns.SharedPins[1].name == "Van Cleef's cffff0000shipr"
+    assert ns.SharedPins[1].icon == map02 and ns.SharedPins[2].down is True
+    P.Prune()
+    pins = P.All()
+    assert len(P.Own()) == 0 and len(pins) == 2 and all(pins[i].shipped for i in (1, 2))
+    assert len(P.ShareLines()) == 0  # (nothing new to share)
+    # removing a shared one: hidden here, its removal shared and applied offline
+    P.Remove(pins[1])
+    assert len(P.All()) == 1 and P.ShareLines()[1] == "P remove 1790000000"
+    added, removed = parse_shared_pins("P remove 1790000000")
+    assert merge_pins(added, removed, store, log=lambda *a: None) == 1
+    assert [p["time"] for p in load_pins(store)] == [1790000001]
+
+
+def test_shared_pins_text_is_data_only():
+    # (the share text is pasted by players: names one clean line, icons only a file id or an icon's path)
+    from azerothgps.pins import parse_shared_pins
+
+    added, _ = parse_shared_pins('P add 0 5 1,2 icon=foo";os.exit() name=a|b\x07c\n'
+                                 "P add 0 6 1,2 icon=Interface/Icons/Spell_Fire_Fire name=x name=y\n"
+                                 "P add 0 nope 1,2 icon=1 name=z\nP add 0 7 1 icon=1 name=z")
+    assert [(p["time"], p["icon"], p["name"]) for p in added] == [
+        (5, r"Interface\Icons\INV_Misc_QuestionMark", "ab c"), (6, "Interface/Icons/Spell_Fire_Fire", "x name=y")]

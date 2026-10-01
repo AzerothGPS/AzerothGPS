@@ -1088,6 +1088,92 @@ function G.ToolFloor(level)
   if not (G.roadMode or G.wallMode) then return nil end
   return G.editFloor
 end
+
+-- Pins (Pins.lua) and floors: the floors a pin at (x, y) of `level` can be on, bottom up, as
+-- { label, z, down }, and the one to start on (0: every floor). A dungeon's floors (its art's, as the
+-- map steps them; the height a road has there on it), the one the map shows first; elsewhere the
+-- floors the road and wall tools pick from (G.EditFloors), the one picked first.
+local pinRoadIndex = setmetatable({}, { __mode = "k" }) -- [a dungeon's graph] = its roads' heights by place
+local function RoadHeightsNear(level, x, y)
+  local R = ns.Router
+  local g = R and R.DebugGraph and R.DebugGraph(level)
+  if not (g and g.z and g.e and R.FloorIndex) then return {} end
+  local idx = pinRoadIndex[g]
+  if not idx then
+    idx = R.FloorIndex(g.e, g.z)
+    pinRoadIndex[g] = idx
+  end
+  return idx(x, y, G.FLOOR_PICK_YD) or {}
+end
+function G.PinFloors(level, x, y)
+  local out, pick = {}, 0
+  local lvl = ns.CityLevels and ns.CityLevels[level]
+  if lvl and lvl.instance then
+    local bands = G.InstanceFloors(level)
+    if #bands < 2 then return out, 0 end
+    local hs = RoadHeightsNear(level, x, y)
+    for k, band in ipairs(bands) do
+      local z -- (the road's height there nearest the floor's bottom; else its bottom)
+      for _, h in ipairs(hs) do
+        if h >= band[1] - 2 and h <= band[2] and (not z or h < z) then z = h end
+      end
+      out[k] = { z = z or band[1] + 1, label = string.format("floor %d of %d, counting up", k, #bands) }
+    end
+    if (view.floor or 0) > 0 then pick = #bands - view.floor + 1 end
+    return out, pick
+  end
+  local floors = G.EditFloors(level, x, y)
+  for k, f in ipairs(floors) do
+    out[k] = { z = f.z, down = f.down,
+      label = f.z and string.format("floor %d of %d here, counting up", k, #floors) or (f.down and "down under" or "up top") }
+    if G.editFloor and SameFloor(f, G.editFloor) then pick = k end
+  end
+  return out, pick
+end
+-- Whether pin `p` is on another floor than the one shown (`band`: a dungeon's, { low, high }) or picked
+-- with the road and wall tools: drawn faint.
+function G.PinOffFloor(p, band)
+  if band then
+    return p.z ~= nil and (p.z < band[1] - G.FLOOR_HEAD or p.z > band[2] + G.FLOOR_HEAD)
+  end
+  local f = G.ToolFloor(p.level)
+  if not f then return false end
+  if f.z and p.z then return math.abs(f.z - p.z) > (ns.Router and ns.Router.LAYER_Z or 5) end
+  if f.down ~= nil and p.down ~= nil then return f.down ~= p.down end
+  return false
+end
+-- A pin's floor in words, for its tooltip ("floor 2 of 3, counting up"; nil: on every floor, or none there).
+local pinLabels = setmetatable({}, { __mode = "k" }) -- [pin] = its floor's label, or false (worked out once)
+function G.PinFloorLabel(p)
+  if p.z == nil and p.down == nil then return nil end
+  local known = pinLabels[p]
+  if known ~= nil then return known or nil end
+  local label = G.PinFloorLabelNow(p)
+  pinLabels[p] = label or false
+  return label
+end
+function G.PinFloorLabelNow(p)
+  local ok, floors = pcall(G.PinFloors, p.level, p.x, p.y)
+  local best, bestD
+  for _, f in ipairs(ok and floors or {}) do
+    if f.down ~= nil and f.down == p.down then return f.label end
+    local d = f.z and p.z and math.abs(f.z - p.z) -- (the nearest: a dungeon's floors can lie close)
+    if d and d <= (ns.Router and ns.Router.LAYER_Z or 5) and (not bestD or d < bestD) then best, bestD = f, d end
+  end
+  return best and best.label or nil
+end
+-- The level a pin at (x, y) (the map's world point) goes on: the one the map shows, an underground
+-- city's when its map is shown over it (as a drawn road's, G.FinishRoad).
+function G.PinLevel(x, y)
+  local _, _, cont = Geo.PlayerWorld()
+  local level = browse and browseCont or (free and free.cont) or cont -- (as ViewCont, below)
+  local shown = G.shownLevel
+  if level and shown and shown ~= level and G.shownCont == level and Geo.Base(shown) == level
+      and not (ns.Passability and ns.Passability.InGrid and not ns.Passability.InGrid(shown, x, y)) then
+    level = shown
+  end
+  return level
+end
 -- Whether road `ei` of graph `g` (on `cont`) is on another floor than the floor `f` (picked: { z } or
 -- { down }) there, at the road's middle (the graph's `otherFloors` on a level with heights; where a
 -- cave's or a capital's floor lies under walkable ground, by its being the cave's road).
@@ -1682,6 +1768,7 @@ local function PoiButton(i)
     end
     if self.note then GameTooltip:AddLine(self.note, 0.7, 0.7, 0.7) end
     GameTooltip:AddLine("Double-click: add as a stop", 0.4, 0.8, 1)
+    if self.pin then GameTooltip:AddLine("Right-click: remove this pin", 0.4, 0.8, 1) end
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)
@@ -1696,7 +1783,12 @@ local function PoiButton(i)
     local onEnter = self:GetScript("OnEnter")
     if onEnter then onEnter(self) end
   end)
-  b:SetScript("OnClick", function(self)
+  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  b:SetScript("OnClick", function(self, button)
+    if button == "RightButton" then -- (a pin: "Remove?")
+      if self.pin then G.AskRemove(self) end
+      return
+    end
     if self.cityMap then G.ShowCity(self.cityMap) end -- (a capital on a continent's map)
     if self.instance then G.ShowInstance(self.instance) end -- (a dungeon's entrance: its map)
     if self.exit then G.ShowEntrance(self.exit) end -- (in a dungeon's map: back out at its entrance)
@@ -1704,7 +1796,8 @@ local function PoiButton(i)
   b:SetScript("OnDoubleClick", function(self)
     if self.cityMap or self.exit then return end
     if G.Held() then return HeldClick(self.wx, self.wy, self.level or view.cont) end -- (the holder's)
-    G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex, self.z) -- like a double-click on the map, with its name and icon
+    -- (like a double-click on the map, with its name and icon; a pin's, on its own level)
+    G.AddStopAt(self.wx, self.wy, self.name, self.level, self.stopTex, self.z, self.pin ~= nil)
   end)
   poiButtons[i] = b
   return b
@@ -1767,7 +1860,7 @@ local function DrawPois(pois, zoom)
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.z = p.z -- (a city place's height: its floor, where floors lie over each other)
       b.preview, b.cityMap, b.instance, b.exit = nil, nil, nil, nil
-      b.dock = nil
+      b.dock, b.pin = nil, nil
       if b.timer then b.timer:Hide() end
       if p[1] == 10 then -- a zeppelin's or boat's dock: its next arrival under it
         ns.SetIcon(b.icon, DOCK_ICON[p.kind])
@@ -1828,6 +1921,13 @@ local function DrawPois(pois, zoom)
         b.note = state == "known" and "Flight master (known)" or state == "unlearned" and "Flight master (not learned)"
           or "Flight master (open a flight map once to see which you know)"
         b:SetSize(16, 16)
+      elseif p[1] == 12 then -- a pin (Pins.lua): its icon; double-click for a stop, right-click to remove it
+        local tex = ns.Pins.IconTexture(p.icon)
+        ns.SetIcon(b.icon, tex)
+        b.stopTex, b.questID = tex, nil
+        b.pin = p.pin
+        b.note = (p.pin.shipped and "Shared pin" or "Your pin") .. (p.floor and (", " .. p.floor) or "")
+        b:SetSize(18, 18)
       elseif p[1] == 4 then -- map layer mark (Layers.lua)
         ns.SetIcon(b.icon, p.icon, ns.Layers and ns.Layers.ICON.objectiveFallback)
         b.icon:SetVertexColor(p.r or 1, p.g or 1, p.b or 1)
@@ -2431,6 +2531,28 @@ function G.Update()
       end
     end
   end
+  -- the pins (Pins.lua, option showCustomPins): those on the level shown (`level`: a dungeon's map, its
+  -- own; else the continent in view and the levels drawn in it), faint on another floor than the one
+  -- shown or picked
+  local function AddPins(pois, level)
+    if st.showCustomPins == false or not (ns.Pins and ns.db) then return end
+    for _, pin in ipairs(ns.Pins.All()) do
+      local x, y
+      if level then
+        if pin.level == level then x, y = pin.x, pin.y end
+      elseif pin.level and pin.x and pin.y then
+        x, y = Geo.ToContinent(pin.level, pin.x, pin.y, viewCont)
+      end
+      if x then
+        local dx, dy = Geo.ScreenOffset(cx, cy, x, y)
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if math.abs(dx) <= half and math.abs(dy) <= half then
+          pois[#pois + 1] = { 12, dx, dy, pin.name, pin.x, pin.y, level = pin.level, z = pin.z, icon = pin.icon, pin = pin,
+            dim = G.PinOffFloor(pin, level and instBand), floor = G.PinFloorLabel(pin) }
+        end
+      end
+    end
+  end
   -- a stop made from a map icon (a trainer, a flight master) shows that icon: the map's
   -- own one under it isn't drawn as well
   local function DropUnderStops(pois)
@@ -2508,6 +2630,7 @@ function G.Update()
         dim = off or dead, dead = dead, next = nextBoss == b })
       end
     end
+    AddPins(pois, inst)
     DrawPois(DropUnderStops(pois), zoom)
   elseif (not place or browse) and not worldView then
     local fac = ns.CharDB().faction
@@ -2586,6 +2709,7 @@ function G.Update()
         end
       end
     end
+    AddPins(pois) -- (on a continent's map too: a few, not hundreds like the caves)
     DrawPois(DropUnderStops(pois), zoom)
   elseif place and not browse then
     -- inside a building's map (a city like Undercity): its districts' names, like the
@@ -2601,6 +2725,7 @@ function G.Update()
       end
     end
     AddMarks(pois)
+    AddPins(pois)
     DrawPois(DropUnderStops(pois), zoom)
   else
     DrawPois({}, zoom)
@@ -3897,7 +4022,7 @@ function G.FinishRoad(line, erase, wall)
   elapsed = 1
 end
 
-function G.AddStopAt(x, y, name, stopCont, tex, z)
+function G.AddStopAt(x, y, name, stopCont, tex, z, exact)
   local px, _, cont = Geo.PlayerWorld()
   if not px then return false end
   if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return false end
@@ -3912,10 +4037,11 @@ function G.AddStopAt(x, y, name, stopCont, tex, z)
   end
   tour = nil
   local sc = stopCont or ViewCont(cont)
-  if ns.Nav.StopLevel then sc = ns.Nav.StopLevel(sc, x, y) end -- down in a city: on its level
+  -- (`exact`: on `stopCont` as given, a pin's level)
+  if ns.Nav.StopLevel and not exact then sc = ns.Nav.StopLevel(sc, x, y) end -- down in a city: on its level
   -- a place picked on the map (its icon: a guard's city location...) on a city's floors is
   -- down there, wherever the player is
-  if tex and ns.Layers and ns.Layers.CityLevelAt then sc = ns.Layers.CityLevelAt(Geo.Base(sc), x, y) or sc end
+  if tex and not exact and ns.Layers and ns.Layers.CityLevelAt then sc = ns.Layers.CityLevelAt(Geo.Base(sc), x, y) or sc end
   -- (`z`: its height, the game's, when known: a city place's, its floor where floors lie over each other)
   local stop = { x = x, y = y, cont = sc, name = name, icon = ns.Nav.NextMarker(ns.Nav.stops, pending), tex = tex, z = z }
   if #ns.Nav.stops > 0 then
@@ -3954,6 +4080,9 @@ function G.AskRemove(pin)
       elseif self.ride then -- (a ride, or a flight's connection: not taken on this route)
         ns.Nav.SkipRide(self.ride, self.hop)
         elapsed = 1
+      elseif self.customPin then -- (a pin: gone)
+        ns.Pins.Remove(self.customPin)
+        elapsed = 1
       elseif self.pendingIndex then
         G.RemovePending(self.pendingIndex)
       elseif self.stopIndex then
@@ -3966,12 +4095,66 @@ function G.AskRemove(pin)
     end)
   end
   removeAsk.pendingIndex, removeAsk.stopIndex, removeAsk.learnNode = pin.pendingIndex, pin.stopIndex, pin.learnNode
-  removeAsk.ride, removeAsk.hop = pin.ride, pin.hop
+  removeAsk.ride, removeAsk.hop, removeAsk.customPin = pin.ride, pin.hop, pin.pin
   removeAsk.shownAt = GetTime()
   removeAsk:ClearAllPoints()
   removeAsk:SetPoint("BOTTOM", pin, "TOP", 0, 2)
   removeAsk:Show()
   GameTooltip_Hide()
+end
+
+-- Shift + left-click on the map (pinning on: Options > Tools): "Create Pin" there, a small button like
+-- "Remove?", then the pin's dialog (Pins.lua). A drag (moving the window) isn't one; not on the world
+-- map, nor while another addon holds the map.
+G.PIN_CLICK_PX = 6 -- cursor pixels: moved further, a drag
+local createAsk
+function G.PinClickDown()
+  G.pinClick = nil
+  if createAsk then createAsk:Hide() end
+  if S().pinning == false or G.Held() or not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+  local m = browse and ns.Maps[browse]
+  if m and m.type <= 2 then return false end
+  local mx, my = GetCursorPosition()
+  G.pinClick = { mx, my }
+  return true
+end
+function G.PinClickUp()
+  local c = G.pinClick
+  G.pinClick = nil
+  if not c then return false end
+  local mx, my = GetCursorPosition()
+  if (mx - c[1]) ^ 2 + (my - c[2]) ^ 2 > G.PIN_CLICK_PX ^ 2 then return false end
+  local sc = canvas:GetEffectiveScale()
+  local ccx, ccy = canvas:GetCenter()
+  return G.AskCreatePin(mx / sc - ccx, my / sc - ccy)
+end
+function G.AskCreatePin(dxUI, dyUI)
+  local x, y = G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s)
+  local level = x and G.PinLevel(x, y)
+  if not level then return false end
+  if removeAsk then removeAsk:Hide() end
+  if not createAsk then
+    createAsk = CreateFrame("Button", nil, keepLayer, "UIPanelButtonTemplate")
+    createAsk:SetSize(90, 20)
+    createAsk:SetText("Create Pin")
+    createAsk:SetFrameLevel(keepLayer:GetFrameLevel() + 6)
+    createAsk:SetScript("OnClick", function(self)
+      self:Hide()
+      local ok, floors, pick = pcall(G.PinFloors, self.level, self.wx, self.wy)
+      if not ok then floors, pick = {}, 0 end
+      ns.Pins.OpenEditor({ level = self.level, x = self.wx, y = self.wy, floors = floors, pick = pick })
+    end)
+    createAsk:SetScript("OnUpdate", function(self)
+      if GetTime() - self.shownAt > 5 then self:Hide() end -- not taken up: go away
+    end)
+  end
+  createAsk.level, createAsk.wx, createAsk.wy = level, x, y
+  createAsk.shownAt = GetTime()
+  createAsk:ClearAllPoints()
+  createAsk:SetPoint("BOTTOM", poiLayer, "CENTER", dxUI, dyUI + 4)
+  createAsk:Show()
+  GameTooltip_Hide()
+  return true
 end
 
 function G.RemovePending(i)
@@ -4499,6 +4682,7 @@ function G.Init()
     if G.mapMenu then G.mapMenu:Hide() end
     if G.searchPanel then G.searchPanel:Hide() end
     if (G.roadMode or G.wallMode) and not G.drawMode and not G.Held() then
+      if button == "LeftButton" and G.PinClickDown() then return end -- (Shift: a pin, on the floor picked)
       if button == "LeftButton" or button == "RightButton" then
         local erase = button == "RightButton"
         local wall = G.wallMode
@@ -4530,6 +4714,7 @@ function G.Init()
     end
     if button ~= "LeftButton" then return end
     if IsShiftKeyDown() then
+      G.PinClickDown() -- (Shift + click, not dragged: "Create Pin")
       if not S().locked then
         f:StartMoving()
         f.moving = true
@@ -4542,6 +4727,15 @@ function G.Init()
     drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false }
   end)
   frame:SetScript("OnMouseUp", function(f, button)
+    if button == "LeftButton" and G.pinClick then -- (Shift + left-click: "Create Pin", unless it was a drag)
+      if f.moving then
+        f:StopMovingOrSizing()
+        f.moving = false
+        SavePosition()
+      end
+      G.PinClickUp()
+      return
+    end
     if (G.roadMode or G.wallMode) and not G.drawMode then
       local l = G.lasso
       if l and button == l.button then

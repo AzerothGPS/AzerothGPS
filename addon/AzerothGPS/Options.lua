@@ -208,19 +208,19 @@ O.SHARE_URL = "https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road
 O.DISCORD_URL = "https://discord.gg/gktYHzs2c"
 O.SHARE_INFO = {
   "|cffffd100What is kept|r",
-  "Roads and walls you draw or erase with the road tools (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions only: no character or realm names.",
+  "Roads and walls you draw or erase with the road tools, and your pins (and, if you turn it on, the way you went when you reached a stop clearly faster than estimated). Positions, and your pins' names and icons: no character or realm names.",
   " ",
   "|cffffd100Where it is kept|r",
   "On your PC, in this addon's saved variables (WTF\\Account\\<account>\\SavedVariables\\AzerothGPS.lua). Addons can't send anything from the game.",
   " ",
-  "|cffffd100How to share your roads and walls|r",
+  "|cffffd100How to share your roads, walls and pins|r",
   "1. Type |cffffd100/reload|r (it saves all your edits, so every one is copied), then click |cffffd100Copy Map Data...|r and press |cffffd100Ctrl+C|r.",
   "2. Paste it in either place (click an address below, Ctrl+C, and open it in your browser):",
   "    |cffffd100GitHub|r: the first address opens a new \"Road data\" issue.",
   "    |cffffd100Discord|r: the second is the AzerothGPS Discord.",
   "3. Name the zone and say what you fixed.",
   " ",
-  "Roads and walls that check out are added in a later version, for everyone.",
+  "Roads, walls and pins that check out are added in a later version, for everyone.",
 }
 
 local shareInfo
@@ -734,6 +734,8 @@ local function BuildWindow()
     function() return GPS().layerInstances ~= false end, function(v) GPS().layerInstances = v end)
   check("Cave entrances", "The ways into caves and mines (not on a continent's map). Double-click one for a stop there.",
     function() return GPS().layerCaves ~= false end, function(v) GPS().layerCaves = v end)
+  check("Pins", "Your pins (Shift + left-click on the map: Options > Tools) and the ones shared with everyone. Double-click one for a stop there; right-click to remove it.",
+    function() return GPS().showCustomPins ~= false end, function(v) GPS().showCustomPins = v end)
 
   ---------------------------------------------------------------- Quick buttons
   Page("Quick buttons")
@@ -917,6 +919,10 @@ local function BuildWindow()
       if ns.GPS.LayoutQuick then ns.GPS.LayoutQuick() end
     end)
   place(Button(page, "Wall Tools On/Off", 150, function() ns.GPS.ToggleWallMode() end), 28, 4)
+  header("Pins", "Your own marks on the map: a name and an icon.")
+  note("Shift + left-click on the map, then |cffffd100Create Pin|r: name it, pick an icon (any the game has, as for a macro) and, where floors lie over each other (a dungeon, Undercity, a cave), its floor. Double-click a pin for a stop there; right-click it to remove it. Pins are shared with your map data (Copy Map Data..., Help improve).")
+  check("Pinning", "Shift + left-click on the map asks to create a pin there. Off: Shift + left-drag only moves the map's window.",
+    function() return GPS().pinning ~= false end, function(v) GPS().pinning = v end)
   header("Your changes", "Roads and walls you draw or erase, in the order drawn.")
   local undoBtn = Button(page, "Take Back the Last", 150, function() ns.Record.Undo() end)
   local listBtn = Button(page, "List Your Changes", 150, function() ns.Record.List() end)
@@ -940,12 +946,13 @@ local function BuildWindow()
   place(howBtn, 28, 4)
   local copyBtn = Button(page, "Copy Map Data...", 150, ShowRoadsText)
   copyBtn:SetPoint("LEFT", howBtn, "RIGHT", 6, 0)
-  note("Type |cffffd100/reload|r before |cffffd100Copy Map Data...|r: it saves all your road and wall edits, so every one of them is in the copy.")
+  note("Type |cffffd100/reload|r before |cffffd100Copy Map Data...|r: it saves all your road and wall edits and pins, so every one of them is in the copy.")
   controls[#controls + 1] = function()
     local _, t = ns.Feedback.Counts()
     local r, w = ns.Feedback.DrawnCounts()
-    counts:SetText(string.format("Waiting to be shared: %d road%s, %d wall%s, %d trip%s", r, r == 1 and "" or "s",
-      w, w == 1 and "" or "s", t, t == 1 and "" or "s"))
+    local pn = ns.Pins and #ns.Pins.ShareLines() or 0
+    counts:SetText(string.format("Waiting to be shared: %d road%s, %d wall%s, %d pin%s, %d trip%s", r, r == 1 and "" or "s",
+      w, w == 1 and "" or "s", pn, pn == 1 and "" or "s", t, t == 1 and "" or "s"))
   end
 
   FinishPage()

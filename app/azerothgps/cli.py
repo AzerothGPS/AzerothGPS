@@ -100,7 +100,11 @@ def cmd_watch_roads(args) -> int:
                 per: dict = {}
                 before = _override_keys(RESOURCES / "overrides")
                 n = import_tracks(wtf, RESOURCES / "overrides", per)
+                np_ = _import_saved_pins(wtf)  # (pins made or removed in game: overrides/pins.json, Data/Pins.lua)
                 last = cur
+                if np_ and not n:
+                    cmd_install_addon(args)
+                    print(f"{time.strftime('%H:%M:%S')} {np_} pin change(s) in the pin data: /reload in game to load it")
                 if n:
                     stamp = time.strftime("%H:%M:%S")
                     print(f"{stamp} {n} new drawn road(s): {per}")
@@ -130,6 +134,24 @@ def cmd_watch_roads(args) -> int:
         if args.once:
             return 0
         time.sleep(args.interval)
+
+
+def _import_saved_pins(wtf: Path) -> int:
+    """The pins in the saved variables into overrides/pins.json, and Data/Pins.lua written when they
+    changed: the number of changes."""
+    from .pins import import_saved, write_pins_lua
+
+    n = import_saved(wtf)
+    if n:
+        write_pins_lua()
+    return n
+
+
+def cmd_pins(args) -> int:
+    """Pins made in game (SavedVariables) into overrides/pins.json and Data/Pins.lua."""
+    n = _import_saved_pins(wtf_account_dir(Path(args.wow_path), args.flavor))
+    print(f"{n} pin change(s)" + (": in Data/Pins.lua (agps install-addon, then /reload)" if n else ""))
+    return 0
 
 
 def cmd_npc_paths(args) -> int:
@@ -490,6 +512,12 @@ def cmd_import_shared(args) -> int:
     ne = merge_entrances(parse_shared_entrances(text))
     if ne:
         print(f"{ne} new dungeon way(s) in: agps instances --write to put them in the data")
+    from .pins import merge_pins, parse_shared_pins, write_pins_lua
+
+    npins = merge_pins(*parse_shared_pins(text))
+    if npins:
+        write_pins_lua()
+        print(f"{npins} pin change(s): in Data/Pins.lua")
     if n:
         reapply_overrides(DATA, [c for c in per if c in CONTINENTS])
         write_roads_lua(DATA, ADDON_DIR)
@@ -552,6 +580,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--wow-path", default=str(DEFAULT_WOW))
     sp.add_argument("--flavor", default=DEFAULT_FLAVOR)
     sp.set_defaults(fn=cmd_entrances)
+
+    sp = sub.add_parser("pins", help="pins made in game into overrides/pins.json and Data/Pins.lua")
+    sp.add_argument("--wow-path", default=str(DEFAULT_WOW))
+    sp.add_argument("--flavor", default=DEFAULT_FLAVOR)
+    sp.set_defaults(fn=cmd_pins)
 
     sp = sub.add_parser("route-sweep", help="random trips in random zones, routed as in game: snapbacks, U-turns, spikes")
     sp.add_argument("--trips", type=int, default=60)
@@ -622,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--continents", type=int, nargs="+", default=None, help="map IDs (default: all: 0 Eastern Kingdoms, 1 Kalimdor, 2991 Zephras Isle)")
     sp.set_defaults(fn=cmd_roads)
 
-    sp = sub.add_parser("import-shared", help="roads players copied from the share page into the road data")
+    sp = sub.add_parser("import-shared", help="roads, walls and pins players copied from the share page into the data")
     sp.add_argument("file", nargs="?", help="a text file of it")
     sp.add_argument("--github", action="store_true", help="from the open 'road data' GitHub issues instead")
     sp.add_argument("--repo", default="AzerothGPS/AzerothGPS")

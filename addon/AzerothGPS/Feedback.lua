@@ -118,6 +118,7 @@ end
 -- The player's drawn and erased roads as text to copy and send (the share page's "Copy
 -- road data"): a header line, then a road per line:
 --   R <op add|remove|area|wall|unwall|unwallarea> <continent> <time> <x,y> <x,y> ...
+-- then their pins ("P" lines: Pins.ShareLines) and the dungeons' ways in they learned ("E").
 -- Both the roads kept for sharing and the ones not in the road data yet, each once.
 -- (`agps import-shared` reads it back.) Numbers only: no character or realm names.
 F.TEXT_HEADER = "AzerothGPS roads 1"
@@ -141,6 +142,7 @@ function F.RoadsText()
   end
   for _, t in ipairs(ns.db and ns.db.tracks or {}) do add(t) end
   for _, t in ipairs(ns.db and ns.db.feedback and ns.db.feedback.roads or {}) do add(t) end
+  for _, l in ipairs(ns.Pins and ns.db and ns.Pins.ShareLines() or {}) do lines[#lines + 1] = l end
   -- dungeons' ways in learned (Taxi.NoteEntrance), those the data doesn't have yet:
   -- "E map-id continent x,y"
   for mapID, list in pairs(ns.db and ns.db.entrances or {}) do
