@@ -72,6 +72,25 @@ def test_route_to_a_boss_follows_the_instances_roads(inst_env):
             assert math.dist(pts[i], pts[i + 1]) < 25, (pts[i], pts[i + 1])
 
 
+def test_gnomeregans_lift_is_taken_and_said(inst_env):
+    # (asked: the dungeons' lifts, roads/lifts.py) Gnomeregan's elevator between its upper hall and the floor
+    # 44 yd under it: a lift road (source 5), taken down and up, "Take the lift down"
+    lua, ns = inst_env
+    R = ns.Router
+    load(lua, ns, "Turns.lua")
+    G = 20090
+    for (a, za), (b, zb), kind, text in ((((-790.0, 300.0), -272.0), ((-835.0, 340.0), -316.0), R.KIND_LIFT_DOWN, "Take the lift down"),
+                                         (((-835.0, 340.0), -316.0), ((-790.0, 300.0), -272.0), R.KIND_LIFT_UP, "Take the lift up")):
+        R.Reset()
+        r = R.Route(G, a[0], a[1], b[0], b[1], lua.table(offroad=False, z=za, tz=zb))
+        assert r, (a, b)
+        _, kinds = pts_kinds(r)
+        assert kind in kinds, (a, b, sorted(set(kinds)))
+        part = lua.table(pts=r.pts, kinds=r.kinds, cont=G, stop=1)
+        ms = ns.Turns.Maneuvers(ns.Turns.Path(lua.table(parts=lua.table(part))))
+        assert any(str(ms[i].text) == text for i in range(1, len(ms) + 1)), text
+
+
 def test_route_from_outside_to_a_boss_takes_the_portal(inst_env):
     lua, ns = inst_env
     N = ns.Nav

@@ -846,6 +846,7 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
     from .capitals import walk_3d
     from .routecheck import _pts
     from .paths import ADDON_DIR
+    from .roads.lifts import INSTANCE as INSTANCE_LIFTS
 
     import lupa
 
@@ -883,7 +884,9 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
             pts, kinds = _pts(r)
             road = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) for i, kd in enumerate(kinds) if kd == 0)
             last = math.hypot(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
-            jump, where = walk_3d(u, pts, kinds)
+            # (its lifts' shafts, Gnomeregan's: a ride down, not a jump; roads/lifts.py)
+            lifts = [(lf["shaft"][0], lf["shaft"][1], None) for lf in INSTANCE_LIFTS.get(inst.map_id, [])]
+            jump, where = walk_3d(u, pts, kinds, lifts)
             closed = 0.0
             for i, kd in enumerate(kinds):
                 if kd == 1:
