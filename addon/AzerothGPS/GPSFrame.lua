@@ -114,10 +114,26 @@ end
 
 -- Map styles that draw world map art: "zone" (fully explored) and "nospoiler" (only what
 -- the character has explored).
-function G.IsMapStyle(style) return style == "zone" or style == "nospoiler" end
+function G.IsMapStyle(style) return style == "zone" or style == "nospoiler" or style == "unrevealed" end
+-- The style the map draws: one a holder of the map set (a game on it: API.HoldMap's opts.style), else the
+-- player's own (the setting is never changed by a holder).
+G.HOLD_STYLES = { minimap = true, zone = true, nospoiler = true, unrevealed = true }
+function G.HeldStyle()
+  for _, h in pairs(G.holders or {}) do
+    if h.style then return h.style end
+  end
+  return nil
+end
+function G.Style() return G.HeldStyle() or (ns.settings and ns.settings.gps.style) end
+-- LayoutZone's overlays for a style: "zone" every area, "nospoiler" the ones this character explored
+-- (true), "unrevealed" none (the base art only, the same for every character).
+function G.SpoilerMode(style)
+  if style == "unrevealed" then return "none" end
+  return style == "nospoiler"
+end
 
--- `noSpoiler`: only the explored overlays (what this character has discovered). `layer`: drawn
--- this many sublayers up (an inset over another map's art).
+-- `noSpoiler`: only the explored overlays (what this character has discovered); "none": no overlays at
+-- all (G.SpoilerMode). `layer`: drawn this many sublayers up (an inset over another map's art).
 function G.LayoutZone(px, py, mapID, rot, zoom, half, bounds, noSpoiler, layer)
   local quads = {}
   local m = ns.Maps and ns.Maps[mapID]
@@ -144,7 +160,9 @@ function G.LayoutZone(px, py, mapID, rot, zoom, half, bounds, noSpoiler, layer)
   end
   layer = layer or 0
   add(m.tiles, layer)
-  if noSpoiler then
+  if noSpoiler == "none" then
+    -- (the base art only)
+  elseif noSpoiler then
     add(G.ExploredOverlays(mapID), layer + 1)
   else
     add(m.overlays, layer + 1) -- explored areas draw over the base art
@@ -1565,6 +1583,21 @@ G.overlays, G.roadOwners = {}, {}
 -- stops' pins, the crosshair with Confirm Route and the top panel aren't shown, and a
 -- double-click goes to the holder instead of making a stop.
 G.holders = {}
+G.HELD_STYLE_TEXT = "The map style is set by the game on the map while it's on."
+-- Hold or let go of the map for `owner` (API.HoldMap): `h` = { click, style } or nil. A style held, or
+-- let go, changes what the map draws as the player's own change would (a map browsed goes back to the
+-- terrain view for the terrain style).
+function G.SetHolder(owner, h)
+  local before = G.Style()
+  G.holders[owner] = h
+  local now = G.Style()
+  if now ~= before then
+    if not G.IsMapStyle(now) and browse and G.BrowseToTerrain then G.BrowseToTerrain() end
+    if G.RefreshQuick then G.RefreshQuick() end
+  end
+  if h and G.StopTools then G.StopTools() end -- (no road, wall or farming tools during it)
+  if G.Redraw then G.Redraw() end
+end
 -- Called with the top panel's left inset when it changes (the window frame on or off):
 -- G.layoutHooks[owner] = fn(inset). G.topInset: the inset now.
 G.layoutHooks, G.topInset = {}, 4
@@ -2246,7 +2279,7 @@ function G.Update()
   -- (in a city: down in an underground one, or in a capital's own cells)
   local inCity = here and (ns.Nav.PlayerLevel(cont) ~= cont
     or (ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(cont, px, py)) or false)
-  if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and (onMe or downCity)
+  if st.interiors and not inst and not G.IsMapStyle(G.Style()) and not browse and here and (onMe or downCity)
       and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
@@ -2276,7 +2309,7 @@ function G.Update()
     elapsed = 1
   end
   -- a city inside a mountain (Ironforge) opened from its icon: its interior map while looking there
-  if not place and free and free.interior and not browse and not G.IsMapStyle(st.style) and zoom <= G.INTERIOR_MAX_ZOOM then
+  if not place and free and free.interior and not browse and not G.IsMapStyle(G.Style()) and zoom <= G.INTERIOR_MAX_ZOOM then
     place, wmo, room = free.interior[1], free.interior[2], free.interior[3]
   end
   G.inside = place and ((room.n ~= "" and room.n or "?") .. " / " .. place[1]) or nil
@@ -2309,7 +2342,7 @@ function G.Update()
     quads = G.LayoutInterior(cx, cy, place, wmo, room, rot, zoom, half)
     artLevel = G.CityArtLevel(place[1])
   elseif browse then
-    quads = G.LayoutZone(cx, cy, browse, rot, zoom, half, browseBounds, st.style == "nospoiler")
+    quads = G.LayoutZone(cx, cy, browse, rot, zoom, half, browseBounds, G.SpoilerMode(G.Style()))
     artLevel = G.CityArtLevel(nil, browse)
     local bm = ns.Maps[browse]
     if bm and bm.worldFrames and browseBounds then -- (the insets: maps not on the world map's art)
@@ -2321,7 +2354,7 @@ function G.Update()
         end
       end
     end
-  elseif G.IsMapStyle(st.style) or zoom > G.MINIMAP_MAX_ZOOM then
+  elseif G.IsMapStyle(G.Style()) or zoom > G.MINIMAP_MAX_ZOOM then
     -- The player's zone map, or a bigger map (continent, world) when zoomed out past it.
     -- (the view moved off somewhere else: the zone there, not the player's)
     local id = free and G.LocateWorld(Geo.Base(viewCont), cx, cy)
@@ -2331,7 +2364,7 @@ function G.Update()
     if not bounds or math.max(bounds[3] - bounds[1], bounds[4] - bounds[2]) / 2 < zoom * 0.9 then
       id, bounds = G.CoveringMap(viewCont, cx, cy, zoom)
     end
-    quads = G.LayoutZone(cx, cy, id, rot, zoom, half, bounds, st.style == "nospoiler")
+    quads = G.LayoutZone(cx, cy, id, rot, zoom, half, bounds, G.SpoilerMode(G.Style()))
     artLevel = G.CityArtLevel(nil, id)
   else
     quads = G.LayoutMinimap(cx, cy, viewCont, rot, zoom, half)
@@ -2700,7 +2733,7 @@ function G.Update()
     end
     -- the terrain view: the cities with an inside map of their own (Undercity, Ironforge),
     -- to click for it
-    if not browse and not G.IsMapStyle(st.style) then
+    if not browse and not G.IsMapStyle(G.Style()) then
       for _, c in ipairs(G.InteriorCities(viewCont)) do
         local dx, dy = Geo.ScreenOffset(cx, cy, c.x, c.y)
         dx, dy = Geo.Rotate(dx * s, dy * s, rot)
@@ -2886,7 +2919,7 @@ function G.Describe()
   if not frame then return "not created" end
   local st = S()
   return string.format("shown=%s style=%s rotate=%s zoom=%d size=%d alpha=%.2f roads=%s interior=%s quads=%d lines=%d",
-    tostring(frame:IsShown()), st.style, tostring(st.rotate), st.zoom, st.size, st.alpha,
+    tostring(frame:IsShown()), tostring(G.Style()) .. (G.HeldStyle() and " (held)" or ""), tostring(st.rotate), st.zoom, st.size, st.alpha,
     tostring(st.showRoads), tostring(G.inside), poolUsed, linesUsed) .. (G.lastError and ("\nlast error: " .. G.lastError) or "")
 end
 
@@ -3213,7 +3246,7 @@ function G.ShowWorld()
   if not w then return end
   local _, _, cont = Geo.PlayerWorld()
   openedFrom = nil
-  fromTerrain = not G.IsMapStyle(S().style) or nil
+  fromTerrain = not G.IsMapStyle(G.Style()) or nil
   G.Browse(w, ViewCont(cont))
 end
 
@@ -3619,7 +3652,7 @@ end
 -- than its tiles go (MINIMAP_MAX_ZOOM; past that the zone maps' art showed instead, the map
 -- switching halfway through the zoom); a map browsed or the map style, all of it.
 function G.TourZoom(z)
-  if not browse and not G.IsMapStyle(S().style) then return math.min(z, G.MINIMAP_MAX_ZOOM - 1) end
+  if not browse and not G.IsMapStyle(G.Style()) then return math.min(z, G.MINIMAP_MAX_ZOOM - 1) end
   return z
 end
 
@@ -4645,7 +4678,7 @@ local function ViewChanged()
   return SigChanged(px and math.floor(px * 10) or false, py and math.floor(py * 10) or false, cont or false,
     math.floor((Geo.Facing() or 0) * 500), browseZoom or approachZoom or st.zoom, free and free.x or false, free and free.y or false,
     free and free.rot or false, browse or false, ns.Nav.route or false, #ns.Nav.stops, #pending,
-    ns.Layers and ns.Layers.version or 0, st.style, canvas:GetWidth())
+    ns.Layers and ns.Layers.version or 0, G.Style(), canvas:GetWidth())
 end
 
 function G.SetZoom(z)
@@ -4705,7 +4738,7 @@ function G.Init()
       return
     end
     if button == "RightButton" then
-      if G.IsMapStyle(S().style) then
+      if G.IsMapStyle(G.Style()) then
         G.ZoomOut()
       elseif S().terrainZoomOut ~= false then
         G.TerrainZoomOut()
@@ -5280,7 +5313,7 @@ function G.Init()
   end
   function G.QuickOn(t)
     if t.isOn then return t.isOn() and true or false end
-    if t.style then return S().style == t.style end
+    if t.style then return G.Style() == t.style end
     if t.action then return true end
     local v = S()[t.key]
     if t.defaultOn then return v ~= false end
@@ -5346,6 +5379,10 @@ function G.Init()
           return
         end
         if t.style then
+          if G.HeldStyle() then -- (a game on the map set it: API.HoldMap)
+            ns.Print(G.HELD_STYLE_TEXT)
+            return
+          end
           S().style = t.style
           if not G.IsMapStyle(t.style) and browse then G.BrowseToTerrain() end
           G.RefreshQuick()

@@ -181,7 +181,9 @@ The addon is going public, so every change must keep it policy-safe:
     AzerothGPS-StreetView (`docs/api.md`): geometry, the cursor's world point, overlays drawn
     on the map (`G.overlays`), showing the road network on request (`G.roadOwners`), and holding
     the map for a game on it (`G.holders`, `G.Held`: no route lines, pins, crosshair or top panel;
-    double-clicks go to the holder).
+    double-clicks go to the holder; API 9's `opts.style`, `G.SetHolder`: the style drawn while held,
+    `G.Style()` everywhere the map reads the style, the setting untouched, the style buttons and
+    `/agps style` refusing meanwhile; "unrevealed": the world map's base art, no areas, `G.SpoilerMode`).
   - `Bindings.xml`: the show/hide map key (loaded by the game, not listed in the toc; the
     names and `AzerothGPS_ToggleMap` are in Core.lua, the Set key button in Options.lua).
   - `Data/*.lua`: generated; don't edit by hand.

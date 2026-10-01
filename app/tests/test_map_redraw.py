@@ -238,6 +238,38 @@ def test_a_pin_on_a_dungeons_floor_and_in_the_copied_map_data(game):
     assert "Second floor" not in ns.Feedback.RoadsText()[0]
 
 
+def test_the_style_buttons_and_command_leave_a_held_style(game):
+    # (API 9) while a game holds the map with a style, the Map Style buttons and /agps style don't change
+    # it (they say why); the map draws it at every zoom; let go, the player's own is back
+    lua, ns = game
+    G, A = ns.GPS, lua.globals().AzerothGPS
+    said = lua.eval("{}")
+    old_print = ns.Print
+    ns.Print = lua.eval("function(t) return function(msg) t[#t + 1] = msg end end")(said)
+    try:
+        ns.settings.gps.style = "minimap"
+        A.HoldMap("game", True, None, lua.eval('{ style = "unrevealed" }'))
+        lua.execute("AGPS_T = 700")
+        G.Update()
+        zone = next(t for t in G.QUICK.values() if t.style == "zone")
+        zone.button._scripts.OnClick(zone.button)
+        assert ns.settings.gps.style == "minimap" and G.Style() == "unrevealed"
+        assert said[1] == G.HELD_STYLE_TEXT
+        assert not G.QuickOn(zone) and G.QuickOn(next(t for t in G.QUICK.values() if t.style == "minimap")) is False
+        lua.globals().SlashCmdList.AZEROTHGPS("style zone")
+        assert ns.settings.gps.style == "minimap"
+        assert [m for m in said.values() if m == G.HELD_STYLE_TEXT] == [G.HELD_STYLE_TEXT] * 2
+        A.HoldMap("game", False)
+        assert G.Style() == "minimap"
+        lua.globals().SlashCmdList.AZEROTHGPS("style zone")
+        assert ns.settings.gps.style == "zone"
+    finally:
+        ns.Print = old_print
+        A.HoldMap("game", False)
+        ns.settings.gps.style = "minimap"
+        lua.execute("AGPS_T = 701")
+        G.Update()
+
 def test_the_dev_hooks_for_sharing(game):
     # (the private dev addon, AzerothGPS_Dev: AzerothGPS_Extend runs its setup with ns; the one way
     # out, Import.io.send; messages in, Import.OnAddonMessage; the popup, Import.Offer)

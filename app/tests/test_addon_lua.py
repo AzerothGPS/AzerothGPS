@@ -4728,7 +4728,7 @@ def test_public_api_exposes_documented_functions(api):
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
                  "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
         assert A[name] is not None, name
-    assert A.version == 8
+    assert A.version == 9
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
 
@@ -4747,6 +4747,49 @@ def test_public_api_hold_map_takes_double_clicks_until_let_go(api):
     assert not G.Held()
     assert G.HeldClick(1, 2, 0) is False
 
+
+def test_a_held_map_style_overrides_the_setting_until_let_go(api):
+    # (StreetView asked, API 9: a game's difficulty locks every player's map style) a holder's style is
+    # what the map draws, the setting untouched; holding again updates it; letting go brings the player's
+    # own back; no style, as before
+    lua, ns, A = api
+    G = ns.GPS
+    ns.settings = lua.eval('{ gps = { style = "minimap", zoom = 300 } }')
+    assert G.Style() == "minimap"
+    A.HoldMap("game", True, None, lua.eval('{ style = "zone" }'))
+    assert G.Style() == "zone" and G.HeldStyle() == "zone" and ns.settings.gps.style == "minimap"
+    assert G.IsMapStyle(G.Style())
+    A.HoldMap("game", True, None, lua.eval('{ style = "unrevealed" }'))  # (a joiner learns the level a moment later)
+    assert G.Style() == "unrevealed" and G.IsMapStyle("unrevealed")
+    A.HoldMap("game", True, None, lua.eval('{ style = "sideways" }'))  # (not a style: none held)
+    assert G.Style() == "minimap"
+    A.HoldMap("game", True, None, lua.eval('{ style = "minimap" }'))
+    ns.settings.gps.style = "zone"
+    assert G.Style() == "minimap"  # (held: the terrain view, whatever the player picked)
+    A.HoldMap("game", False)
+    assert G.Style() == "zone" and G.HeldStyle() is None
+    A.HoldMap("game", True)  # (no opts: today's behavior)
+    assert G.Style() == "zone"
+    A.HoldMap("game", False)
+
+
+def test_the_unrevealed_style_draws_no_explored_areas(api):
+    # (API 9) "unrevealed": the world map's base art only, no area overlays at all (the same for every
+    # character); "zone" all of them
+    lua, ns, A = api
+    load(lua, ns, "Data/Maps.lua")
+    G = ns.GPS
+    mid = next(k for k in sorted(ns.Maps.keys()) if ns.Maps[k].overlays and len(ns.Maps[k].overlays) > 0
+               and ns.Maps[k].tiles and ns.Maps[k].bounds)
+    b = ns.Maps[mid].bounds
+    cx, cy = (b[1] + b[3]) / 2, (b[2] + b[4]) / 2
+    zoom = max(b[3] - b[1], b[4] - b[2])
+    n = {style: len(G.LayoutZone(cx, cy, mid, 0, zoom, 200, None, G.SpoilerMode(style)))
+         for style in ("zone", "unrevealed")}
+    tiles = lua.eval("function(G, m, x, y, z) local t = G.LayoutZone(x, y, m, 0, z, 200, nil, 'none') return #t end")
+    assert G.SpoilerMode("unrevealed") == "none" and G.SpoilerMode("nospoiler") is True and not G.SpoilerMode("zone")
+    assert 0 < n["unrevealed"] < n["zone"], n
+    assert n["unrevealed"] == tiles(G, mid, cx, cy, zoom)
 
 def test_api_saves_and_restores_the_whole_view(api):
     # (StreetView asked: a game ending put a browsed continent or world map back as a zoomed-out

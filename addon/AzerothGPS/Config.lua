@@ -61,7 +61,11 @@ SlashCmdList.AZEROTHGPS = function(msg)
   elseif a == "rotate" then
     gps.rotate = OnOff(b, gps.rotate)
   elseif a == "style" and (b == "minimap" or b == "zone" or b == "nospoiler") then
-    gps.style = b
+    if ns.GPS.HeldStyle and ns.GPS.HeldStyle() then -- (a game on the map set it: API.HoldMap)
+      ns.Print(ns.GPS.HELD_STYLE_TEXT)
+    else
+      gps.style = b
+    end
   elseif a == "lock" or a == "unlock" then
     -- both, or just "map" / "arrow"
     local lock = a == "lock"

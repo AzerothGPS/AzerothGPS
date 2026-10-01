@@ -990,7 +990,7 @@ function L.Marks(cont, cx, cy, reach, mapIDs, level)
     end
   end
   -- (city locations on the terrain view only, not on the world map styles)
-  if st.layerCity and not (ns.GPS and ns.GPS.IsMapStyle and ns.GPS.IsMapStyle(st.style)) then
+  if st.layerCity and not (ns.GPS and ns.GPS.IsMapStyle and ns.GPS.IsMapStyle(ns.GPS.Style and ns.GPS.Style() or st.style)) then
     -- (and those down in its underground cities, saved on their levels, drawn here too)
     local saved = {}
     for lc, list in pairs(L.CityDB()) do

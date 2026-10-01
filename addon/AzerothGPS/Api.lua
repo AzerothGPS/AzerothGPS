@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 8 }
+local API = { version = 9 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -138,12 +138,15 @@ end
 -- and the arrow window unchanged), the stops' pins, the crosshair with Confirm Route and the top
 -- panel aren't shown, and a double-click on the map (or on one of its icons) calls
 -- onDoubleClick(x, y, continent) instead of making a stop. on = false lets go.
-function API.HoldMap(owner, on, onDoubleClick)
+-- (Version 9) `opts.style`: the map drawn in that style while held, whatever the player's own setting
+-- (not changed; back on release): "minimap" (the terrain view), "zone" (the world map's art, every area
+-- shown), "unrevealed" (the world map's art with no area shown: the same for every character), or
+-- "nospoiler". The style buttons and /agps style don't change it meanwhile. Holding again updates it.
+function API.HoldMap(owner, on, onDoubleClick, opts)
   local G = GPS()
   if not G then return end
-  G.holders[owner] = on and { click = onDoubleClick } or nil
-  if on and G.StopTools then G.StopTools() end -- (no road, wall or farming tools during it)
-  G.Redraw()
+  local style = type(opts) == "table" and G.HOLD_STYLES[opts.style] and opts.style or nil
+  G.SetHolder(owner, on and { click = onDoubleClick, style = style } or nil)
 end
 -- Look at a spot: the map centered on (x, y) of `cont`, north up, `zoom` yards from the middle
 -- to the edge. "Back to your position" (or API.Follow) returns to the player.

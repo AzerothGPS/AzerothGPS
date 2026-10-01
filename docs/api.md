@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 8) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 9) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -53,6 +53,14 @@ center, +x right and +y up.
   route (still followed; the arrow window is unchanged), the stops' pins, the crosshair with
   Confirm Route and the top panel aren't shown, and a double-click on the map or one of its
   icons calls `onDoubleClick(x, y, continent)` instead of making a stop. `on = false` lets go.
+- `HoldMap(owner, on, onDoubleClick, opts)` (version 9): `opts.style` draws the map in that style
+  while it's held, at every zoom as for a player who picked it, whatever the player's own setting
+  (which isn't changed, and is back on release): `"minimap"` (the terrain view), `"zone"` (the
+  world map's art, every area shown), `"unrevealed"` (the world map's art with no area shown at
+  all: the same for every character), or `"nospoiler"` (the areas this character explored).
+  Holding again with another style updates it. Meanwhile the Map Style buttons and `/agps style`
+  don't change it (they say the game on the map sets it). No `opts`, or no style: as before.
+  An older AzerothGPS ignores the 4th argument: check `AzerothGPS.version >= 9`.
 - `LookAt(cont, x, y, zoom)`: centers the map on that spot, north up, `zoom` yards from the
   middle to the edge. "Back to your position" or `Follow()` returns to the player.
 - `ShowWorld()`: the world map, as right-clicking out to the top level (from the terrain view, a
