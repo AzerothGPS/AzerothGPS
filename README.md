@@ -2,6 +2,14 @@
 
 # AzerothGPS
 
+[![Release build](https://github.com/AzerothGPS/AzerothGPS/actions/workflows/release.yml/badge.svg)](https://github.com/AzerothGPS/AzerothGPS/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/AzerothGPS/AzerothGPS?label=release)](https://github.com/AzerothGPS/AzerothGPS/releases/latest)
+[![CurseForge downloads](https://img.shields.io/curseforge/dt/1712208?label=CurseForge&logo=curseforge&color=F16436)](https://www.curseforge.com/projects/1712208)
+![WoW Forever 1.60.1](https://img.shields.io/badge/WoW%20Forever-1.60.1-1f6feb)
+![Interface 16001](https://img.shields.io/badge/interface-16001-555555)
+![Lua 5.1](https://img.shields.io/badge/Lua-5.1-2C2D72?logo=lua&logoColor=white)
+[![Last commit](https://img.shields.io/github/last-commit/AzerothGPS/AzerothGPS)](https://github.com/AzerothGPS/AzerothGPS/commits/main)
+
 Car-GPS style navigation **inside World of Warcraft: Forever**. Routes follow the
 game's roads, with turn-by-turn directions, multi-stop trips (boats and zeppelins
 included), quests on the map, and TomTom `/way` import and sharing.
