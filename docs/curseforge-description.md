@@ -35,7 +35,7 @@ Every herb and ore node you gather, hover over on the minimap, or right-click wi
 
 ## Spot a mistake? Fix it
 
-If a route misses a trail or walks you into a wall, draw the fix right on the map and routes use it straight away. Send it in (`/reload`, then **Copy Map Data...**) and if it checks out, it ships in the next version for everybody.
+If a route misses a trail or walks you into a wall, draw the fix right on the map and routes use it straight away. Send it by following directions in "Help improve" menu (`/reload`, then **Copy Map Data...**) and if it checks out, it ships in the next version for everybody.
 
 ![Road tools in Duskwood: circling a false road to erase it, then drawing the real one](https://i.imgur.com/WjwnjW1.gif)
 
