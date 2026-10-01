@@ -291,6 +291,13 @@ def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
     N.SetStops(lua.eval("{ { x = -1441, y = -2332, cont = 0 } }"), False, "red")
     lua.execute("AGPS_T = 800")
     G.Update()
+    # (it walks through Hillsbrad, too high for the character: "Keep this route?", yes; until then it isn't
+    # drawn or followed, N.RedAsking)
+    lua.execute("AGPS_T = 800.5")
+    G.Update()
+    if N.RedAsking():
+        G.confirmBox.yes._scripts.OnClick(G.confirmBox.yes)
+    assert not N.RedAsking()
     real = N.UseNow
     hearth = lua.eval("{ 0, 2254, 293, 0, -8900, -160, 10, 'your Hearthstone', '', 'Northshire Valley', 'your Hearthstone', use = true, item = 6948 }")
     N.UseNow = lua.eval("function(t) return function() return t end end")(hearth)

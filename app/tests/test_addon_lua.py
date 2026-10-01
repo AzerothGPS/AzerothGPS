@@ -5216,13 +5216,36 @@ def test_a_route_walking_through_a_zone_too_high_asks_first(nav_env):
     N.CheckRedRoute(brill[0], brill[1], 0, 100)
     popup = lua.eval("ASKED")
     assert popup and "The only way there walks through Alterac Mountains" in popup.text
+    # (and not drawn or followed while asked: the map and the arrow leave it out, asked 2026-10-01)
+    assert N.RedAsking()
     popup.data[2]()
-    assert len(N.stops) == 0
+    assert len(N.stops) == 0 and not N.RedAsking()
     # Yes: not asked again for that zone on this route
     N.stops = lua.table(lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill"))
     N.redOk = lua.table()
     N.redOk[zone("Alterac Mountains")] = True
     assert N.RedOnRoute(route, brill[0], brill[1], 0) is None
+
+
+def test_no_route_without_the_rides_removed_asks_to_put_them_back(nav_env):
+    # (asked: a route to another continent, the boats removed from it, no teleport: "Route not possible
+    # without" them) no route, rides removed: asked by name; yes puts them back, no clears the route
+    lua, ns = nav_env
+    load(lua, ns, "GPSFrame.lua")
+    N = ns.Nav
+    ns.Print = lua.eval("function() end")
+    ns.Ask = lua.eval("function(name, text, yes, no, onYes, onNo) ASKED = { text = text, data = { onYes, onNo } } end")
+    lua.execute("ASKED = nil")
+    N.SetDestination(9700.0, 2300.0, 1, "Darnassus")
+    boat = next(t for t in ns.Transports.values() if t[8] == "boat")
+    N.SkipRide(boat, None, "Boat to Auberdine")
+    assert N.AskSkipped()
+    popup = lua.eval("ASKED")
+    assert popup and popup.text.startswith("Route not possible without Boat to Auberdine.") and "Put it back?" in popup.text
+    assert not N.AskSkipped()  # (once)
+    popup.data[1]()
+    assert not any(True for _ in N.skipRides.keys())
+    N.Clear()
 
 
 def test_a_dungeons_way_in_is_learned_and_shared(env, tmp_path, monkeypatch):

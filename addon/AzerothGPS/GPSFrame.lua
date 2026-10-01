@@ -2503,6 +2503,7 @@ function G.Update()
   ns.Nav.Tick()
   local dest = ns.Nav.dest
   local route = not hidden and ns.Nav.Route(px, py, cont) or nil
+  if route and ns.Nav.RedAsking and ns.Nav.RedAsking() then route = nil end -- (asked "keep this route?": not drawn yet)
   if route and not G.Held() then -- (held by another addon: the route goes on, not drawn)
     -- Every part of the route, converted into this view's continent coordinates.
     local reach = half * 1.5
@@ -4219,7 +4220,7 @@ function G.AskRemove(pin)
         ns.Nav.SkipLearn(self.learnNode)
         elapsed = 1
       elseif self.ride then -- (a ride, or a flight's connection: not taken on this route)
-        ns.Nav.SkipRide(self.ride, self.hop)
+        ns.Nav.SkipRide(self.ride, self.hop, self.rideName)
         elapsed = 1
       elseif self.customPin then -- (a pin: gone)
         ns.Pins.Remove(self.customPin)
@@ -4237,6 +4238,7 @@ function G.AskRemove(pin)
   end
   removeAsk.pendingIndex, removeAsk.stopIndex, removeAsk.learnNode = pin.pendingIndex, pin.stopIndex, pin.learnNode
   removeAsk.ride, removeAsk.hop, removeAsk.customPin = pin.ride, pin.hop, pin.pin
+  removeAsk.rideName = pin.ride and pin.title or nil
   removeAsk.shownAt = GetTime()
   removeAsk:ClearAllPoints()
   removeAsk:SetPoint("BOTTOM", pin, "TOP", 0, 2)

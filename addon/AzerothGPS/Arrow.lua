@@ -168,6 +168,7 @@ local function UpdateText(px, py, cont)
   bang:Hide()
   dist:Hide()
   local r, d = N.route, N.dest
+  if r and N.RedAsking and N.RedAsking() then r = nil end -- (asked "keep this route?": not followed yet)
   if not d and N.areaQuests then
     -- no route, in a quest's area: its objectives, with a big "!"
     path, maneuvers = nil, nil

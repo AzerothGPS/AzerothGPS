@@ -475,14 +475,17 @@ function N.RideKey(t, hop)
   if t.from and t.to then return "f:" .. tostring(t.from) .. ">" .. tostring(t.to) end
   return string.format("t:%s:%.0f,%.0f>%.0f,%.0f", tostring(t[8]), t[2], t[3], t[5], t[6])
 end
-function N.SkipRide(t, hop)
-  N.skipRides[N.RideKey(t, hop)] = true
+N.skipNames = {} -- [key] = the ride's name (its pin's: "Boat to Auberdine"), for "Route not possible without"
+function N.SkipRide(t, hop, name)
+  local key = N.RideKey(t, hop)
+  N.skipRides[key] = true
+  N.skipNames[key] = name
   N.FlightsChanged() -- (the flights over a connection left out: worked out again without it)
   N.SaveStops()
 end
 function N.ClearSkippedRides()
   if next(N.skipRides or {}) then N.FlightsChanged() end
-  N.skipRides = {}
+  N.skipRides, N.skipNames = {}, {}
 end
 
 -- Recompute the flights on the next plan (a flight map was opened, the option changed).
@@ -1702,6 +1705,10 @@ end
 -- Once a route is worked out (settled, or 3 s on): walking through a zone too high for the
 -- player asks first (GPSFrame's ConfirmRedRoute); no clears the route.
 local redChecked, redSeenAt = nil, nil
+local redAsking -- (the stops' version while asked)
+-- Whether "keep this route?" is being asked about it: it isn't drawn or followed until the answer is
+-- yes (asked 2026-10-01: the route through the zones showed while the popup asked about it).
+function N.RedAsking() return redAsking ~= nil and redAsking == version end
 function N.CheckRedRoute(px, py, cont, now)
   local r = N.route
   local d = N.dest
@@ -1711,12 +1718,44 @@ function N.CheckRedRoute(px, py, cont, now)
   redChecked = version
   local zones = N.RedOnRoute(r, px, py, cont)
   if not (zones and ns.GPS and ns.GPS.ConfirmRedRoute) then return end
-  ns.GPS.ConfirmRedRoute(zones, function()
+  redAsking = version
+  local asked = ns.GPS.ConfirmRedRoute(zones, function()
+    redAsking = nil
     for _, z in ipairs(zones) do N.redOk[z.z] = true end
     N.SaveStops()
+    if ns.GPS.Redraw then ns.GPS.Redraw() end
   end, function()
+    redAsking = nil
     N.Clear()
   end)
+  if not asked then redAsking = nil end
+end
+
+-- No route, with rides the player removed from it (N.SkipRide): "Route not possible without" them, put
+-- back? (asked 2026-10-01) Yes: back in, the route worked out again; no: the route cleared. Once per change.
+N.RED_ASK_TEXT = "Waiting: keep the route through zones too high for you?"
+local skipAsked
+function N.AskSkipped()
+  local n = 0
+  for _ in pairs(N.skipRides or {}) do n = n + 1 end
+  local key = version .. ":" .. n
+  if n == 0 or skipAsked == key or not N.dest or not (ns.GPS and ns.GPS.Confirm) then return false end
+  skipAsked = key
+  local names = {}
+  for k in pairs(N.skipRides) do
+    if N.skipNames[k] then names[#names + 1] = N.skipNames[k] end
+  end
+  table.sort(names)
+  local what = #names > 0 and table.concat(names, ", ") or "the rides you removed"
+  return ns.GPS.Confirm(string.format("Route not possible without %s.\n\nPut %s back?", what, n == 1 and "it" or "them"),
+    function()
+      N.ClearSkippedRides()
+      N.SaveStops()
+      if ns.GPS.RouteChanged then ns.GPS.RouteChanged() end
+    end, function()
+      N.Clear()
+      if ns.GPS.Follow then ns.GPS.Follow() end
+    end)
 end
 
 -- Keep route `old` instead of the recalculated `new`? When `new` is clearly longer (the
@@ -2573,7 +2612,11 @@ function N.Status(px, py, cont)
   N.MaybeReorder(px, py, cont)
   local d = N.dest
   local r = N.Route(px, py, cont)
-  if not r then return N.warming and N.WorkingText() or "No way there found" end
+  if not r then
+    if not N.warming then N.AskSkipped() end -- (rides removed: put back?)
+    return N.warming and N.WorkingText() or "No way there found"
+  end
+  if N.RedAsking() then return N.RED_ASK_TEXT end -- (not shown until kept)
   working = nil -- (the next time: picked again)
   local cur, walk, mount, mounted, ability = N.Speeds()
   local head = N.FormatDistance(r.length)
