@@ -77,7 +77,11 @@ The addon is going public, so every change must keep it policy-safe:
     Inside maps (`G.FindInterior`): a model's indoor rooms only (or where the game says indoors;
     down in an underground city, any of its rooms); indoors the inside map shows at any zoom,
     outdoors up to `INTERIOR_MAX_ZOOM`. Never from Stormwind's city model (`G.NO_INSIDE_MAP`: its
-    streets have art and district names too, and it looks worse than the terrain).
+    streets have art and district names too, and it looks worse than the terrain). In a city (a
+    capital's own cells, down in an underground city) its inside map shows at any zoom, and the wheel
+    zooms out no further than `CITY_MAX_ZOOM` (`G.cityMap`; zoomed further out on the way in, zoomed
+    in to it): right-click for the land around. The title (the coordinates line's place) names the
+    city there (`G.CityMapAt`: the ground's zone is the land's, Dun Morogh over Ironforge).
   - `Layers.lua`: quests, quest areas, herbs and ore (gathered, hovered on the minimap,
     right-clicked without the profession, imported; unconfirmed until gathered), and city
     locations guards point out (`C_GossipInfo` points of interest, saved account-wide).
@@ -224,7 +228,10 @@ The addon is going public, so every change must keep it policy-safe:
     the continent's, 2 closed) from the floors reached on foot from the ground at its gates,
     the top one per cell (bridges, ramps and tower tops over the streets); stairs and spiral
     ramps between levels are found in 3D (`walknet.build(road_pieces=True)`), and its roads are
-    one `ns.RoadOverlays[cont]` entry joined onto the land's road at the gates. Those roads are its
+    one `ns.RoadOverlays[cont]` entry joined onto the land's road at the gates (a gate whose roads the
+    drawn fixes erased has none: `capitals --write` warns, and a road drawn in game through the gate is
+    the way out; the merge in `Router.BuildGraph` drops the land's roads through a city's closed cells,
+    but never a drawn one, source 2: Stormwind's gate road went once shipped). Those roads are its
     **streets** (`capitals.streets`): of the floors' roads (every square's middle, a jumble), the
     edges along the NPCs' walks (`patrol_points`, the path files `agps npc-paths` reads;
     `STREET_*`), the shortest ways between every two of its gates, places (CityPlaces, the check's,
@@ -245,7 +252,9 @@ The addon is going public, so every change must keep it policy-safe:
     a flight master or dock, `capitals.up_top_spots`), with their own roads (a `cave` entry,
     no gap links). A straight line (`Passability.Overlay`) goes by the floor over them. A city
     under a mountain (Ironforge, `indoor`) is also written like a cave (its floor under walkable
-    land 3, its rock there the continent's; `IsIndoors` tells). A city on its own ground
+    land 3, its rock there the continent's), and its grid has a `zsplit` (between its floor and the
+    ground over it: lower, down in the city, `Router.CaveDown`; `IsIndoors` said outdoors in its halls
+    and routes took the mountain over it). A city on its own ground
     (Thunder Bluff's mesas, Darnassus: `ground_above`) takes that ground in too; its gates'
     ways to the land's roads may not cross blocked ground (`join_blocked`), and a lift
     (`lifts`: Thunder Bluff's from Mulgore, shafts from the cmangos DB's "Mesa Elevator") is a
@@ -259,6 +268,10 @@ The addon is going public, so every change must keep it policy-safe:
     the file, `--check` routes from outside the gate to every place (CityPlaces, the check's
     own, each named area of the models) and walks the routes in 3D over the floors
     (`capitals.walk_3d`; "!" marks a jump between levels or a long last leg).
+  - `Data/Transit.lua` (`agps transit --write`, `instances.TRANSIT_MAPS`): maps the game puts you on
+    between places (the Deeprun Tram, map 369): a level like an instance's (`instance`, `transit`: no
+    entrances, bosses or roads), its models' art, so the map shows it as a dungeon's; its name in the
+    title. The ride between the cities is still `Data/Transports.lua`'s tram.
   - `Data/Instances.lua` (`app/azerothgps/instances.py`): dungeons and raids, each instance map
     (the client's Map rows with InstanceType 1 or 2) a level of its own like Undercity's:
     **level id = 20000 + its MapID** (the Deadmines, map 36: 20036), in the instance's own world

@@ -59,6 +59,11 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 - Stormwind's map switched between the city's own map and the terrain as you zoomed: Stormwind now keeps the terrain map. Elsewhere, a building's inside map shows only indoors (at any zoom).
 - The map window's title is centered (it sat a little right of the middle).
 - The logo at the top left of the map and options windows stands on its own, without the circle, and is sharp: drawn at the size your screen shows it, not shrunk by the graphics card. Options → Map, **Logo in a round portrait** brings the circle back.
+- Routes out of Stormwind went straight out through the city's wall (and after a moment by the Deeprun Tram and a long walk): a road drawn in through its gate was dropped once it was in the data. Drawn roads are always kept now.
+- In Ironforge, routes cut straight across the Great Forge and the Forlorn Cavern's pool instead of along its halls: the game can report its halls as outdoors, and that took you to be up on the mountain over the city. Your height tells now.
+- In a city with its own inside map (Ironforge, Undercity), zooming out stops at the city's map instead of turning to the land around it; right-click for the outside. Coming into the city zoomed far out, the map zooms in to it.
+- The map's title says the city you're in (Ironforge, not Dun Morogh).
+- The Deeprun Tram has its map (it was blank), with its name in the title.
 - A zeppelin's or boat's dock that was a stop lost its countdown (hidden with its icon under the stop's marker): the countdown now shows under the stop.
 - A straight line over the hills could replace the roads after standing still for a while.
 - A flight could stop being suggested after a stop was added elsewhere and taken back.

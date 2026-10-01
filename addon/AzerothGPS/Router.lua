@@ -1159,7 +1159,9 @@ function BuildGraph(cont)
         local x, y = nodes[nd * 2 - 1], nodes[nd * 2]
         if x > ox0 - 400 and x < ox1 + 400 and y > oy0 - 400 and y < oy1 + 400 then near = true end
       end
-      if not (near and throughWalls(e)) then e2[#e2 + 1] = e end
+      -- (a road drawn in game (source 2) is truth: kept through them, as before it was in the data:
+      -- Stormwind's gate road, drawn through its gate's closed cells, went once shipped, 2026-09-30)
+      if e[4] == 2 or not (near and throughWalls(e)) then e2[#e2 + 1] = e end
     end
     local roadsEnd = #e2
     for k, e in ipairs(extra.e) do
@@ -2015,8 +2017,11 @@ function R.CaveDown(cont, x, y, indoors, z)
   local P = ns.Passability
   local v, o = P.OverlayRaw(cont, x, y)
   if v == nil or not (o and o.cave) then return false end
-  if v == 3 and o.split then
-    if z then return z < o.split end
+  -- (a floor under another's: `split`; a city under a mountain's own grid, Ironforge's: `zsplit`, its
+  -- floor or the ground over it, not skipped as the floors under others are by Passability's `floors`)
+  local split = o.split or o.zsplit
+  if v == 3 and split then
+    if z then return z < split end
     return true
   end
   if v == 3 and indoors ~= nil then return indoors end
@@ -2573,7 +2578,12 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
   local s, t = ss[1], ts[1]
   if not s or not t then return Straight(g, sx, sy, tx, ty) end
-  if not offroad and directSafe and Dist(sx, sy, tx, ty) <= s.dist + t.dist then return Straight(g, sx, sy, tx, ty) end
+  -- (no closer to a road than to each other: straight; not in a capital, whose grid doesn't show its
+  -- walls where its floor is under the land (Ironforge's: straight across the Great Forge, 2026-09-30))
+  if not offroad and directSafe and Dist(sx, sy, tx, ty) <= s.dist + t.dist
+      and not R.CapitalAt(cont, sx, sy) and not R.CapitalAt(cont, tx, ty) then
+    return Straight(g, sx, sy, tx, ty)
+  end
 
   local OFF, ROAD = R.KIND_OFFROAD, R.KIND_ROAD
   -- a terrain search this route needs is still running: it's provisional (see Nav's Route)

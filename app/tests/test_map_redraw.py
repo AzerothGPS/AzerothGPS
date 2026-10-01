@@ -824,3 +824,61 @@ def test_the_place_is_in_the_title_bar_and_the_coordinates_at_the_bottom(game):
     finally:
         G.chrome = chrome
         G.UpdateInfo()
+
+
+def test_in_a_city_the_wheel_doesnt_zoom_out_past_its_map(game):
+    # (reported: in Ironforge, zooming out turned the city's map into the terrain around it) in a city
+    # whose inside map shows, its map at any zoom (zoomed in to it on the way in), the wheel no further
+    # out than CITY_MAX_ZOOM; outside a city, zooming out as before
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    zoom = st.zoom
+    # (Ironforge, the Great Forge: its floor's height, its name)
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4840.0, -1100.0, 0, 501.7 "
+                "AGPS_ZONE_REAL = GetMinimapZoneText GetMinimapZoneText = function() return 'The Great Forge' end")
+    try:
+        for indoors in ("true", "false"):  # (Ironforge's halls: indoors or not, the city's map)
+            lua.execute(f"AGPS_INDOORS_REAL = AGPS_INDOORS_REAL or IsIndoors IsIndoors = function() return {indoors} end")
+            G.Follow()
+            st.zoom = 2000.0
+            lua.execute("AGPS_T = AGPS_T + 1")
+            G.Update()
+            assert G.inside is not None and G.cityMap, indoors
+            assert str(G.LocateWorld(0, -4840.0, -1100.0)[1]) == "Ironforge"  # (the city's name, not Dun Morogh's over it)
+            assert st.zoom == G.CITY_MAX_ZOOM  # (zoomed in to the city's map)
+            G.WheelZoom(1.25)
+            assert st.zoom == G.CITY_MAX_ZOOM  # (no further out: right-click for the land around)
+            G.WheelZoom(0.8)
+            assert st.zoom < G.CITY_MAX_ZOOM
+        lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil "
+                    "GetMinimapZoneText = AGPS_ZONE_REAL AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert not G.cityMap
+        before = st.zoom
+        G.WheelZoom(1.25)
+        assert st.zoom > before  # (outside a city: out as before)
+    finally:
+        st.zoom = zoom
+        lua.execute("IsIndoors = AGPS_INDOORS_REAL or IsIndoors GetMinimapZoneText = AGPS_ZONE_REAL or GetMinimapZoneText "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
+def test_the_deeprun_tram_has_its_map(game):
+    # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
+    # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    assert ns.Instances[20369].transit and len(ns.Instances[20369].entrances) == 0
+    lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 0.0, 270.0, 369, 0 AGPS_T = AGPS_T + 1")
+    try:
+        assert N.PlayerLevel(369) == 20369
+        G.Follow()
+        G.Update()
+        assert str(G.infoName) == "Deeprun Tram"
+        quads = int(str(G.Describe()).split("quads=")[1].split()[0])
+        assert quads > 0  # (its art drawn)
+        assert not any(e.level == 20369 for c in (0, 1) for e in G.InstanceEntrances(c).values())  # (no dungeon icon)
+    finally:
+        lua.execute("AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()

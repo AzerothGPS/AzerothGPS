@@ -5053,3 +5053,32 @@ def test_the_map_windows_title_is_centered(env):
     (a1, x1, y1), (a2, x2, y2) = [(pts[i][1], pts[i][4], pts[i][5]) for i in (1, 2)]
     assert (a1, a2) == ("TOPLEFT", "TOPRIGHT") and x1 == -x2 and y1 == y2 == -1
 
+
+
+def test_in_ironforge_the_route_keeps_to_its_halls_though_the_game_says_outdoors(capitals_env):
+    # (reported: in Ironforge the routes ran straight across the Great Forge and over the Forlorn
+    # Cavern's pool) IsIndoors said outdoors in its halls, and over its floor under the mountain that
+    # made the player up on the mountain, with no roads of the city's: the player's height tells now
+    # (the city's grid's `split`, between its floor and the ground over it)
+    lua, ns = capitals_env
+    R = ns.Router
+    forge, cavern, z = (-4763.4, -1107.8), (-4628.4, -1100.1), 502.0
+    assert R.CaveDown(0, *forge, False, z)
+    r = R.Route(0, *forge, *cavern, lua.table(offroad=False, z=z, indoors=False, tz=z))
+    share, closed, last = check_capital_route(ns, 0, r)
+    assert share > 0.6 and closed < 5 and last < 40, (share, closed, last)
+
+
+def test_out_of_stormwind_the_route_takes_the_gate_and_the_roads(capitals_env):
+    # (reported: from Stormwind to the Redridge border, a straight line out through the city's wall, then
+    # the Deeprun Tram and a 34-minute walk) the erasures drawn at its gate had left its streets no road
+    # out to Elwynn's: the nearest street runs out to the gate again (capitals.remouth)
+    lua, ns = capitals_env
+    pts_off = []
+    for start in ((-8832.0, 625.0), (-8750.0, 430.0)):  # (the Trade District, Old Town)
+        r = ns.Router.Route(0, *start, -9613.0, -2072.0, lua.table(offroad=False))
+        pts, kinds = route_pts(r)
+        off = sum(math.dist(pts[i], pts[i + 1]) for i, k in enumerate(kinds) if k != 0)
+        pts_off.append(off)
+        assert off < 300, (start, off, r.length)
+        assert min(_seg_dist(p, q, (-9095.0, 412.0)) for p, q in zip(pts, pts[1:])) < 40  # (out by the gate)

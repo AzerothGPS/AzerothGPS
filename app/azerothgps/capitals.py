@@ -543,7 +543,13 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         gh, _ = ground.sample(X, Y)
         up = cont_at(X, Y) != 2
         cells[fp & ~walk & up] = CONT
-        cells[fp & walk & up & (gh > u["top"] + walknet.HEAD + 2)] = FLOOR_UNDER
+        under = fp & walk & up & (gh > u["top"] + walknet.HEAD + 2)
+        cells[under] = FLOOR_UNDER
+        # (and a height between the city's floor and the ground over it there: lower, the player is down
+        # in the city (Router.CaveDown). IsIndoors alone said outdoors in Ironforge's halls (2026-09-30):
+        # its routes took the mountain over it, straight across the Great Forge)
+        if under.any():
+            u["split"] = float(np.median((u["top"][under] + gh[under]) / 2))
     u.update({"footprint": fp, "overlay": cells, "name": cap.name, "capital": cap})
     # each named area's spot (the checks route to them): of its floors walked on (open, the
     # floor the grid shows), the one nearest their middle
@@ -715,6 +721,8 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         g.add_edge(near[0][1], end, [g.nodes[near[0][1]], (lx, ly), land[0][1]], source="lift")
         joins.append((end, land[0][1]))
     u.update({"joins": joins, "mouths": [n for n in mouths if n in g.nodes]})
+    if not joins:  # (the drawn fixes erased its gates' roads: only a road drawn in through a gate joins it now)
+        log(f"  {cap.name}: WARNING no road out of its gates (a road drawn in game through one joins it)")
     u["labels"] = city_labels(cd, cap, u, box)
     log(f"  {cap.name}: {len(g.nodes)} nodes, {g.total_length():.0f} yd of road, {len(u['mouths'])} gate roads, "
         f"{len(joins)} joined, grid {W}x{H}; {len(u['labels'])} district labels")
@@ -1031,7 +1039,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                 halls.append(key)
         for u in lst:
             grid(key_of(u["capital"]), u["overlay"], u["tx0"], u["ty0"],
-                 " capital = true," + (" cave = true," if u["capital"].indoor else ""))
+                 " capital = true," + (" cave = true," if u["capital"].indoor else "")
+                 + (f" zsplit = {u['split']:.1f}," if u.get("split") is not None else ""))
             halls.append(key_of(u["capital"]))
         out.append("do -- the capitals' roads (the format of Data/Roads.lua)")
         out.append(f"  local halls = ns.CityHalls[{cont}] or {{}}")

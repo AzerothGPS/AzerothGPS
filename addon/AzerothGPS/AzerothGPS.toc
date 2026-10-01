@@ -24,6 +24,7 @@ Data\Cities.lua
 Data\Caves.lua
 Data\Capitals.lua
 Data\Instances.lua
+Data\Transit.lua
 Data\CityPlaces.lua
 Data\Hostile.lua
 Data\Zones.lua

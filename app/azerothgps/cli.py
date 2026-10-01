@@ -181,6 +181,20 @@ def cmd_gen_addon_data(args) -> int:
     return 0
 
 
+def cmd_transit(args) -> int:
+    """Maps you pass through (the Deeprun Tram): with --write, Data/Transit.lua (their art, shown like a
+    dungeon's map)."""
+    from .instances import transit_lua
+
+    cd = _client(args)
+    text = transit_lua(cd)
+    if args.write:
+        p = ADDON_DIR / "Data" / "Transit.lua"
+        p.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {p} ({p.stat().st_size // 1024} KB)")
+    return 0
+
+
 def cmd_media(args) -> int:
     from .media import make
     from .paths import REPO
@@ -535,6 +549,11 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("gen-addon-data", help="write addon/AzerothGPS/Data/*.lua from the client")
     client_args(sp)
     sp.set_defaults(fn=cmd_gen_addon_data)
+
+    sp = sub.add_parser("transit", help="maps you pass through (the Deeprun Tram): their art (--write: Data/Transit.lua)")
+    client_args(sp)
+    sp.add_argument("--write", action="store_true", help="write Data/Transit.lua")
+    sp.set_defaults(fn=cmd_transit)
 
     sp = sub.add_parser("media", help="the addon's own art from assets/: the logo's round portrait in sizes (Media/)")
     sp.set_defaults(fn=cmd_media)

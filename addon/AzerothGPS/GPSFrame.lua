@@ -689,6 +689,10 @@ local Z_SLACK = 3 -- yards above/below a group's height range still counted as "
 -- looks worse than the terrain). There the terrain view stays the terrain.
 G.NO_INSIDE_MAP = { [7962574] = true } -- (Stormwind City's model, Data/Interiors.lua)
 G.INTERIOR_MAX_ZOOM = 500 -- zoomed out further than this, show the outside view instead (not while indoors)
+-- In a city whose inside map shows (Ironforge's, Undercity's), the city's map at any zoom, and the wheel
+-- zooms out no further than this (zoomed out further on the way in: zoomed in to it); right-click for
+-- the land around (asked, 2026-09-30: zooming out in Ironforge turned to the terrain around it).
+G.CITY_MAX_ZOOM = G.INTERIOR_MAX_ZOOM
 
 -- Height range of the rooms in `w` named `name` (cached): the floor the minimap names.
 local function NamedBand(w, name)
@@ -972,7 +976,38 @@ end
 
 -- The smallest zone/city map on continent `cont` containing world (x, y), with the
 -- point's map coordinates (0-1): returns uiMapID, name, mx, my.
+local cityMaps -- (the city maps: those with a zone around them, `zoneParent`)
+-- The city map (uiMapID) at world (x, y) of `cont`: on a capital's own cells, or down in an underground
+-- city; nil elsewhere. (The ground's zone there is the land's: Ironforge's is Dun Morogh's.)
+function G.CityMapAt(cont, x, y)
+  local lvl = G.DownInCityAt and G.DownInCityAt(cont, x, y)
+  local l = lvl and ns.CityLevels and ns.CityLevels[lvl]
+  if l and l.map and ns.Maps and ns.Maps[l.map] then return l.map end
+  local R = ns.Router
+  if not (ns.Maps and R and R.CapitalAt and R.CapitalAt(cont, x, y)) then return nil end
+  if not cityMaps then
+    cityMaps = {}
+    for id, m in pairs(ns.Maps) do
+      if m.zoneParent and m.bounds then cityMaps[#cityMaps + 1] = id end
+    end
+    table.sort(cityMaps)
+  end
+  for _, id in ipairs(cityMaps) do
+    local m = ns.Maps[id]
+    local b = m.bounds
+    if m.continent == cont and x >= b[1] and x <= b[3] and y >= b[2] and y <= b[4] then return id end
+  end
+  return nil
+end
+
 function G.LocateWorld(cont, x, y)
+  -- (a city: its own map)
+  local city = G.CityMapAt(cont, x, y)
+  if city then
+    local m = ns.Maps[city]
+    local b = m.bounds
+    return city, m.name, (b[4] - y) / (b[4] - b[2]), (b[3] - x) / (b[3] - b[1])
+  end
   -- (the zone the ground there is in, Data/Zones.lua, when it has it: the zones' outlines
   -- overlap, and a third of Tirisfal's ground is inside Western Plaguelands' by them)
   local R = ns.Router
@@ -2060,8 +2095,11 @@ function G.Update()
   -- (indoors, the inside map at any zoom, as the game's minimap: which map shows is up to indoors or
   -- outdoors, not the zoom)
   local indoors = IsIndoors and IsIndoors() and true or false
+  -- (in a city: down in an underground one, or in a capital's own cells)
+  local inCity = here and (ns.Nav.PlayerLevel(cont) ~= cont
+    or (ns.Router and ns.Router.CapitalAt and ns.Router.CapitalAt(cont, px, py)) or false)
   if st.interiors and not inst and not G.IsMapStyle(st.style) and not browse and here and (onMe or downCity)
-      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors) then
+      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)
@@ -2082,6 +2120,12 @@ function G.Update()
     G.shownInside = place and not city and place[1] or nil
   else
     G.shownInside = nil
+  end
+  -- (the city's map on the player: zoomed out no further than CITY_MAX_ZOOM, G.WheelZoom)
+  G.cityMap = place and inCity and not free or false
+  if G.cityMap and S().zoom > G.CITY_MAX_ZOOM then
+    S().zoom = G.CITY_MAX_ZOOM
+    elapsed = 1
   end
   -- a city inside a mountain (Ironforge) opened from its icon: its interior map while looking there
   if not place and free and free.interior and not browse and not G.IsMapStyle(st.style) and zoom <= G.INTERIOR_MAX_ZOOM then
@@ -2644,6 +2688,12 @@ InfoParts = function()
     if name then return mark, name, string.format("%.1f, %.1f", u * 100, v * 100) end
     return mark, nil, nil
   end
+  -- (in a dungeon or a map passed through, the Deeprun Tram: its name, and the spot in its own yards)
+  local own = view.mine and view.instance and ns.Instances[view.instance]
+  if own then
+    local wx, wy = Geo.PlayerWorld()
+    return nil, own.name, wx and string.format("%.0f, %.0f", wx, wy) or nil
+  end
   local mapID = C_Map.GetBestMapForUnit("player")
   local info = mapID and C_Map.GetMapInfo(mapID)
   local pos = mapID and C_Map.GetPlayerMapPosition(mapID, "player")
@@ -2826,7 +2876,10 @@ end
 -- would turn into map art): only right-click leaves it. Returns the zoom.
 function G.WheelZoom(f)
   if not browseZoom then
-    G.SetZoom(S().zoom * f)
+    local z = S().zoom * f
+    -- (on a city's map: no further out than it; right-click for the land around)
+    if G.cityMap and f > 1 then z = math.min(z, math.max(S().zoom, G.CITY_MAX_ZOOM)) end
+    G.SetZoom(z)
     return S().zoom
   end
   local z = math.max(MIN_ZOOM, browseZoom * f)
