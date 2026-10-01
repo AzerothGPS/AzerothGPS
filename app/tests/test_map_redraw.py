@@ -1112,6 +1112,60 @@ def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     assert not list(media.glob("Portrait*.tga")) and ns.FitPortrait is None
 
 
+def test_map_icons_read_their_mipmaps_and_labels_sit_on_whole_pixels(game):
+    # (reported: city places and custom pins looked low-resolution; then the place names and city labels too)
+    # every icon on the map is read through its art's smaller copies, as Blizzard's map does with the art it
+    # shrinks ("TRILINEAR"), not sampled from the 64-pixel art; and a label's top-left goes on a whole screen
+    # pixel (the map scrolls smoothly, and text between pixels is smeared), its shadow one pixel off
+    lua, ns = game
+    G, P, N = ns.GPS, ns.Pins, ns.Nav
+    N.Clear()
+    pin = P.Add(lua.eval("{ level = 0, x = 2254, y = 293, name = 'Sharp', icon = 136777 }"))
+    try:
+        lua.execute("AGPS_T = 900")
+        G.Update()
+        pins = _shown(lua, lambda w: w.pin is not None and w.pin.name == "Sharp")
+        assert len(pins) == 1 and pins[0].icon._tex == 136777 and pins[0].icon._filter == "TRILINEAR"
+        pins[0]._scripts.OnDoubleClick(pins[0])  # (as a stop: its marker too)
+        lua.execute("AGPS_T = 901")
+        G.Update()
+        stop = _shown(lua, lambda w: w.pendingIndex == 1)
+        assert len(stop) == 1 and stop[0].icon._filter == "TRILINEAR"
+        G.RemovePending(1)
+    finally:
+        P.Remove(pin)
+    t = lua.eval("CreateFrame('Frame'):CreateTexture()")  # (city places, POIs, overlays: ns.SetIcon)
+    ns.SetIcon(t, "Interface\\Icons\\INV_Misc_Bag_10_Blue")
+    assert t._filter == "TRILINEAR"
+    lua.execute("AGPS_OLD_PSS = GetPhysicalScreenSize\nGetPhysicalScreenSize = function() return 2560, 1440 end")
+    try:
+        fs = lua.eval("""(function()
+          local parent = CreateFrame('Frame')
+          parent.GetCenter = function() return 300.3, 200.7 end
+          parent.GetEffectiveScale = function() return 0.64 end
+          AGPS_PARENT = parent
+          local fs = parent:CreateFontString()
+          fs.GetStringWidth = function() return 41.3 end
+          fs.GetStringHeight = function() return 12.2 end
+          fs.SetPoint = function(self, ...) self.pt = { ... } end
+          fs.SetShadowOffset = function(self, x, y) self.sh = { x, y } end
+          return fs
+        end)()""")
+        ppu = 1440 / 768 * 0.64
+        for point, x, y in (("CENTER", 12.37, -40.91), ("BOTTOM", -3.5, 7.25)):
+            G.PinText(fs, lua.eval("AGPS_PARENT"), point, x, y)
+            assert fs.pt[1] == "TOPLEFT" and fs.pt[3] == "CENTER"
+            left, top = fs.pt[4], fs.pt[5]
+            want = (x - 41.3 / 2, y + (12.2 if point == "BOTTOM" else 6.1))
+            for got, wanted, middle in ((left, want[0], 300.3), (top, want[1], 200.7)):
+                px = (middle + got) * ppu
+                assert abs(px - round(px)) < 1e-6  # (a whole pixel)
+                assert abs(got - wanted) <= 0.5 / ppu + 1e-9  # (the nearest one)
+            assert abs(fs.sh[1] * ppu - 1) < 1e-9 and abs(fs.sh[2] * ppu + 1) < 1e-9
+    finally:
+        lua.execute("GetPhysicalScreenSize = AGPS_OLD_PSS")
+
+
 def test_the_corner_logo_without_the_circle(game):
     # (asked: the logo without the circle, as StreetView's viewer has it; later the round portrait's option
     # removed) the plate logo, the window's border without the portrait's ring; dragging the plate moves

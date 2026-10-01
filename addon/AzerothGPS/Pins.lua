@@ -340,7 +340,7 @@ function P.Refresh()
     local icon = list[k]
     b.index = k
     if icon then
-      b.icon:SetTexture(P.IconTexture(icon))
+      b.icon:SetTexture(P.IconTexture(icon), nil, nil, ns.ICON_FILTER)
       b:Show()
       if k == P.selected then
         f.sel:ClearAllPoints()
@@ -351,7 +351,7 @@ function P.Refresh()
       b:Hide()
     end
   end
-  f.preview:SetTexture(P.IconTexture(list[P.selected]))
+  f.preview:SetTexture(P.IconTexture(list[P.selected]), nil, nil, ns.ICON_FILTER)
   local first = P.top * P.COLS + 1
   f.count:SetText(string.format("Icons %d-%d of %d (mouse wheel scrolls)", math.min(first, #list),
     math.min(first + P.COLS * P.ROWS - 1, #list), #list))

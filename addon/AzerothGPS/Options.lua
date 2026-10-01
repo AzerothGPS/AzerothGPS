@@ -828,7 +828,7 @@ local function BuildWindow()
     elseif t.id == "search" then
       ns.SetIcon(icon, "atlas:common-search-magnifyingglass", "Interface\\Icons\\INV_Misc_Spyglass_03")
     else
-      icon:SetTexture("Interface\\Icons\\Ability_Rogue_Sprint")
+      icon:SetTexture("Interface\\Icons\\Ability_Rogue_Sprint", nil, nil, ns.ICON_FILTER)
     end
     local label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     label:SetPoint("LEFT", icon, "RIGHT", 4, 0)

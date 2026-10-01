@@ -91,6 +91,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - The map stayed on Ironforge's outside after making or cancelling a route out of the city.
 - The map's title says the city you're in (Ironforge, not Dun Morogh), and it's centered.
 - The corner logo stands on its own without the circle, and it's sharp.
+- Map icons (city places, pins, stops, dungeon and cave entrances) looked grainy, like low-resolution pictures; they're smooth and sharp now. Place names and city labels on the map are crisp too.
 - The Deeprun Tram's map was blank.
 - A zeppelin to Zephras Isle had no line on the map.
 - A dock that was a stop lost its countdown.

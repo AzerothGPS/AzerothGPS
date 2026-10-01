@@ -1967,6 +1967,24 @@ end
 local BOSS_ICON = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
 local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 
+-- A map label on whole screen pixels (the user, 2026-10-01: place names and city labels looked soft). The
+-- map scrolls smoothly, so a label's spot mostly falls between pixels, and the game smears text drawn
+-- there; its 1-unit shadow lands between pixels too. `fs`'s top-left goes on the pixel nearest to where
+-- `point` ("CENTER" or "BOTTOM") at (x, y) from `parent`'s middle would put it, its shadow one pixel off.
+function G.PinText(fs, parent, point, x, y)
+  local ppu = ns.PixelsPerUnit(parent:GetEffectiveScale())
+  local w, h = fs:GetStringWidth() or 0, fs:GetStringHeight() or 0
+  local left, top = x - w / 2, point == "BOTTOM" and y + h or y + h / 2
+  local pcx, pcy = parent:GetCenter()
+  if pcx and pcy then
+    left = math.floor((pcx + left) * ppu + 0.5) / ppu - pcx
+    top = math.floor((pcy + top) * ppu + 0.5) / ppu - pcy
+  end
+  fs:ClearAllPoints()
+  fs:SetPoint("TOPLEFT", parent, "CENTER", left, top)
+  fs:SetShadowOffset(1 / ppu, -1 / ppu)
+end
+
 local function DrawPois(pois, zoom)
   local known, seen = TaxiKnowledge()
   local nb, nl = 0, 0
@@ -1978,12 +1996,10 @@ local function DrawPois(pois, zoom)
         if not fs then
           fs = poiLayer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
           fs:SetTextColor(1, 0.95, 0.8)
-          fs:SetShadowOffset(1, -1)
           poiLabels[nl] = fs
         end
         fs:SetText(p[4])
-        fs:ClearAllPoints()
-        fs:SetPoint("CENTER", poiLayer, "CENTER", p[2], p[3])
+        G.PinText(fs, poiLayer, "CENTER", p[2], p[3])
         fs:Show()
       end
     else
@@ -2153,11 +2169,11 @@ local function DrawStopPins(toScreen, viewCont)
     n = n + 1
     local b = StopPin(n)
     if d.learnNode then -- (a flight master's detour: the map's own icon for it, as a stop made from a map icon)
-      b.icon:SetTexture(TAXI_ICON.unlearned)
+      b.icon:SetTexture(TAXI_ICON.unlearned, nil, nil, ns.ICON_FILTER)
     elseif d.ride then -- (a ride the route takes: its icon where it's boarded)
       ns.SetIcon(b.icon, G.RideIcon(d))
     else
-      b.icon:SetTexture(ns.Nav.StopIcon(d))
+      b.icon:SetTexture(ns.Nav.StopIcon(d), nil, nil, ns.ICON_FILTER)
     end
     b.icon:SetAlpha(pendingIndex and 0.75 or 1)
     b.title, b.pendingIndex, b.stopIndex, b.learnNode = title, pendingIndex, stopIndex, d.learnNode
@@ -2230,11 +2246,11 @@ function G.ClassIcon(tex, class)
   if not class then return false end
   local atlas = "classicon-" .. class:lower()
   if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
-    tex:SetAtlas(atlas)
+    tex:SetAtlas(atlas, false, ns.ICON_FILTER)
     return true
   end
   local tc = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
-  if tc and tex:SetTexture(G.CLASS_SHEET) ~= false then
+  if tc and tex:SetTexture(G.CLASS_SHEET, nil, nil, ns.ICON_FILTER) ~= false then
     tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4])
     return true
   end
@@ -4523,7 +4539,7 @@ function G.SetUseButton(b, t, place)
     b:SetAttribute("spell", ns.SpellName and ns.SpellName(t.spell) or t.spell)
     b:SetAttribute("item", nil)
   end
-  b.icon:SetTexture(G.UseTexture(t))
+  b.icon:SetTexture(G.UseTexture(t), nil, nil, ns.ICON_FILTER)
   b.what, b.to = t[8], t[10]
   b:ClearAllPoints()
   place(b)
@@ -6168,12 +6184,10 @@ function G.DrawInsetFrames(cx, cy, rot, s)
       end
       if not label then
         label = lineLayer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetShadowOffset(1, -1)
         G.insetLabels[i] = label
       end
       label:SetText(ns.Maps[it.map].name)
-      label:ClearAllPoints()
-      label:SetPoint("BOTTOM", canvas, "CENTER", (pts[1][1] + pts[2][1]) / 2, (pts[1][2] + pts[2][2]) / 2 + 2)
+      G.PinText(label, canvas, "BOTTOM", (pts[1][1] + pts[2][1]) / 2, (pts[1][2] + pts[2][2]) / 2 + 2)
       label:Show()
     elseif label then
       label:Hide()

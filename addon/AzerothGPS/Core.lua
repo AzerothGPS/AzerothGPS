@@ -166,19 +166,26 @@ function ns.PerfReport()
   return #rows > 0 and out or { "nothing measured yet" }
 end
 
+-- Icons are drawn smaller than their art (the game's icons are 64 pixels, the map's 14 to 22 UI units):
+-- read from the art's smaller copies (mipmaps), as Blizzard's own map does with the art it shrinks.
+-- The default filter samples the full-size art, so small icons came out jagged and coarse, like a
+-- low-resolution picture (the user, 2026-10-01: city places and pins). Every icon the map, the arrow
+-- and the pin picker show is set with it.
+ns.ICON_FILTER = "TRILINEAR"
+
 -- Set a texture from a file path/ID, or from a UI atlas written "atlas:<name>" (falling back
 -- to `fallback` if the client doesn't know the atlas).
 function ns.SetIcon(tex, icon, fallback)
   local atlas = type(icon) == "string" and icon:match("^atlas:(.+)$")
   if atlas then
     if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
-      tex:SetAtlas(atlas)
+      tex:SetAtlas(atlas, false, ns.ICON_FILTER)
       return
     end
     icon = fallback
   end
   tex:SetTexCoord(0, 1, 0, 1) -- undo a previous atlas's coordinates
-  tex:SetTexture(icon)
+  tex:SetTexture(icon, nil, nil, ns.ICON_FILTER)
 end
 
 function ns.CharKey()
@@ -539,13 +546,18 @@ ns.CORNER_LOGO_UNITS = 62 -- (the portrait's size)
 ns.TITLE_MID = 11 -- the title bar's middle, under the window's top (its TitleContainer: 1 down, 20 high)
 local MEDIA = "Interface\\AddOns\\AzerothGPS\\Media\\"
 local windows = {} -- { chrome, portrait, move = fn(starting), plate }
--- The pre-scaled size for `units` UI units at effective scale `effScale`, and the screen pixels per unit.
-function ns.PortraitPx(units, effScale)
-  local ppu = 1 -- screen pixels per UI unit
+-- Screen pixels per UI unit at effective scale `effScale` (a frame's GetEffectiveScale()).
+function ns.PixelsPerUnit(effScale)
+  local ppu = 1
   if GetPhysicalScreenSize then
     local ok, _, h = pcall(GetPhysicalScreenSize)
     if ok and h and h > 0 then ppu = h / 768 * (effScale or 1) end
   end
+  return ppu
+end
+-- The pre-scaled size for `units` UI units at effective scale `effScale`, and the screen pixels per unit.
+function ns.PortraitPx(units, effScale)
+  local ppu = ns.PixelsPerUnit(effScale)
   local want, px = units * ppu, ns.PORTRAIT_PX[1]
   for _, s in ipairs(ns.PORTRAIT_PX) do
     if math.abs(s - want) < math.abs(px - want) then px = s end
