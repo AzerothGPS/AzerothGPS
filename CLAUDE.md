@@ -510,6 +510,11 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   - **New Lua files (in the toc) need a full game restart.** New images have loaded after a
     `/reload` (Media/CornerLogo<px>.tga, 2026-09-30): try `/reload` first.
   - Changed images usually need a restart too.
+- **Every popup window is `ns.Window(name, w, h, title)`** (Core.lua; companions: `AzerothGPS.Window`):
+  the map window's frame without the logo (PortraitFrameTemplate with the no-portrait border, a dark
+  inside, the title centered), a plain box where the template is missing; content from `f.top` down.
+  Never a hand-made BackdropTemplate box (asked 2026-10-01; `test_every_popup_window_is_made_with_ns_window`
+  fails on one). Only the map, the arrow and the options window (which has the logo) build their own.
 - **Use the game's newer UI templates, with fallbacks.** Old art such as
   `UI-PlusButton-Up` is missing in this client. Prefer drawing simple controls yourself,
   or use the modern templates (`PortraitFrameTemplate` etc.) wrapped in `pcall`, with a

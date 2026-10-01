@@ -636,6 +636,80 @@ function ns.SetLogoPortrait(f, file, move)
   return w
 end
 
+-- Popup windows (asked, 2026-10-01: every popup in the map window's art style, without its logo): the
+-- client's PortraitFrameTemplate (metal border, title bar, close button) with the border that has no
+-- portrait, a dark inside like the map window's title strip, the title centered; a plain dark box with a
+-- border and a close button if the template isn't there. Every popup AzerothGPS makes uses it (a test
+-- checks: test_every_popup_window_is_made_with_ns_window), and its companions through API.Window.
+-- Dragged anywhere to move, kept on the screen, closed by its button or Escape (a plain Hide: works in
+-- combat). Returns the frame: its content goes from `f.top` (negative) down; f:SetWindowTitle(text).
+ns.WINDOW_BG = { 0.06, 0.06, 0.07, 0.97 }
+ns.WINDOW_TITLE_MARGIN = 24 -- (as the map window's: GPSFrame's TITLE_MARGIN)
+function ns.Window(name, w, h, title, strata)
+  local f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  f:SetSize(w, h)
+  f:SetPoint("CENTER")
+  f:SetFrameStrata(strata or "DIALOG")
+  f:SetToplevel(true)
+  f:SetClampedToScreen(true)
+  f:EnableMouse(true)
+  f:SetMovable(true)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  if name and UISpecialFrames then table.insert(UISpecialFrames, name) end -- (Escape closes it)
+  local c = ns.WINDOW_BG
+  local bg = f:CreateTexture(nil, "BACKGROUND")
+  bg:SetPoint("TOPLEFT", 3, -3)
+  bg:SetPoint("BOTTOMRIGHT", -3, 3)
+  bg:SetColorTexture(c[1], c[2], c[3], c[4])
+  f.bg = bg
+  local ok, chrome = pcall(CreateFrame, "Frame", nil, f, "PortraitFrameTemplate")
+  if ok and chrome and chrome.NineSlice then
+    chrome:SetAllPoints()
+    chrome:SetFrameLevel(f:GetFrameLevel()) -- (under the window's own controls)
+    chrome:EnableMouse(false)
+    if chrome.Bg then chrome.Bg:Hide() end
+    if chrome.TopTileStreaks then chrome.TopTileStreaks:Hide() end
+    if chrome.SetBorder then
+      pcall(chrome.SetBorder, chrome, "ButtonFrameTemplateNoPortrait")
+    elseif NineSliceUtil and NineSliceUtil.ApplyLayoutByName then
+      pcall(NineSliceUtil.ApplyLayoutByName, chrome.NineSlice, "ButtonFrameTemplateNoPortrait")
+    end
+    if chrome.PortraitContainer then chrome.PortraitContainer:Hide() end
+    if chrome.portrait then chrome.portrait:Hide() end
+    local tc = chrome.TitleContainer
+    if tc and tc.ClearAllPoints and tc.GetPoint then -- (centered on the window, as the map window's)
+      local _, _, _, _, y = tc:GetPoint(1)
+      tc:ClearAllPoints()
+      tc:SetPoint("TOPLEFT", chrome, "TOPLEFT", ns.WINDOW_TITLE_MARGIN, y or -1)
+      tc:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -ns.WINDOW_TITLE_MARGIN, y or -1)
+    end
+    if chrome.CloseButton then chrome.CloseButton:SetScript("OnClick", function() f:Hide() end) end
+    function f.SetWindowTitle(_, text)
+      if chrome.SetTitle then chrome:SetTitle(text)
+      elseif tc and tc.TitleText then tc.TitleText:SetText(text) end
+    end
+    f.chrome, f.top = chrome, -30
+  else
+    if f.SetBackdrop then
+      f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+      f:SetBackdropColor(c[1], c[2], c[3], c[4])
+      f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+    end
+    local t = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    t:SetPoint("TOP", 0, -8)
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", 2, 2)
+    close:SetScript("OnClick", function() f:Hide() end)
+    function f.SetWindowTitle(_, text) t:SetText(text) end
+    f.top = -28
+  end
+  f:SetWindowTitle(title or "")
+  f:Hide()
+  return f
+end
+
 -- In combat: the map and arrow switch to their combat opacity, or hide (options).
 ns.inCombat = false
 local function CombatChanged(inCombat)

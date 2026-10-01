@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 10 }
+local API = { version = 11 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -159,6 +159,10 @@ end
 function API.ShowWorld()
   if GPS() then GPS().ShowWorld() end
 end
+-- (Version 11) A popup window in AzerothGPS's style: the map window's frame without the logo (the
+-- game's metal border, title bar and close button, a dark inside, the title centered), movable, closed
+-- by Escape. Hidden; its content goes from f.top (negative) down; f:SetWindowTitle(text).
+function API.Window(name, width, height, title, strata) return ns.Window(name, width, height, title, strata) end
 -- Back to following the player.
 function API.Follow()
   if GPS() then GPS().Follow() end

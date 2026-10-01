@@ -307,47 +307,9 @@ end
 local win
 
 local function Build()
-  local f = CreateFrame("Frame", "AzerothGPSImport", UIParent, "BackdropTemplate")
-  f:SetSize(480, 358)
-  f:SetPoint("CENTER")
-  f:SetFrameStrata("DIALOG")
-  f:SetClampedToScreen(true)
-  f:SetMovable(true)
-  f:EnableMouse(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", f.StartMoving)
-  f:SetScript("OnDragStop", f.StopMovingOrSizing)
-  tinsert(UISpecialFrames, "AzerothGPSImport")
-
-  -- the game-style window frame, like the map's (without the logo portrait); a plain
-  -- border if the template isn't there
-  local TOP = 10 -- where the content starts, below the title
-  local ok, chrome = pcall(CreateFrame, "Frame", nil, f, "PortraitFrameTemplate")
-  if ok and chrome and chrome.NineSlice then
-    f:SetHeight(f:GetHeight() + 14)
-    chrome:SetAllPoints()
-    chrome:SetFrameLevel(f:GetFrameLevel())
-    if NineSliceUtil and NineSliceUtil.ApplyLayoutByName then
-      pcall(NineSliceUtil.ApplyLayoutByName, chrome.NineSlice, "ButtonFrameTemplateNoPortrait")
-    end
-    if chrome.PortraitContainer then chrome.PortraitContainer:Hide() end
-    if chrome.portrait then chrome.portrait:Hide() end
-    if chrome.SetTitle then chrome:SetTitle("Import and Share Waypoints")
-    elseif chrome.TitleContainer and chrome.TitleContainer.TitleText then chrome.TitleContainer.TitleText:SetText("Import and Share Waypoints") end
-    if chrome.CloseButton then chrome.CloseButton:SetScript("OnClick", function() f:Hide() end) end -- works in combat too
-    TOP = 30
-  else
-    f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-    f:SetBackdropColor(0.06, 0.06, 0.07, 0.96)
-    f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-    local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    title:SetText("Import and Share Waypoints")
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetScript("OnClick", function() f:Hide() end) -- works in combat too
-    close:SetPoint("TOPRIGHT", 2, 2)
-    TOP = 26
-  end
+  -- the map window's frame without the logo, as every popup (ns.Window)
+  local f = ns.Window("AzerothGPSImport", 480, 372, "Import and Share Waypoints")
+  local TOP = -f.top -- where the content starts, below the title
   local hint = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
   hint:SetPoint("TOPLEFT", 12, -TOP)
   hint:SetText("Paste TomTom lines, one per stop:  /way Elwynn Forest 43.2 65.1 First Stop")

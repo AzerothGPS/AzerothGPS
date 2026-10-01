@@ -279,6 +279,53 @@ def test_an_overlay_draws_icons_until_removed(game):
     G.Update()
     assert not _shown(lua, lambda w: w._tex == 136777)
 
+def test_every_popup_window_is_made_with_ns_window():
+    # (asked) every popup in the map window's art style without its logo, by default: none built by hand
+    # (only the map, the arrow window and the options window, which has the logo, make their own)
+    import re
+
+    own = {"AzerothGPSFrame", "AzerothGPSArrow", "AzerothGPSOptions"}
+    found = []
+    for f in sorted(ADDON.glob("*.lua")):
+        for name in re.findall(r'CreateFrame\(\s*"Frame"\s*,\s*"(AzerothGPS\w*)"\s*,\s*UIParent', f.read_text(encoding="utf-8")):
+            if name not in own:
+                found.append((f.name, name))
+    assert not found, f"popups to build with ns.Window: {found}"
+
+
+def test_a_popup_window_has_the_map_windows_frame_without_the_logo(game):
+    # ns.Window: the client's PortraitFrameTemplate with the no-portrait border, its own background hidden
+    # for the dark inside, the portrait hidden, the title set; a plain box where the template is missing
+    lua, ns = game
+    lua.execute("""
+      AGPS_REAL_CF = CreateFrame
+      CreateFrame = function(kind, name, parent, template)
+        local w = AGPS_REAL_CF(kind, name, parent, template)
+        if template == "PortraitFrameTemplate" then
+          w.NineSlice, w.Bg, w.PortraitContainer = AGPS_REAL_CF("Frame"), w:CreateTexture(), AGPS_REAL_CF("Frame")
+          w.TitleContainer = AGPS_REAL_CF("Frame")
+          w.TitleContainer.TitleText = w:CreateFontString()
+          w.CloseButton = AGPS_REAL_CF("Button")
+          w.SetBorder = function(self, layout) self.agpsBorder = layout end
+          w.SetTitle = function(self, text) self.TitleContainer.TitleText:SetText(text) end
+        end
+        return w
+      end""")
+    try:
+        f = ns.Window("AzerothGPSTestPopup", 300, 200, "Hello")
+    finally:
+        lua.execute("CreateFrame = AGPS_REAL_CF")
+    c = f.chrome
+    assert c is not None and f.top == -30 and not f._shown
+    assert c.agpsBorder == "ButtonFrameTemplateNoPortrait" and not c.Bg._shown and not c.PortraitContainer._shown
+    assert c.TitleContainer.TitleText._text == "Hello"
+    f._shown = True
+    c.CloseButton._scripts.OnClick(c.CloseButton)
+    assert not f._shown
+    assert "AzerothGPSTestPopup" in list(lua.globals().UISpecialFrames.values())
+    plain = ns.Window("AzerothGPSTestPlain", 300, 200, "Plain")  # (the stand-in has no template parts: the box)
+    assert plain.chrome is None and plain.top == -28
+
 def test_the_style_buttons_and_command_leave_a_held_style(game):
     # (API 9) while a game holds the map with a style, the Map Style buttons and /agps style don't change
     # it (they say why); the map draws it at every zoom; let go, the player's own is back
