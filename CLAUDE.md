@@ -81,7 +81,11 @@ The addon is going public, so every change must keep it policy-safe:
     without "red", `Clear`), saved with the stops (`cdb.skipRides`). Their pins (`N.RidePins`: a
     flight's at each master it flies on from, a teleport's where it lands) are drawn with the stops'
     (`DrawStopPins`, the map's icon under them left out) and right-clicked like a detour's.
-  - `Turns.lua`: turn-by-turn maneuvers.
+  - `Turns.lua`: turn-by-turn maneuvers. Stairs (`T.Stairs`): where the route has heights (`zs`: Undercity,
+    a dungeon), a stretch as steep as `STAIR_SLOPE` rising `STAIR_RISE` in all; else a capital's stair roads
+    (source 6, `Router.SOURCE_STAIR`, written by `capitals.py` from walknet's "stair" edges; `Router.StairAt`
+    by the nodes' `nz`). A "stairs" maneuver ("Stairs up in 10 yd, then turn left": `after`, a turn within
+    `STAIRS_THEN_YD`), and the turns on them left out.
   - `Arrow.lua`: the direction arrow window.
   - `GPSFrame.lua`: the map window (layers, fade while moving, click-through, window
     frame, map menu, search, drawing a farming area).
@@ -278,7 +282,10 @@ The addon is going public, so every change must keep it policy-safe:
     capital, legs off the roads are straight (no terrain walk: its grid is coarser than the
     streets and blind to levels), gap links through closed cells are shut, and no joining the
     roads partway (`Router`'s `JOIN_ALONG_MAX` joins skip capitals, cities and caves); `route-check` leaves out trips from or to a capital's
-    own cells (its flat walk can't judge levels and lifts). `agps capitals` renders each (floors under others
+    own cells (its flat walk can't judge levels and lifts). A gate's way to the land's road that jumps
+    over `JUMP_MAX` in 3D is left out (Thunder Bluff's mesa cliff by the east lifts). `agps capitals --roads3d`
+    and `agps instances --roads3d` walk every road in 3D (`check_roads_3d`, `walk_3d`'s `z0`: from a road's
+    node height) into `roads3d.txt`, "!" for a jump between levels. `agps capitals` renders each (floors under others
     purple, their roads cyan) into `data/debug/capitals/` with `summary.txt`; `--write` writes
     Each capital's road node has its floor's height (the entry's `nz`, the game's; `g.nz` in the graph,
     not `g.z`: not a level with heights): a stop with a height (a city place's) takes the roads on its

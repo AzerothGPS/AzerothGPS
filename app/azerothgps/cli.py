@@ -281,6 +281,12 @@ def cmd_capitals(args) -> int:
 
         log("-- routes from outside each gate to the places (the addon's routing, 3D walk over the floors):")
         check_routes(built, log=log)
+    if args.roads3d:
+        from .capitals import check_roads_3d
+
+        rows = check_roads_3d(built)
+        (out / "roads3d.txt").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        log(f"-- every road in 3D: {sum(1 for r in rows if r.startswith('!'))} flagged; {out / 'roads3d.txt'}")
     (out / "summary.txt").write_text("\n".join(logs) + "\n", encoding="utf-8")
     print(f"{len(built)} capitals built; renders and summary.txt in {out}")
     return 0
@@ -315,6 +321,20 @@ def cmd_instances(args) -> int:
     if args.check:  # (the routes over the data just built)
         log("-- routes from the entrance to each boss (the addon's routing, 3D walk over the floors):")
         check_routes(built, log=log, text=text)
+    if args.roads3d:
+        from .instances import check_roads_3d
+
+        out.mkdir(parents=True, exist_ok=True)
+        rows = check_roads_3d(built)
+        (out / "roads3d.txt").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        flagged = [r for r in rows if r.startswith("!")]
+        log(f"-- every road in 3D: {len(flagged)} flagged of {len(rows)}; {out / 'roads3d.txt'}")
+        by = {}
+        for r in flagged:
+            name = r[2:].split(": road")[0]
+            by[name] = by.get(name, 0) + 1
+        for name, n in sorted(by.items(), key=lambda kv: -kv[1]):
+            log(f"  {n:5d} {name}")
     lines = [f"{status:8s} {inst.name} ({inst.map_id}{', raid' if inst.raid else ''}): {why}"
              for inst, status, why in sorted(report, key=lambda r: (r[1], r[0].raid, r[0].map_id))]
     out.mkdir(parents=True, exist_ok=True)
@@ -578,6 +598,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--write", action="store_true", help="also write Data/Capitals.lua (gen-addon-data writes it too)")
     sp.add_argument("--check", action="store_true",
                     help="route from outside each gate to its places over the data and walk them in 3D")
+    sp.add_argument("--roads3d", action="store_true",
+                    help="walk every road of each capital in 3D: jumps between levels, stairs, drops (roads3d.txt)")
     sp.set_defaults(fn=cmd_capitals)
 
     sp = sub.add_parser("instances", help="build the dungeons' and raids' levels; renders in data/debug/instances/")
@@ -586,6 +608,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--write", action="store_true", help="also write Data/Instances.lua (gen-addon-data writes it too)")
     sp.add_argument("--check", action="store_true",
                     help="route from each entrance to every boss over the data and walk the routes in 3D")
+    sp.add_argument("--roads3d", action="store_true",
+                    help="walk every road of each instance in 3D: jumps between levels, joins between floors (roads3d.txt)")
     sp.set_defaults(fn=cmd_instances)
 
     sp = sub.add_parser("extract", help="extract map art, bounds, POIs, area grid (+ roads) into data/")

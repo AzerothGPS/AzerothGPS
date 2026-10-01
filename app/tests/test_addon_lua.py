@@ -2347,6 +2347,39 @@ def test_route_up_into_thunder_bluff_takes_a_lift(capitals_env):
     assert any(str(ms[i].text) == "Take the lift up" for i in range(1, len(ms) + 1))
 
 
+def test_capital_stairs_are_said_in_the_directions(capitals_env):
+    # (asked) a capital's stairs and ramps between levels (walknet's, written as source 6 with the nodes'
+    # heights): Router.StairAt finds them along a route, up or down by the heights, and the directions say
+    # "Take the stairs up" there
+    lua, ns = capitals_env
+    R = ns.Router
+    assert R.StairAt(1, 0.0, 0.0, 1.0, 1.0) is None  # (builds Kalimdor's graph; no stairs out there)
+    g = R.DebugGraph(1)
+    found = None
+    for i in range(1, len(g.e) + 1):
+        e = g.e[i]
+        za, zb = g.nz[e[1]], g.nz[e[2]]
+        if e[4] == R.SOURCE_STAIR and za and zb and abs(zb - za) >= 6 and len(e) >= 8:
+            found = e
+            break
+    assert found, "no stairs between levels in Kalimdor's capitals"
+    e = found
+    pts = [(e[k], e[k + 1]) for k in range(5, len(e) + 1, 2)]
+    up = g.nz[e[2]] > g.nz[e[1]]
+    (x1, y1), (x2, y2) = pts[0], pts[1]
+    assert R.StairAt(1, x1, y1, x2, y2) == (1 if up else -1)
+    assert R.StairAt(1, x2, y2, x1, y1) == (-1 if up else 1)
+    load(lua, ns, "Turns.lua")
+    lo_to_hi = pts if up else pts[::-1]
+    lead = [(lo_to_hi[0][0] - 30, lo_to_hi[0][1])]  # (a walk up to their foot first, and on from the top: not arriving)
+    (ax, ay), (bx, by) = lo_to_hi[-2], lo_to_hi[-1]
+    d = math.hypot(bx - ax, by - ay) or 1
+    tail = [(bx + (bx - ax) / d * 60, by + (by - ay) / d * 60)]
+    walk = lead + lo_to_hi + tail
+    part = lua.table(pts=lua.table(*[v for q in walk for v in q]), kinds=lua.table(*([0] * (len(walk) - 1))), cont=1, stop=1)
+    ms = ns.Turns.Maneuvers(ns.Turns.Path(lua.table(parts=lua.table(part))))
+    assert any(str(ms[i].kind) == "stairs" and str(ms[i].text) == "Take the stairs up" for i in range(1, len(ms) + 1))
+
 def test_thunder_bluff_places_are_reached_on_its_roads(capitals_env):
     # Every service a guard points out, from the lifts' foot: on the mesas' roads and their
     # bridges, never a long way through the chasms between the mesas or their tents
@@ -2506,6 +2539,54 @@ def test_turn_left_at_a_corner(turns):
     got, _ = maneuvers(lua, ns, p)
     assert got == [("turn", 500, "Turn left"), ("arrive", 1000, "Arrive at stop 1")]
 
+
+def _stairs_in(lua, ns, x0, x1, y0, y1):
+    # (Router.StairAt as a stand-in: a stretch whose middle is in the box is stairs, up going east or north)
+    ns.Router = lua.eval(f"""{{ StairAt = function(cont, ax, ay, bx, by)
+      local mx, my = (ax + bx) / 2, (ay + by) / 2
+      if mx < {x0} or mx > {x1} or my < {y0} or my > {y1} then return nil end
+      return (by < ay or bx > ax) and 1 or -1
+    end }}""")
+
+
+def test_stairs_then_a_turn_are_said_together(turns):
+    # (asked) "Stairs up in 10 yd, then turn left": stairs on the way (a capital's, Router.StairAt) said
+    # where they start, with a turn just after them
+    lua, ns = turns
+    _stairs_in(lua, ns, -1, 1, -121, -99)
+    p = path_of(lua, ns, [(0, 0), (0, -100), (0, -120), (0, -130), (250, -130), (500, -130)], [0, 0, 0, 0, 0])
+    got, ms = maneuvers(lua, ns, p)
+    assert got == [("stairs", 100, "Take the stairs up"), ("turn", 130, "Turn left"), ("arrive", 630, "Arrive at stop 1")]
+    fmt = lua.eval("function(d) return string.format('%d yd', d) end")
+    assert ns.Turns.NowText(ms[1], fmt) == "Stairs up in 100 yd, then turn left"
+    ms[1].dist = 2
+    assert ns.Turns.NowText(ms[1], fmt) == "Take the stairs up, then turn left"
+    # (the other way: down)
+    p = path_of(lua, ns, [(500, -130), (250, -130), (0, -130), (0, -120), (0, -100), (0, 0)], [0, 0, 0, 0, 0])
+    got, _ = maneuvers(lua, ns, p)
+    assert ("stairs", 510, "Take the stairs down") in got
+
+
+def test_turns_on_the_stairs_are_not_said(turns):
+    # (a spiral's bends, or a landing's corner: "Take the stairs up" covers them)
+    lua, ns = turns
+    _stairs_in(lua, ns, -1, 41, -141, -99)
+    p = path_of(lua, ns, [(0, 0), (0, -100), (0, -140), (40, -140), (500, -140)], [0, 0, 0, 0])
+    got, ms = maneuvers(lua, ns, p)
+    assert got == [("stairs", 100, "Take the stairs up"), ("arrive", 640, "Arrive at stop 1")]
+    assert not ms[1].after
+
+def test_stairs_by_the_routes_heights_on_a_level_of_floors(turns):
+    # (Undercity, a dungeon: the route's points have heights; a steep stretch rising 4 yd or more is stairs,
+    # a bump isn't)
+    lua, ns = turns
+    pts = [(0, 0), (0, -100), (0, -110), (0, -150), (0, -170), (0, -300)]
+    zs = [0, 0, 2.5, 2.5, 12.5, 12.5]
+    part = lua.table(cont=20036, pts=lua.table(*[v for q in pts for v in q]), kinds=lua.table(0, 0, 0, 0, 0),
+                     stop=1, zs=lua.table(*zs))
+    p = ns.Turns.Path(lua.table(parts=lua.table(part), legs=lua.table(lua.table(walk=True))))
+    got, _ = maneuvers(lua, ns, p)
+    assert got == [("stairs", 150, "Take the stairs up"), ("arrive", 300, "Arrive at stop 1")]
 
 def test_the_next_turn_reads_what_to_do_now_first(turns):
     # (asked) "Continue straight, then slight right in 13 yd": what to do now, then the next maneuver;

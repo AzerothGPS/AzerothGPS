@@ -894,6 +894,37 @@ def check_routes(built: list, log=print, text: str | None = None) -> list:
     return out
 
 
+def check_roads_3d(built: list) -> list:
+    """Every road of each instance walked in 3D over its floors (capitals.walk_3d), from each end at its
+    node's height where the roads have heights (floors over floors): "!" marks a jump between levels over
+    JUMP_MAX (a gap, a join between floors, a road on no floor at its end's height); drops may go down.
+    Rows of text."""
+    from .capitals import walk_3d
+    rows = []
+    for inst, u in built:
+        nodes, edges, drops, zs = instance_roads(u)
+        # (each road's source, in the same order: a straight 2-point "stair" is a join across a gap between
+        # pieces of floor, layers.py's GAP_MAX: where the floors found miss a way, maybe a lift or a door)
+        src = [e.source for e in (u["layered"]["graph"] if u.get("layered") else u["graph"]).edges.values()]
+        for i, (a, b, pts) in enumerate(edges):
+            P = [tuple(q[:2]) for q in pts]
+            if len(P) < 2:
+                continue
+            kinds = [4 if i in drops else 0] * (len(P) - 1)
+            jump, where = walk_3d(u, P, kinds, z0=zs[a] if zs else None)
+            if zs and i not in drops:  # (and back from the other end, at its height)
+                j2, w2 = walk_3d(u, P[::-1], kinds, z0=zs[b])
+                if j2 > jump:
+                    jump, where = j2, w2
+            length = sum(math.hypot(P[k + 1][0] - P[k][0], P[k + 1][1] - P[k][1]) for k in range(len(P) - 1))
+            hz = (f" {zs[a]:.0f} to {zs[b]:.0f}" if zs else "")
+            kind = "gap join" if len(P) == 2 and i < len(src) and src[i] == "stair" else (src[i] if i < len(src) else "?")
+            rows.append(f"{'!' if jump > JUMP_MAX else ' '} {inst.name}: road {i} {kind}{' drop' if i in drops else ''} "
+                        f"{length:.0f} yd from ({P[0][0]:.0f}, {P[0][1]:.0f}) to ({P[-1][0]:.0f}, {P[-1][1]:.0f}){hz}, "
+                        f"3D jump {jump:.0f} yd" + (f" ({where[0]} at {where[1]}, {where[2]})" if where else ""))
+    return rows
+
+
 # --- entrances learned in game ------------------------------------------------------------
 
 

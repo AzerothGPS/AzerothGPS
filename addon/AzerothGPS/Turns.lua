@@ -19,6 +19,11 @@ T.JOG_OFFSET = 12 -- yards: ... and a jog when the route after it is this close 
 T.LOOKAHEAD = 30 -- the arrow points at the route this far ahead
 T.TOWARD_AHEAD = 350 -- "toward <place>": a named place near the route this far past the turn
 T.TOWARD_RADIUS = 450
+T.STAIRS_GAP = 6 -- yards: stairs this close after stairs the same way (a landing between) are one flight
+-- (where the route has heights: a stretch this steep is stairs, a flight rising this much in all; as the map's
+-- stairs icons, GPSFrame's STAIR_SLOPE and STAIR_RISE)
+T.STAIR_SLOPE, T.STAIR_RISE = 0.2, 4
+T.STAIRS_THEN_YD = 20 -- yards: a turn this soon after the stairs is said with them ("Stairs up, then turn left")
 
 local atan2 = math.atan2 or math.atan
 
@@ -28,12 +33,13 @@ end
 
 -- The walk ahead, from the player to the next stop or dock: the route's first parts that
 -- lead to stop 1 on the player's continent, up to a transport ride.
--- { pts = { x, y, ... }, kinds, cum, total, cont, ends = "stop" | "ride", ride, from }
+-- { pts = { x, y, ... }, kinds, cum, total, cont, ends = "stop" | "ride", ride, from, zs }
+-- (zs: the points' heights where the route has them, a level with floors over floors; else false)
 function T.Path(route)
   if not route or not route.parts or not route.parts[1] then return nil end
   local first = route.parts[1]
-  local path = { pts = {}, kinds = {}, cum = { 0 }, cont = first.cont, ends = "stop" }
-  local pts, kinds, cum = path.pts, path.kinds, path.cum
+  local path = { pts = {}, kinds = {}, cum = { 0 }, cont = first.cont, ends = "stop", zs = {} }
+  local pts, kinds, cum, zs = path.pts, path.kinds, path.cum, path.zs
   for _, part in ipairs(route.parts) do
     if part.stop ~= first.stop or part.cont ~= first.cont then break end
     if part.kinds[1] == (ns.Nav and ns.Nav.KIND_TRANSPORT or 2) then
@@ -49,6 +55,7 @@ function T.Path(route)
           kinds[#kinds + 1] = part.kinds[(i - 1) / 2] or part.kinds[1]
         end
         pts[n + 1], pts[n + 2] = x, y
+        zs[#zs + 1] = part.zs and part.zs[(i + 1) / 2] or false
       end
     end
   end
@@ -108,6 +115,11 @@ end
 T.NOW_YD = 8
 function T.NowText(m, fmt, short)
   local d = m.dist or 0
+  if m.kind == "stairs" then -- ("Stairs up in 10 yd, then turn left"; on them, "Take the stairs up, then turn left")
+    local after = m.after and (", then " .. m.after) or ""
+    if d <= T.NOW_YD then return m.text .. after end
+    return string.format("%s in %s%s", m.short, fmt(d), after)
+  end
   if d <= T.NOW_YD then
     if m.kind == "turn" or m.kind == "join" or m.kind == "leave" then return m.text .. " now" end
     return m.text
@@ -141,8 +153,45 @@ local function Toward(path, s)
   return best
 end
 
+-- Stairs on the path, in order: { s0, s1, dir = 1 up | -1 down }, flights the same way with a landing
+-- between them one. Where the route has heights (Undercity, a dungeon), by its slope; else a capital's
+-- stairs and ramps between levels (Router.StairAt).
+function T.Stairs(path)
+  local R = ns.Router
+  local out = {}
+  if not (path and path.pts) then return out end
+  local pts, cum, zs = path.pts, path.cum, path.zs or {}
+  local stairAt = R and R.StairAt
+  local last
+  for j = 1, #cum - 1 do
+    local st, dz
+    local z1, z2, len = zs[j], zs[j + 1], cum[j + 1] - cum[j]
+    if z1 and z2 then
+      dz = z2 - z1
+      if len > 0 and math.abs(dz) / len >= T.STAIR_SLOPE then st = dz > 0 and 1 or -1 end
+    elseif stairAt and path.kinds[j] == 0 then -- (a road's: stairs are roads)
+      st = stairAt(path.cont, pts[2 * j - 1], pts[2 * j], pts[2 * j + 1], pts[2 * j + 2])
+    end
+    if st then
+      if last and last.dir == st and cum[j] - last.s1 <= T.STAIRS_GAP then
+        last.s1, last.dz = cum[j + 1], last.dz and dz and last.dz + dz
+      else
+        last = { s0 = cum[j], s1 = cum[j + 1], dir = st, dz = dz }
+        out[#out + 1] = last
+      end
+    end
+  end
+  -- (by heights: only a flight rising or falling STAIR_RISE in all, not a bump)
+  local kept = {}
+  for _, st in ipairs(out) do
+    if not st.dz or math.abs(st.dz) >= T.STAIR_RISE then kept[#kept + 1] = st end
+  end
+  return kept
+end
+
 -- The maneuvers ahead, nearest first: { dist, kind, text, toward, angle }.
--- kind: "turn", "join" (onto the road), "leave" (off the road), "board", "arrive".
+-- kind: "turn", "join" (onto the road), "leave" (off the road), "drop", "lift", "stairs" (up or down:
+-- `short` "Stairs up", `after` the turn just after them), "board", "arrive".
 -- stopLabel: how the next stop is named ("stop 1", a place name...).
 function T.Maneuvers(path, stopLabel)
   local out = {}
@@ -212,6 +261,24 @@ function T.Maneuvers(path, stopLabel)
     end
   end
   flush()
+  -- stairs: said where they start (however near), and the turns on them not (a spiral's)
+  local stairs = T.Stairs(path)
+  if #stairs > 0 then
+    local kept = {}
+    for _, m in ipairs(out) do
+      local on = false
+      for _, st in ipairs(stairs) do
+        if m.kind == "turn" and m.dist >= st.s0 - 3 and m.dist < st.s1 - 1 then on = true break end
+      end
+      if not on then kept[#kept + 1] = m end
+    end
+    out = kept
+    for _, st in ipairs(stairs) do
+      local up = st.dir > 0
+      out[#out + 1] = { dist = st.s0, stop = st.s1, kind = "stairs", up = up,
+        text = up and "Take the stairs up" or "Take the stairs down", short = up and "Stairs up" or "Stairs down" }
+    end
+  end
   table.sort(out, function(a, b) return a.dist < b.dist end)
   -- a jog: turns close together that net out and bring the route back onto the line it
   -- was on (out and back) are no turn at all: straight on
@@ -280,7 +347,8 @@ function T.Maneuvers(path, stopLabel)
       else
         merged[#merged] = nil
       end
-    elseif prev and m.dist - prev.dist < 15 and not prev.merged and ((prev.kind == "turn") ~= (m.kind == "turn")) then
+    elseif prev and m.dist - prev.dist < 15 and not prev.merged and ((prev.kind == "turn") ~= (m.kind == "turn"))
+        and (prev.road or m.kind == "join" or m.kind == "leave") then
       -- a turn right where the route joins/leaves a road reads as one instruction
       local turn, road = prev.kind == "turn" and prev or m, prev.kind == "turn" and m or prev
       local text = turn.text .. (road.kind == "join" and " onto the road" or " off the road")
@@ -289,6 +357,13 @@ function T.Maneuvers(path, stopLabel)
     else
       if m.kind == "join" or m.kind == "leave" then m.road = m.kind end
       merged[#merged + 1] = m
+    end
+  end
+  -- (a turn just after stairs: said with them)
+  for k, m in ipairs(merged) do
+    local nxt = merged[k + 1]
+    if m.kind == "stairs" and nxt and nxt.kind == "turn" and nxt.dist - m.stop <= T.STAIRS_THEN_YD then
+      m.after = nxt.text:sub(1, 1):lower() .. nxt.text:sub(2)
     end
   end
   if path.ends == "ride" and path.ride then

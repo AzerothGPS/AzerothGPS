@@ -690,12 +690,20 @@ def build_capital(cd: ClientData, cap: Capital, ground: Ground, finder: RoadFind
         log(f"  {cap.name}: {len(hung)} road pieces only dropped down out of (no way up onto them) left out")
     joins = []
     for patch, lst in sorted(by_patch.items()):
-        ways = []
+        ways, cliffs = [], []
         for nid in lst:
             if nid in g.nodes and finder is not None:
                 w = finder.walk(tuple(float(v) for v in g.nodes[nid]), inside, cap.join_blocked)
                 if w:
+                    # (not one up a cliff, as walked in 3D: Thunder Bluff's mesa from the east lifts' feet,
+                    # 98 yd straight up, which routes took over the lifts; the every-road check, 2026-10-01)
+                    jump = walk_3d(u, [tuple(q) for q in w[1]], [0] * (len(w[1]) - 1))[0]
+                    if jump > JUMP_MAX:
+                        cliffs.append(jump)
+                        continue
                     ways.append((w[0], nid, w[1]))
+        if cliffs and not ways:
+            log(f"  {cap.name}: a gate's way to the land's road left out: {max(cliffs):.0f} yd up or down in 3D")
         if not ways:
             continue
         yards, nid, pts = min(ways)
@@ -1054,8 +1062,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
         def roads(label, parts, cave):
             """One entry of the overlays: the parts (nodes, edges, drops, joins, bridge or None,
             extra yards per edge) one after the other, their node numbers moved on."""
-            n_all, e_all, joins, bridge, drops, lifts, nz = [], [], [], [], {}, set(), []
-            for nodes, edges, dr, jn, br, extra, heights in parts:
+            n_all, e_all, joins, bridge, drops, lifts, nz, stair_set = [], [], [], [], {}, set(), [], set()
+            for nodes, edges, dr, jn, br, extra, heights, stairs in parts:
                 base = len(n_all)
                 nz += heights
                 for i, (a, b, pts) in enumerate(edges):
@@ -1068,6 +1076,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                     length += (extra or {}).get(i, 0)  # (a lift: its wait and ride, as yards walked)
                     if i in (extra or {}):
                         lifts.add(len(e_all))
+                    if i in stairs:
+                        stair_set.add(len(e_all))
                     if i in dr:
                         drops[len(e_all)] = dr[i]
                     e_all.append((a + base, b + base, length, pts))
@@ -1083,7 +1093,8 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
             out.append("  nz = {" + ",".join("0" if h is None else f"{h:.0f}" for h in nz) + "},")
             out.append("  e = {")
             for i, (a, b, length, pts) in enumerate(e_all):
-                src = 3 if i in drops else 5 if i in lifts else 0  # (5: a lift, its top to its foot: Router.SOURCE_LIFT)
+                # (5: a lift, its top to its foot: Router.SOURCE_LIFT; 6: stairs or a ramp between levels, Router.SOURCE_STAIR)
+                src = 3 if i in drops else 5 if i in lifts else 6 if i in stair_set else 0
                 out.append(f"    {{{a + 1},{b + 1},{length:.0f},{src},\"{pack_points(pts)}\"}},")
             out.append("  },")
             out.append("  joins = {" + ",".join(str(j + 1) for j in joins) + "},")
@@ -1126,24 +1137,27 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
             order = {nid: i for i, nid in enumerate(sorted(u["graph"].nodes))}
             joins = [order[j] for j, q in u["joins"] if q is not None and j in order]
             lift_yd = {i: LIFT_SECONDS * 7 for i, e in enumerate(u["graph"].edges.values()) if e.source == "lift"}
+            stairs = {i for i, e in enumerate(u["graph"].edges.values()) if e.source == "stair"}
             if u["capital"].indoor:  # (like a cave's: gap links only at its gates, not into the mountain)
                 bridge = sorted({order[j] for j in u["mouths"] if j in order} | set(joins))
-                under.append((nodes, edges, drops, joins, bridge, lift_yd, hs))
+                under.append((nodes, edges, drops, joins, bridge, lift_yd, hs, stairs))
             else:
-                land.append((nodes, edges, drops, joins, None, lift_yd, hs))
+                land.append((nodes, edges, drops, joins, None, lift_yd, hs, stairs))
             log(f"  {u['capital'].name}: {len(nodes)} road nodes, {len(edges)} roads, {len(joins)} joined")
             un = u.get("under")
             if un and un["graph"].edges:
                 g = un["graph"]
                 order = {nid: i for i, nid in enumerate(sorted(g.nodes))}
                 unodes = [tuple(g.nodes[n]) for n in sorted(g.nodes)]
-                uedges, udrops = [], {}
+                uedges, udrops, ustairs = [], {}, set()
                 for e in g.edges.values():
                     if e.source.startswith("drop:"):
                         udrops[len(uedges)] = int(float(e.source[5:]))
+                    if e.source == "stair":
+                        ustairs.add(len(uedges))
                     uedges.append((order[e.a], order[e.b], [tuple(q) for q in e.pts]))
                 # (no gap links to or from them: a straight line there may be up or down a level)
-                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}, heights_at(un["low"], unodes)))
+                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}, heights_at(un["low"], unodes), ustairs))
         roads("capitals", land, cave=False)
         roads("capitals (under others, in a mountain)", under, cave=True)
         out.append("end")
@@ -1156,13 +1170,14 @@ JUMP_MAX = 8.0  # yards: a jump bigger than this between levels is flagged (stee
 CLIMB_MAX = 8.0  # yards: a route up over both its ends and back down by more than this is marked "^"
 
 
-def walk_3d(u: dict, pts, kinds, lifts=(), with_climb: bool = False) -> tuple:
+def walk_3d(u: dict, pts, kinds, lifts=(), with_climb: bool = False, z0: float | None = None) -> tuple:
     """Whether a route stays on the city's floors in 3D: the heights a walk along it may be at
     (every floor within JUMP_TOL of the last sample's), sample by sample, half a yard apart;
     drops (kind 4) may go down, and a lift's shaft (lifts: (x, y, z)) up or down. The worst jump
     between levels (yards) and where, or (0, None). `with_climb`: and how far it must go up over
     both its ends (the lowest floor it may be on, at its highest) and back down: a way up a stair
-    and down again (Ironforge's trainers, asked 2026-09-30)."""
+    and down again (Ironforge's trainers, asked 2026-09-30). `z0`: the height it starts at (a road's
+    node's), else on any floor there; none about it at the start is a jump there too."""
     bands, wall3, Z0 = u["bands"], u["wall3"], u["Z0"]
     H, W = u["H"], u["W"]
     zs, worst, where, miss = None, 0.0, None, 0
@@ -1181,6 +1196,14 @@ def walk_3d(u: dict, pts, kinds, lifts=(), with_climb: bool = False) -> tuple:
                 continue
             if zs is None:
                 zs = fz
+                if z0 is not None:
+                    zs = [f for f in fz if abs(f - z0) <= JUMP_TOL]
+                    if not zs:
+                        jump = min(abs(f - z0) for f in fz)
+                        if jump > worst:
+                            worst, where = jump, ("start", round(x), round(y))
+                        zs = fz
+                    z0 = None
                 continue
             nz = [f for f in fz if any((f <= z + JUMP_TOL) if kd == 4 else abs(f - z) <= JUMP_TOL for z in zs)]
             if not nz:
@@ -1259,6 +1282,35 @@ def map_places(cap: Capital, u: dict | None = None) -> list:
         for u_, v_, name in re.findall(r"\{ ([\d.]+), ([\d.]+), \"([^\"]+)\"(?:, -?[\d.]+)? \}", m.group(1)):
             out.append((name, maxX - float(v_) / 100 * (maxX - minX), maxY - float(u_) / 100 * (maxY - minY)))
     return out
+
+
+def check_roads_3d(built: list) -> list:
+    """Every road of each capital (its own and its floors under others'), walked in 3D over its floors
+    (walk_3d): a jump between levels over JUMP_MAX marked "!" (a gap, a wrong join, a lift's shaft), and
+    each road's source (stairs and ramps: "stair"; drops) and its ends' floor heights. Rows of text."""
+    rows = []
+    for u in built:
+        cap = u["capital"]
+        un = u.get("under") or {}
+        for label, g, uu in ((cap.name, u["graph"], u), (cap.name + " (under)", un.get("graph"), un.get("low"))):
+            if g is None or uu is None:
+                continue
+            for eid, e in g.edges.items():
+                pts = [tuple(q) for q in e.pts]
+                if len(pts) < 2:
+                    continue
+                kinds = [4 if str(e.source).startswith("drop") else 0] * (len(pts) - 1)
+                jump, where, _climb = walk_3d(uu, pts, kinds, cap.lifts, with_climb=True)
+                hs = []
+                for q in (pts[0], pts[-1]):
+                    r, c = uu["world_to_px"](*q)
+                    ok = 0 <= r < uu["H"] and 0 <= c < uu["W"] and np.isfinite(uu["top"][r, c])
+                    hs.append(round(float(uu["top"][r, c])) if ok else None)
+                bad = jump > JUMP_MAX and not str(e.source).startswith(("drop", "lift"))
+                rows.append(f"{'!' if bad else ' '} {label}: road {eid} {e.source} {e.length:.0f} yd from "
+                            f"({pts[0][0]:.0f}, {pts[0][1]:.0f}) {hs[0]} to ({pts[-1][0]:.0f}, {pts[-1][1]:.0f}) {hs[1]}, "
+                            f"3D jump {jump:.0f} yd" + (f" at ({where[1]}, {where[2]})" if where else ""))
+    return rows
 
 
 def place_heights(cap: Capital) -> dict:

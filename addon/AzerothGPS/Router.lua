@@ -2167,6 +2167,58 @@ function R.JunctionAt(cont, x, y)
   return g.junctions[Key(math.floor(x + 0.5), math.floor(y + 0.5))] or false
 end
 
+-- Whether the route's stretch (x1, y1)-(x2, y2) on `cont` goes up (1) or down (-1) stairs (a capital's
+-- stairs or ramp between levels: SOURCE_STAIR, capitals.py), else nil: its middle on such a road, the
+-- way along it by its ends' heights (g.nz), at least STAIR_MIN_Z apart. Turns says "Stairs up".
+R.SOURCE_STAIR = 6
+R.STAIR_MIN_Z = 3
+R.STAIR_CELL = 8 -- yards: the cells the stairs' pieces are looked up by
+R.STAIR_REACH = 2 -- yards: a stretch's middle this close to a stair road is on it
+function R.StairAt(cont, x1, y1, x2, y2)
+  local g = Graph(cont)
+  if not (g and g.nz) then return nil end
+  local C = R.STAIR_CELL
+  if not g.stairs then
+    local idx = {}
+    for _, e in ipairs(g.e) do
+      local za, zb
+      if e[4] == R.SOURCE_STAIR then za, zb = g.nz[e[1]], g.nz[e[2]] end
+      if za and zb and math.abs(zb - za) >= R.STAIR_MIN_Z then
+        for i = 5, #e - 3, 2 do
+          local s = { e[i], e[i + 1], e[i + 2], e[i + 3], zb > za } -- (5th: along its points is up)
+          local n = math.max(1, math.ceil(Dist(e[i], e[i + 1], e[i + 2], e[i + 3]) / (C / 2)))
+          local seen = {}
+          for k = 0, n do -- (in the cells around it too: a lookup is one cell's)
+            local px, py = e[i] + (e[i + 2] - e[i]) * k / n, e[i + 1] + (e[i + 3] - e[i + 1]) * k / n
+            for dx = -1, 1 do
+              for dy = -1, 1 do
+                local key = Key(math.floor(px / C) + dx, math.floor(py / C) + dy)
+                if not seen[key] then
+                  seen[key] = true
+                  idx[key] = idx[key] or {}
+                  table.insert(idx[key], s)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    g.stairs = idx
+  end
+  local mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+  local list = g.stairs[Key(math.floor(mx / C), math.floor(my / C))]
+  if not list then return nil end
+  local best, bestD = nil, R.STAIR_REACH * R.STAIR_REACH
+  for _, s in ipairs(list) do
+    local d = SegDist2(mx, my, s[1], s[2], s[3], s[4])
+    if d <= bestD then best, bestD = s, d end
+  end
+  if not best then return nil end
+  local along = (x2 - x1) * (best[3] - best[1]) + (y2 - y1) * (best[4] - best[2]) >= 0
+  return along == best[5] and 1 or -1
+end
+
 -- Nearest point on the road network to (x, y) (see NearestEdges).
 function R.Nearest(cont, x, y)
   return R.NearestEdges(cont, x, y)[1]
