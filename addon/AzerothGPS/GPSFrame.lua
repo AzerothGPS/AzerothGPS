@@ -3577,6 +3577,29 @@ function G.InstanceEntrances(cont)
   return list
 end
 
+-- The way in a stop picked in dungeon `lvl`'s map at (x, y) goes to instead: its entrance on the continent,
+-- the icon there ({ cont, x, y, name }), or nil when it has none. Of several, the one whose way in is
+-- nearest (x, y) (a wing's: the Scarlet Monastery's); with no inside end (WoW Forever's own dungeons),
+-- the one nearest the player (`pcont`, px, py: on their continent first).
+function G.InstanceStopEntrance(lvl, x, y, pcont, px, py)
+  local info = ns.Instances and ns.Instances[lvl]
+  if not info then return nil end
+  local list = info.ghost and { info.ghost } or info.entrances or {}
+  local best, bd
+  for _, e in ipairs(list) do
+    local d
+    if e[4] and e[5] then
+      d = (e[4] - x) ^ 2 + (e[5] - y) ^ 2
+    elseif pcont and px and Geo.Base(pcont) == e[1] then
+      d = (e[2] - px) ^ 2 + (e[3] - py) ^ 2
+    else
+      d = math.huge
+    end
+    if not bd or d < bd then best, bd = e, d end
+  end
+  return best and { cont = best[1], x = best[2], y = best[3], name = info.name } or nil
+end
+
 -- A dungeon's extent: x0, x1, y0, y1 (its floor grid, else its map's minimap tiles: WoW
 -- Forever's own dungeons, their map only), or nil.
 function G.InstanceBounds(lvl)
@@ -4114,7 +4137,7 @@ function G.FinishRoad(line, erase, wall)
 end
 
 function G.AddStopAt(x, y, name, stopCont, tex, z, exact)
-  local px, _, cont = Geo.PlayerWorld()
+  local px, py, cont = Geo.PlayerWorld()
   if not px then return false end
   if ns.Nav.DungeonLocked() then ns.Nav.SayLocked() return false end
   local max = ns.Nav.loop and ns.Nav.MAX_LOOP_STOPS or ns.Nav.MAX_STOPS
@@ -4133,6 +4156,18 @@ function G.AddStopAt(x, y, name, stopCont, tex, z, exact)
   -- a place picked on the map (its icon: a guard's city location...) on a city's floors is
   -- down there, wherever the player is
   if tex and not exact and ns.Layers and ns.Layers.CityLevelAt then sc = ns.Layers.CityLevelAt(Geo.Base(sc), x, y) or sc end
+  -- (in a dungeon's or raid's map, a spot, a boss or a pin there: not a stop inside it (a route there kept
+  -- "Working out the route..." going), its entrance's icon on the continent instead; asked 2026-10-01)
+  local inst = G.InstanceOf(sc)
+  if inst then
+    local e = G.InstanceStopEntrance(inst, x, y, cont, px, py)
+    if not e then
+      ns.Print(string.format("%s: no way in known to route to", ns.Instances[inst].name or "that dungeon"))
+      return false
+    end
+    x, y, name, tex, z = e.x, e.y, e.name, INSTANCE_ICON, nil
+    sc = ns.Nav.StopLevel and ns.Nav.StopLevel(e.cont, x, y) or e.cont
+  end
   -- (`z`: its height, the game's, when known: a city place's, its floor where floors lie over each other)
   local stop = { x = x, y = y, cont = sc, name = name, icon = ns.Nav.NextMarker(ns.Nav.stops, pending), tex = tex, z = z }
   if #ns.Nav.stops > 0 then

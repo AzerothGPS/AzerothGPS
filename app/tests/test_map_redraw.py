@@ -1328,6 +1328,35 @@ def test_dragging_in_a_city_keeps_its_map_until_right_click(game):
         G.Follow()
 
 
+def test_a_stop_picked_in_a_dungeons_map_goes_to_its_entrance(game):
+    # (asked: a stop picked in a dungeon's map kept "Working out the route..." going) a spot, a boss or a pin
+    # in a dungeon's or raid's map: a stop at its entrance's icon on the continent instead; of a dungeon's
+    # several ways in, the wing picked
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    # (the Scarlet Monastery's four wings: the second's way in is at (853, 1319) inside)
+    e = G.InstanceStopEntrance(20189, 860.0, 1310.0)
+    assert (e.cont, e.x, e.y, e.name) == (0, 2915.1, -823.6, "Scarlet Monastery")
+    N.Clear()
+    try:
+        G.ShowInstance(20036)  # (the Deadmines' map, opened from its icon)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        boss = ns.Instances[20036].bosses[1]
+        G.AddStopAt(boss[3], boss[4], boss[1], 20036, r"Interface\Icons\Spell_Shadow_Skull", boss[5])  # (its icon)
+        G.AddStopAt(boss[3] + 20.0, boss[4])  # (a double-click on the map there)
+        G.ConfirmRoute()
+        way = ns.Instances[20036].entrances[1]
+        assert len(N.stops) == 2
+        for d in N.stops.values():
+            assert (d.cont, d.x, d.y, d.name) == (way[1], way[2], way[3], "Deadmines") and d.z is None
+        _frames(lua, 3, fps=10)
+        assert N.route is not None and N.Status(2254.0, 293.0, 0) != N.WORKING_TEXT  # (worked out)
+    finally:
+        N.Clear()
+        G.Follow()
+
+
 def test_the_deeprun_tram_has_its_map(game):
     # (reported: in the Deeprun Tram the map was blank) the game puts you on a map of its own there (369):
     # its art, as a dungeon's (Data/Transit.lua), and its name in the title; no dungeon features
