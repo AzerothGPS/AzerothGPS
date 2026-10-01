@@ -1,68 +1,68 @@
 # AzerothGPS
 
-**A car-style GPS for Azeroth.** Pick where you want to go and AzerothGPS draws the way there along the world's roads and trails, with turn-by-turn directions, distances and ETAs.
+**Basically a car GPS, but for Azeroth.** Tell it where you want to go and it draws the way there along the actual roads and trails, with turn-by-turn directions, distances and an ETA.
 
 ![Double-clicking Brill and a spot on the map, confirming, then following the route with the direction arrow](https://i.imgur.com/LnZbC2x.gif)
 
 _Double-click where you want to go, confirm, and follow the arrow._
 
-## Routes that know the terrain
+## It knows the terrain
 
-When mountains or cliffs block the straight way, the route goes around them and in through the pass. It follows the roads, and off the road it joins them where they're heading, not back at their nearest point; walk your own way and the join point moves with you. A trip can have many stops, put in the fastest order.
+No more running straight at a mountain and wondering why you're stuck. When cliffs or ridges are in the way, the route goes around them and in through the pass. It sticks to the roads where that makes sense, and when you're off the road it joins up where you're headed, not back at the closest bit behind you. Take your own shortcut and it just adjusts. Got a bunch of places to hit? Add as many stops as you like and it sorts them into the fastest order.
 
 ![A route around a mountain ridge and in through the pass to a walled-off valley](https://i.imgur.com/IyVpGiY.png)
 
 ![A three-stop route around Brill and the Undercity, with the direction arrow](https://i.imgur.com/lOUdHxl.png)
 
-## Quests, routed for you
+## Your quest log, routed
 
-Quest areas show on the map like on the minimap. One click routes you through your whole quest log: every objective and every turn-in, in the fastest order. A stop in a quest's area waits until that quest's objectives are done, then the route moves on.
+Quest areas show up on the map just like on your minimap. One click and it routes you through your whole quest log: every objective and every turn-in, in the fastest order. A stop in a quest area waits until you've finished that quest's objectives, then the route moves on.
 
 ![Clicking the Sprint button: the route zooms out over every quest stop and turn-in](https://i.imgur.com/g67YfqD.gif)
 
-## A map that stays out of your way
+## Stays out of your way
 
-- **Size and opacity:** resize the map and set how see-through it is.
-- **While moving and in combat:** it can fade while you move, turn click-through, or dim or hide in combat.
-- **Show/hide key:** your choice of key.
-- **Light on slower PCs:** Options → Performance sets how often the map redraws and the route is worked out again, with one click for low-end settings and a live readout of how much of the time AzerothGPS is using.
+- **Size and opacity:** make it as big or as see-through as you want.
+- **Moving and fighting:** it can fade while you run, go click-through, or dim or hide in combat.
+- **Show/hide key:** bind whatever key you like.
+- **Older PC?** Options → Performance lets you turn down how often the map redraws and the route gets recalculated. There's a one-click low-end preset, and it shows you live how much time AzerothGPS is actually taking.
 
-## Gathering for every character
+## Farming, on every character
 
-Herbs and ore you gather, hover on the minimap, or right-click without the profession ("Requires Herbalism") are remembered for all your characters. Draw around them and the route loops through every node.
+Every herb and ore node you gather, hover over on the minimap, or right-click without the profession ("Requires Herbalism") gets remembered across all your characters. Draw around a spot and it routes a loop through every node in it.
 
 ![Drawing a farming area and following the loop](https://i.imgur.com/ABt7arU.gif)
 
-## Fix the map, improve it for everyone
+## Spot a mistake? Fix it
 
-Draw a trail the routes miss, or a wall they walk through, and routes use it right away. Then send it in (`/reload`, then **Copy Map Data...**): fixes that check out ship in the next version for everyone.
+If a route misses a trail or walks you into a wall, draw the fix right on the map and routes use it straight away. Send it in (`/reload`, then **Copy Map Data...**) and if it checks out, it ships in the next version for everybody.
 
 ![Road tools in Duskwood: circling a false road to erase it, then drawing the real one](https://i.imgur.com/WjwnjW1.gif)
 
-## Also
+## Also in there
 
-- **Every way to travel:** flight paths (and a detour to learn the ones you pass), boats and zeppelins with arrival countdowns, the Deeprun Tram, your hearthstone, class teleports and engineers' teleporters, used with one click from the directions.
+- **Every way to get around:** flight paths (plus a detour to pick up ones you pass but haven't learned), boats and zeppelins with countdowns to their next arrival, the Deeprun Tram, your hearthstone, class teleports and engineer teleporters. You can hearth or teleport with one click right from the directions. Don't fancy a certain flight or boat? Right-click it and the route skips it.
 - **Cities and caves:** every capital's streets, Undercity's floors and lifts, and 351 caves and mines.
-- **Dungeons and raids:** their maps floor by floor, bosses in order, a boss route.
-- **Staying safe:** routes go around the other faction's towns and zones too high for your level.
-- **Your party on the map:** party and raid members as round class icons in their class's color (they don't need the addon).
-- **Turn-by-turn directions**, with ETAs at your walking, mount or travel-form speed.
-- **TomTom `/way`** import and route sharing.
-- **Display only:** it never moves your character, clicks for you or automates anything.
+- **Dungeons and raids:** floor-by-floor maps, bosses in order, and a boss route.
+- **Keeping you alive:** routes steer around the other faction's towns and zones way above your level.
+- **Your group on the map:** party and raid members show up as round class icons in their class color. They don't need the addon.
+- **Turn-by-turn directions** with ETAs at your actual speed, on foot, mounted or in travel form.
+- **TomTom `/way`** import, and you can share routes with friends.
+- **Display only:** it never moves your character, clicks anything for you or automates anything. It just shows you the way.
 
 ## Getting started
 
-1. The map window shows at the bottom of the screen (`/agps show` if it's hidden).
-2. **Double-click the map** to add a stop, then click **Confirm Route** (or wait 5 seconds).
-3. Follow the line on the map, or the direction arrow.
-4. Using flight paths? Open the flight map at any flight master once.
+1. The map sits at the bottom of your screen (type `/agps show` if it's hidden).
+2. **Double-click the map** to add a stop, then click **Confirm Route** (or just wait 5 seconds).
+3. Follow the line on the map, or the arrow.
+4. Using flight paths? Open the flight map at any flight master once so it knows which ones you have.
 
-Everything else, every feature, option and command, is in the **[AzerothGPS wiki](https://github.com/AzerothGPS/AzerothGPS/wiki)**.
+Want the full rundown of every feature, option and command? It's all in the **[AzerothGPS wiki](https://github.com/AzerothGPS/AzerothGPS/wiki)**.
 
-## Community and feedback
+## Come say hi
 
-- **Discord:** questions, ideas and news on the **[AzerothGPS Discord](https://discord.gg/gktYHzs2c)**.
-- **Bugs and bad routes:** open an issue on [GitHub](https://github.com/AzerothGPS/AzerothGPS/issues) or post on the Discord, with the zone and your start and destination coordinates (shown at the bottom of the map).
-- **Map fixes:** draw them with the road or wall tools, type `/reload` (it saves every edit), then **Copy Map Data...** (Options → Help improve) and paste it in a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or on the Discord.
+- **Discord:** questions, ideas and news on the **[AzerothGPS Discord](https://discord.gg/gktYHzs2c)**. Come hang out.
+- **Bugs and bad routes:** open an issue on [GitHub](https://github.com/AzerothGPS/AzerothGPS/issues) or post in the Discord. Include the zone and your start and destination coordinates (they're at the bottom of the map).
+- **Map fixes:** draw them with the road or wall tools, type `/reload` (that saves every edit), then **Copy Map Data...** (Options → Help improve) and paste it into a [Road data issue](https://github.com/AzerothGPS/AzerothGPS/issues/new?template=road-data.yml) or the Discord.
 
 _AzerothGPS is a fan-made addon and is not affiliated with or endorsed by Blizzard Entertainment. World of Warcraft and Azeroth are trademarks of Blizzard Entertainment, Inc._
