@@ -39,7 +39,7 @@ For WoW Forever client 1.60.1 (interface 16001). A new data file is included, so
 ### Changed
 
 - **Flights at a low level:** a flight is weighed against the walk as it's actually routed, not a straight line, so a route flies when walking would go the long way round zones too high for you (e.g. from Brill into Arathi Highlands at level 14).
-- With the window frame on, the zone and coordinates are in its title bar, in place of "AzerothGPS" (without the frame, at the bottom of the map as before).
+- With the window frame on, the place's name ("Undercity") is in its title bar, in place of "AzerothGPS"; the coordinates stay at the bottom of the map. Without the frame, both are at the bottom as before.
 - The directions say what to do now, then the next turn: "Continue straight, then slight right in 13 yd" ("Slight right now" at the turn).
 - Changing a route option (flight paths, the hearthstone, teleports, the zones or towns avoided) works the trip out again at once.
 - "Route there anyway?" is remembered for the route, also after a /reload.

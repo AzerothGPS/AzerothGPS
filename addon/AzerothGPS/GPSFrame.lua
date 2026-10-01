@@ -2596,31 +2596,35 @@ function G.Update()
   G.UpdateInfo()
 end
 
--- Where the coordinates line goes: with the window frame shown, its title bar, in place of
--- "AzerothGPS" (asked, 2026-09-30; "AzerothGPS" when the line is empty); else the map's bottom.
+-- The coordinates line, split (asked, 2026-09-30): with the window frame shown, the place's name is its
+-- title ("AzerothGPS" when there's none) and the line at the map's bottom has the coordinates; without
+-- it, the whole line at the bottom. (G.infoMark, G.infoName, G.infoXY: from G.UpdateInfo.)
 function G.PlaceInfo()
   if not infoText then return end
+  local mark, name, xy = G.infoMark or "", G.infoName, G.infoXY
   local c = G.chrome
   local title = c and c:IsShown() and (c.TitleContainer and c.TitleContainer.TitleText or c.TitleText)
   if title then
-    local text = infoText:GetText()
-    title:SetText(text and text ~= "" and text or "AzerothGPS")
-    infoText:Hide()
+    title:SetText(name and name ~= "" and name or "AzerothGPS")
+    infoText:SetText(xy and mark .. xy or "")
   else
-    infoText:Show()
+    infoText:SetText(mark .. (name or "") .. (xy and ((name and "  " or "") .. xy) or ""))
   end
+  infoText:Show()
 end
 
--- The coordinates line (bottom): the spot under the mouse pointer while it's over the map,
--- else the crosshair while panning, else the player. Runs ~10 times a second on its own
--- (the map redraw is skipped when nothing moves, the pointer may still).
-local SetInfo
+-- The coordinates line: the spot under the mouse pointer while it's over the map, else the crosshair
+-- while panning, else the player. Runs ~10 times a second on its own (the map redraw is skipped when
+-- nothing moves, the pointer may still).
+local InfoParts
 function G.UpdateInfo()
   if not infoText then return end
-  SetInfo()
+  G.infoMark, G.infoName, G.infoXY = InfoParts()
   G.PlaceInfo()
 end
-SetInfo = function()
+-- Its parts: the mark (what it's of: the pointer, the crosshair, or none for the player), the place's
+-- name and the coordinates; each nil when there's none.
+InfoParts = function()
   local over = canvas:IsMouseOver() and not drag
   local x, y, mark
   if over then
@@ -2633,27 +2637,21 @@ SetInfo = function()
     x, y, mark = view.x, view.y, "|cffffd100+|r "
   end
   if x and view.instance and ns.Instances[view.instance] then -- (a dungeon's map)
-    infoText:SetFormattedText("%s%s  %.0f, %.0f", mark, ns.Instances[view.instance].name, x, y)
-    return
+    return mark, ns.Instances[view.instance].name, string.format("%.0f, %.0f", x, y)
   end
   if x and view.cont then
     local _, name, u, v = G.LocateWorld(view.cont, x, y)
-    if name then
-      infoText:SetFormattedText("%s%s  %.1f, %.1f", mark, name, u * 100, v * 100)
-    else
-      infoText:SetText(mark)
-    end
-    return
+    if name then return mark, name, string.format("%.1f, %.1f", u * 100, v * 100) end
+    return mark, nil, nil
   end
   local mapID = C_Map.GetBestMapForUnit("player")
   local info = mapID and C_Map.GetMapInfo(mapID)
   local pos = mapID and C_Map.GetPlayerMapPosition(mapID, "player")
   if info and pos then
     local px, py = pos:GetXY()
-    infoText:SetFormattedText("%s  %.1f, %.1f", info.name, px * 100, py * 100)
-  else
-    infoText:SetText(info and info.name or "")
+    return nil, info.name, string.format("%.1f, %.1f", px * 100, py * 100)
   end
+  return nil, info and info.name or nil, nil
 end
 
 function G.Describe()

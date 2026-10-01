@@ -789,9 +789,9 @@ def test_the_corner_logo_without_the_circle_and_back(game):
         lua.execute("GetPhysicalScreenSize = nil AGPS_W:Hide()")
 
 
-def test_the_coordinates_are_in_the_title_bar_with_the_window_frame(game):
-    # (asked) the zone and coordinates line from the map's bottom in the window frame's title bar,
-    # in place of "AzerothGPS"; without the frame, at the bottom as before
+def test_the_place_is_in_the_title_bar_and_the_coordinates_at_the_bottom(game):
+    # (asked) with the window frame, the place's name ("Undercity") in its title bar in place of
+    # "AzerothGPS", the X, Y at the map's bottom as before; without the frame, both at the bottom
     lua, ns = game
     G = ns.GPS
     chrome = G.chrome
@@ -802,23 +802,25 @@ def test_the_coordinates_are_in_the_title_bar_with_the_window_frame(game):
     """)
     fake = lua.eval("AGPS_CHROME")
     title = fake.TitleContainer.TitleText
-    # (the other shown texts saying it: the bottom line)
-    elsewhere = lua.eval("""function(text)
-      local n = 0
+    # (the shown texts but the title: the line at the bottom)
+    shown = lua.eval("""function()
+      local out = {}
       for _, w in ipairs(AGPS_WIDGETS) do
-        if w._shown and w._text == text and w ~= AGPS_CHROME.TitleContainer.TitleText then n = n + 1 end
+        if w._shown and w._text ~= "" and w ~= AGPS_CHROME.TitleContainer.TitleText then out[#out + 1] = w._text end
       end
-      return n
+      return out
     end""")
     try:
         G.chrome = fake
         G.UpdateInfo()
-        text = str(title._text)
-        assert text != "AzerothGPS" and "," in text  # (the zone, x, y)
-        assert elsewhere(text) == 0
+        name, xy = str(G.infoName), str(G.infoXY)
+        assert name and "," in xy
+        assert str(title._text) == name  # (the place alone)
+        texts = [str(t) for t in shown().values()]
+        assert xy in texts and not any(name in t for t in texts if xy in t)  # (the X, Y alone, at the bottom)
         fake.Hide(fake)
-        G.UpdateInfo()
-        assert elsewhere(text) == 1
+        G.PlaceInfo()
+        assert f"{name}  {xy}" in [str(t) for t in shown().values()]  # (no title bar: the whole line)
     finally:
         G.chrome = chrome
         G.UpdateInfo()
