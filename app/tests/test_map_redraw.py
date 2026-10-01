@@ -331,6 +331,52 @@ def test_a_route_starting_with_the_hearthstone_says_so_in_both_windows(game):
     N.Clear()
 
 
+def test_yes_no_questions_are_azerothgps_popups_without_a_title_bar(game):
+    # (asked, screenshot: "route there anyway?" a plain box) the questions in AzerothGPS's popup without a
+    # title bar (ns.Ask): on the map, mid-screen while it's hidden, and a route someone shares
+    lua, ns = game
+    G, I = ns.GPS, ns.Import
+    said = lua.eval("{}")
+    yes = lua.eval("function(t) return function() t.yes = true end end")(said)
+    no = lua.eval("function(t) return function() t.no = true end end")(said)
+    assert G.Confirm("That stop is in Badlands (level 35-45): too high for your level 1.\n\nRoute there anyway?", yes, no)
+    box = G.confirmBox
+    assert box._shown and box.top in (-12, -14) and "Badlands" in box.text._text
+    assert (box.yes._text, box.no._text) == ("Yes", "No")
+    box.yes._scripts.OnClick(box.yes)
+    assert said.yes and not said.no and not box._shown
+    G.Confirm("Again?", yes, no)
+    box._scripts.OnHide(box)  # (closed unanswered: as no)
+    assert said.no
+    # a shared route: its own question, "Use Route" / "Ignore"
+    stops = lua.eval("{ { x = 2250, y = 250, cont = 0, name = 'Brill' }, { x = 1600, y = 240, cont = 0, name = 'Ruins' } }")
+    I.Offer("Friend-Realm", stops)
+    offer = lua.globals().AzerothGPSSharedRoute
+    assert offer._shown and "Friend" in offer.text._text and "1. Brill" in offer.text._text
+    assert (offer.yes._text, offer.no._text) == ("Use Route", "Ignore")
+    offer.yes._scripts.OnClick(offer.yes)
+    assert len(ns.Nav.stops) == 2
+    ns.Nav.Clear()
+    G.Follow()
+
+
+def test_leaving_a_route_shows_the_citys_inside_map_again(game):
+    # (reported) in Ironforge, right-clicked out to pick a spot outside: the route made (or cleared), the
+    # map stayed on the outside; following the player again shows the city's inside map again
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    G.outsideOf = "Ironforge"
+    G.Follow()
+    assert G.outsideOf is None
+    N.SetStops(lua.eval("{ { x = -1441, y = -2332, cont = 0 } }"), False, "red")
+    lua.execute("AGPS_T = 900")
+    G.Update()
+    G.outsideOf = "Ironforge"
+    clear = next(w for w in lua.eval("AGPS_WIDGETS").values() if w._text == "Clear Route")
+    clear._scripts.OnClick(clear)
+    assert len(N.stops) == 0 and G.outsideOf is None
+
+
 def test_every_popup_window_is_made_with_ns_window():
     # (asked) every popup in the map window's art style without its logo, by default: none built by hand
     # (only the map, the arrow window and the options window, which has the logo, make their own)

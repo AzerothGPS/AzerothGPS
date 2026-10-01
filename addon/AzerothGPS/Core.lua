@@ -643,20 +643,26 @@ end
 -- checks: test_every_popup_window_is_made_with_ns_window), and its companions through API.Window.
 -- Dragged anywhere to move, kept on the screen, closed by its button or Escape (a plain Hide: works in
 -- combat). Returns the frame: its content goes from `f.top` (negative) down; f:SetWindowTitle(text).
+-- `opts`: { parent (default the screen), noTitle (no title bar or close button: a question's, ns.Ask; the
+-- border without the title band), fixed (not dragged) }.
 ns.WINDOW_BG = { 0.06, 0.06, 0.07, 0.97 }
 ns.WINDOW_TITLE_MARGIN = 24 -- (as the map window's: GPSFrame's TITLE_MARGIN)
-function ns.Window(name, w, h, title, strata)
-  local f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+ns.WINDOW_PLAIN_BORDER = "SimplePanelTemplate" -- (the client's metal border without a title band)
+function ns.Window(name, w, h, title, strata, opts)
+  opts = opts or {}
+  local f = CreateFrame("Frame", name, opts.parent or UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   f:SetSize(w, h)
   f:SetPoint("CENTER")
   f:SetFrameStrata(strata or "DIALOG")
   f:SetToplevel(true)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
-  f:SetMovable(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  if not opts.fixed then
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  end
   if name and UISpecialFrames then table.insert(UISpecialFrames, name) end -- (Escape closes it)
   local c = ns.WINDOW_BG
   local bg = f:CreateTexture(nil, "BACKGROUND")
@@ -671,11 +677,15 @@ function ns.Window(name, w, h, title, strata)
     chrome:EnableMouse(false)
     if chrome.Bg then chrome.Bg:Hide() end
     if chrome.TopTileStreaks then chrome.TopTileStreaks:Hide() end
-    if chrome.SetBorder then
-      pcall(chrome.SetBorder, chrome, "ButtonFrameTemplateNoPortrait")
-    elseif NineSliceUtil and NineSliceUtil.ApplyLayoutByName then
-      pcall(NineSliceUtil.ApplyLayoutByName, chrome.NineSlice, "ButtonFrameTemplateNoPortrait")
+    local function Border(layout)
+      if chrome.SetBorder then return (pcall(chrome.SetBorder, chrome, layout)) end
+      if NineSliceUtil and NineSliceUtil.ApplyLayoutByName then
+        return (pcall(NineSliceUtil.ApplyLayoutByName, chrome.NineSlice, layout))
+      end
+      return false
     end
+    -- (no title bar: the plain metal border, else the usual one with its title band empty)
+    if not (opts.noTitle and Border(ns.WINDOW_PLAIN_BORDER)) then Border("ButtonFrameTemplateNoPortrait") end
     if chrome.PortraitContainer then chrome.PortraitContainer:Hide() end
     if chrome.portrait then chrome.portrait:Hide() end
     local tc = chrome.TitleContainer
@@ -686,11 +696,15 @@ function ns.Window(name, w, h, title, strata)
       tc:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -ns.WINDOW_TITLE_MARGIN, y or -1)
     end
     if chrome.CloseButton then chrome.CloseButton:SetScript("OnClick", function() f:Hide() end) end
+    if opts.noTitle then
+      if tc then tc:Hide() end
+      if chrome.CloseButton then chrome.CloseButton:Hide() end
+    end
     function f.SetWindowTitle(_, text)
       if chrome.SetTitle then chrome:SetTitle(text)
       elseif tc and tc.TitleText then tc.TitleText:SetText(text) end
     end
-    f.chrome, f.top = chrome, -30
+    f.chrome, f.top = chrome, opts.noTitle and -14 or -30
   else
     if f.SetBackdrop then
       f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
@@ -699,14 +713,76 @@ function ns.Window(name, w, h, title, strata)
     end
     local t = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     t:SetPoint("TOP", 0, -8)
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", 2, 2)
-    close:SetScript("OnClick", function() f:Hide() end)
     function f.SetWindowTitle(_, text) t:SetText(text) end
-    f.top = -28
+    if not opts.noTitle then
+      local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+      close:SetPoint("TOPRIGHT", 2, 2)
+      close:SetScript("OnClick", function() f:Hide() end)
+    end
+    f.top = opts.noTitle and -12 or -28
   end
   f:SetWindowTitle(title or "")
   f:Hide()
+  return f
+end
+
+-- A question with two answers, in AzerothGPS's popup without a title bar (asked, 2026-10-01): the text,
+-- then `yes` and `no` buttons; onYes / onNo on the answer (onNo also when it times out, `opts.timeout`
+-- seconds, or Escape hides it). One window per `name` (made the first time), shown again for the next
+-- question; `opts.parent` and `opts.place(f)` put it somewhere else than the screen's middle. Returns it.
+local asks = {}
+function ns.Ask(name, text, yes, no, onYes, onNo, opts)
+  opts = opts or {}
+  local f = asks[name]
+  if not f then
+    f = ns.Window(opts.parent and nil or name, 300, 120, nil, opts.strata, { parent = opts.parent, noTitle = true,
+      fixed = opts.parent ~= nil })
+    f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.text:SetPoint("TOPLEFT", 16, f.top - 4)
+    f.text:SetPoint("TOPRIGHT", -16, f.top - 4)
+    f.text:SetJustifyH("LEFT")
+    local function Btn(x)
+      local ok, b = pcall(CreateFrame, "Button", nil, f, "UIPanelButtonTemplate")
+      if not ok then b = CreateFrame("Button", nil, f) end
+      b:SetSize(110, 22)
+      b:SetPoint("BOTTOM", f, "BOTTOM", x, 14)
+      return b
+    end
+    f.yes, f.no = Btn(-60), Btn(60)
+    f.yes:SetScript("OnClick", function()
+      f.answered = true
+      f:Hide()
+      if f.onYes then f.onYes() end
+    end)
+    f.no:SetScript("OnClick", function()
+      f.answered = true
+      f:Hide()
+      if f.onNo then f.onNo() end
+    end)
+    -- (not answered: Escape, or the time out, counts as no)
+    f:SetScript("OnHide", function()
+      if not f.answered and f.onNo then f.onNo() end
+      f.answered = true
+    end)
+    f:SetScript("OnUpdate", function(self)
+      if self.until_ and GetTime() > self.until_ then self:Hide() end
+    end)
+    asks[name] = f
+  end
+  f.answered = true
+  f:Hide() -- (the last question, unanswered: let go without its no)
+  f.answered = false
+  f.onYes, f.onNo = onYes, onNo
+  f.yes:SetText(yes or YES or "Yes")
+  f.no:SetText(no or NO or "No")
+  f.text:SetText(text)
+  f:SetHeight(f.text:GetStringHeight() + 22 - f.top + 34)
+  f.until_ = opts.timeout and GetTime() + opts.timeout or nil
+  f:ClearAllPoints()
+  if opts.place then opts.place(f) else f:SetPoint("CENTER", 0, 120) end
+  if opts.level then f:SetFrameLevel(opts.level) end
+  f:Show()
+  f:Raise()
   return f
 end
 

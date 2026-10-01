@@ -269,23 +269,18 @@ function I.Offer(sender, stops)
   local who = Ambiguate and Ambiguate(sender, "none") or sender
   local names = {}
   for i, d in ipairs(stops) do names[i] = string.format("%d. %s", i, d.name or ("stop " .. i)) end
-  StaticPopupDialogs.AZEROTHGPS_SHARED_ROUTE = StaticPopupDialogs.AZEROTHGPS_SHARED_ROUTE or {
-    text = "%s shared a route with you (AzerothGPS):\n\n%s\n\nUse it as your route?",
-    button1 = "Use route",
-    button2 = "Ignore",
-    OnAccept = function(_, data)
-      local n = I.Apply(data.stops, false)
-      ns.Print(string.format("route from %s: %d stop%s", data.who, n, n > 1 and "s" or ""))
+  -- (AzerothGPS's popup without a title bar, ns.Ask; gone unanswered after a minute)
+  I.offered = { stops = stops, who = who }
+  I.offerBox = ns.Ask("AzerothGPSSharedRoute",
+    string.format("%s shared a route with you (AzerothGPS):\n\n%s\n\nUse it as your route?", who, table.concat(names, "\n")),
+    "Use Route", "Ignore", function()
+      local n = I.Apply(stops, false)
+      ns.Print(string.format("route from %s: %d stop%s", who, n, n > 1 and "s" or ""))
       if ns.GPS then
         ns.GPS.Follow()
         ns.GPS.Redraw()
       end
-    end,
-    timeout = 60,
-    whileDead = true,
-    hideOnEscape = true,
-  }
-  StaticPopup_Show("AZEROTHGPS_SHARED_ROUTE", who, table.concat(names, "\n"), { stops = stops, who = who })
+    end, nil, { timeout = 60 })
 end
 
 local SHARE_CHANNELS = { WHISPER = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }

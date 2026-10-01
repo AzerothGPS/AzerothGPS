@@ -519,6 +519,9 @@ cd app && python -m pytest -q    # tests (the addon's Lua runs under lupa)
   inside, the title centered), a plain box where the template is missing; content from `f.top` down.
   Never a hand-made BackdropTemplate box (asked 2026-10-01; `test_every_popup_window_is_made_with_ns_window`
   fails on one). Only the map, the arrow and the options window (which has the logo) build their own.
+  A yes/no question is `ns.Ask(name, text, yes, no, onYes, onNo, opts)`: the same frame without a title
+  bar (`opts.noTitle`: the SimplePanelTemplate border), unanswered (Escape, `timeout`) counts as no; on the
+  map `G.Confirm`, a shared route `Import.Offer`. Not the game's StaticPopup.
 - **Use the game's newer UI templates, with fallbacks.** Old art such as
   `UI-PlusButton-Up` is missing in this client. Prefer drawing simple controls yourself,
   or use the modern templates (`PortraitFrameTemplate` etc.) wrapped in `pcall`, with a

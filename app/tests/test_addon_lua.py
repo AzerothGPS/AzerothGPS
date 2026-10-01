@@ -5008,7 +5008,8 @@ def test_a_stop_in_a_zone_too_high_is_confirmed_first(nav_env):
     brill, tarren = at("Tirisfal Glades", 61, 52), at("Hillsbrad Foothills", 61, 20)
     lua.execute("UnitLevel = function() return 13 end")
     lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
-    lua.execute("StaticPopupDialogs = {}; ASKED = nil; StaticPopup_Show = function(which, text, _, data) ASKED = { text = text, data = data } end")
+    ns.Ask = lua.eval("function(name, text, yes, no, onYes, onNo) ASKED = { text = text, data = { onYes, onNo } } end")
+    lua.execute("ASKED = nil")
     stop = lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill")
     ok, asked = N.SetStops(lua.table(stop))
     assert ok is False and asked and len(N.stops) == 0  # not yet: asked first
@@ -5157,7 +5158,8 @@ def test_a_route_walking_through_a_zone_too_high_asks_first(nav_env):
     brill, alterac, tarren = at("Tirisfal Glades", 61, 52), at("Alterac Mountains", 50, 50), at("Hillsbrad Foothills", 61, 20)
     lua.execute("UnitLevel = function() return 13 end")
     lua.execute(f"UnitPosition = function() return {brill[0]}, {brill[1]}, 0, 0 end")
-    lua.execute("StaticPopupDialogs = {}; ASKED = nil; StaticPopup_Show = function(which, text, _, data) ASKED = { text = text, data = data } end")
+    ns.Ask = lua.eval("function(name, text, yes, no, onYes, onNo) ASKED = { text = text, data = { onYes, onNo } } end")
+    lua.execute("ASKED = nil")
     N.stops = lua.table(lua.table(x=tarren[0], y=tarren[1], cont=0, name="Tarren Mill"))
     N.dest = N.stops[1]
     # a route over the mountains (as when there's no other way for the character's faction)

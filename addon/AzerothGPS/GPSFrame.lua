@@ -3080,8 +3080,10 @@ function G.CollapsedStatus(status)
   return status:match("\n([^\n]*)$") or status
 end
 
--- Leave free view and follow the player again.
+-- Leave free view and follow the player again (and the inside map again, in a building or a city whose
+-- outside was right-clicked to: routing out of Ironforge from inside left its outside shown, 2026-10-01).
 function G.Follow()
+  G.outsideOf = nil
   G.appended = false
   fromTerrain, openedFrom = nil, nil
   tour = nil
@@ -4221,6 +4223,7 @@ function G.RemovePending(i)
   end
   lastActivity = GetTime()
   elapsed = 1
+  if #pending == 0 and #ns.Nav.stops == 0 and free and not browse then G.Follow() end -- (the last one gone: back to the player)
 end
 
 -- Hovering a quest area on the map shows the quest and its objectives, like the minimap.
@@ -4486,61 +4489,16 @@ end
 -- (no popup here: false, and the route is set without asking).
 -- "Yes / No" on the map (over its middle; the game's popup mid-screen while the map is hidden).
 -- onYes / onNo run on the answer. False when neither can be shown.
-local confirmBox
 function G.Confirm(text, onYes, onNo)
+  if not ns.Ask then return false end
   if frame and frame:IsShown() and topLayer then
-    if not confirmBox then
-      local c = CreateFrame("Frame", nil, topLayer, "BackdropTemplate")
-      c:SetFrameLevel(topLayer:GetFrameLevel() + 20)
-      c:SetWidth(280)
-      c:SetPoint("CENTER", canvas, "CENTER", 0, 20)
-      if c.SetBackdrop then
-        c:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-        c:SetBackdropColor(0.05, 0.04, 0.03, 0.95)
-        c:SetBackdropBorderColor(1, 0.82, 0, 0.7)
-      end
-      c:EnableMouse(true)
-      c.text = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-      c.text:SetPoint("TOPLEFT", 12, -12)
-      c.text:SetPoint("TOPRIGHT", -12, -12)
-      c.text:SetJustifyH("LEFT")
-      local function Btn(label, x)
-        local ok, b = pcall(CreateFrame, "Button", nil, c, "UIPanelButtonTemplate")
-        if not ok then b = CreateFrame("Button", nil, c) end
-        b:SetSize(90, 22)
-        b:SetText(label)
-        b:SetPoint("BOTTOM", c, "BOTTOM", x, 10)
-        return b
-      end
-      c.yes = Btn(YES or "Yes", -50)
-      c.no = Btn(NO or "No", 50)
-      c.yes:SetScript("OnClick", function()
-        c:Hide()
-        if c.onYes then c.onYes() end
-      end)
-      c.no:SetScript("OnClick", function()
-        c:Hide()
-        if c.onNo then c.onNo() end
-      end)
-      confirmBox = c
-    end
-    local c = confirmBox
-    c.onYes, c.onNo = onYes, onNo
-    c.text:SetText(text)
-    c:SetHeight(c.text:GetStringHeight() + 56)
-    c:Show()
+    -- (over the map's middle, with the map: AzerothGPS's popup without a title bar, ns.Ask)
+    G.confirmBox = ns.Ask("map", text, YES or "Yes", NO or "No", onYes, onNo, { parent = topLayer,
+      strata = topLayer:GetFrameStrata(), level = topLayer:GetFrameLevel() + 20,
+      place = function(f) f:SetPoint("CENTER", canvas, "CENTER", 0, 20) end })
     return true
   end
-  if not (StaticPopup_Show and StaticPopupDialogs) then return false end
-  if not StaticPopupDialogs.AZEROTHGPS_CONFIRM then
-    StaticPopupDialogs.AZEROTHGPS_CONFIRM = {
-      text = "%s", button1 = YES or "Yes", button2 = NO or "No",
-      OnAccept = function(_, data) if data and data[1] then data[1]() end end,
-      OnCancel = function(_, data, reason) if reason == "clicked" and data and data[2] then data[2]() end end,
-      timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-  end
-  StaticPopup_Show("AZEROTHGPS_CONFIRM", text, nil, { onYes, onNo })
+  G.confirmBox = ns.Ask("AzerothGPSConfirm", text, YES or "Yes", NO or "No", onYes, onNo) -- (mid-screen: the map hidden)
   return true
 end
 
@@ -4561,6 +4519,8 @@ function G.ConfirmRedZone(zones, stops, again)
   return G.Confirm(text, function()
     again()
     G.RouteChanged()
+  end, function()
+    if #ns.Nav.stops == 0 then G.Follow() end -- (no: no route, back to the player)
   end)
 end
 
@@ -5716,6 +5676,7 @@ function G.Init()
   routeBtn:SetScript("OnClick", function()
     if #ns.Nav.stops > 0 then
       ns.Nav.Clear()
+      G.Follow() -- (the route gone: back to the player, the city's inside map in a city)
       elapsed = 1
     else
       G.ConfirmRoute()
