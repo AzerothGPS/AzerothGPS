@@ -719,6 +719,14 @@ def test_party_members_show_their_class_icon(game):
         G.Update()
         (pin,) = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
         assert pin.dot._tex == G.CLASS_SHEET
+        # (asked: sharp, as the other map icons) read through its mipmaps, the class sheet and the atlas alike
+        assert pin.dot._filter == "TRILINEAR"
+        lua.execute("AGPS_OLD_CT = C_Texture C_Texture = { GetAtlasInfo = function() return {} end }")
+        try:
+            t = lua.eval("CreateFrame('Frame'):CreateTexture()")
+            assert G.ClassIcon(t, "MAGE") and t._atlas == "classicon-mage" and t._filter == "TRILINEAR"
+        finally:
+            lua.execute("C_Texture = AGPS_OLD_CT")
         # (asked) round: the icon and its class-colored ring each cut to a circle by the portrait mask
         for part in (pin.dot, pin.edge):
             assert part._masks and part._masks[1]._tex == G.ROUND_MASK
