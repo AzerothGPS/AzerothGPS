@@ -348,9 +348,11 @@ The addon is going public, so every change must keep it policy-safe:
     floors lie over each other it tells the floor (Router's city floor check, `CaveDown`, the
     height hint). Undercity's heights in Cities.lua are its model's own: the game's less
     `CityLevels[10001].zoff`; the player's own height (`Nav.PlayerCityZ`) tells their floor.
-  - `Media/*.tga`: our own art: `Portrait<px>` (the logo in the windows' round portraits, pre-scaled
-    by `agps media` (`app/azerothgps/media.py`, from `assets/logo.png`); `ns.FitPortrait` in Core.lua
-    shows the size nearest the portrait's pixels on the screen, 1:1), `Device` (minimap button and the
+  - `Media/*.tga`: our own art: the windows' corner logo, pre-scaled by `agps media`
+    (`app/azerothgps/media.py`, from `assets/logo.png`), the size nearest its pixels on the screen
+    shown 1:1 (Core.lua `ns.PortraitPx`): `CornerLogo<px>` (the default: on a plate cut to its outline,
+    no circle, the border without the portrait's ring; dragging it moves the window) or `Portrait<px>`
+    (option `roundLogo`: in the round portrait); `ns.SetLogoPortrait`, `ns.ApplyLogoLook`. `Device` (minimap button and the
     addon list icon), `MapMenu` (the eye button), `Dash` (dotted route lines).
 - `app/`: Python developer tools (not shipped). They include a CASC/DB2 reader, road
   extraction, `gen-addon-data`, `route-check` (`routecheck.py`) and the tests.
@@ -381,7 +383,7 @@ agps route-sweep        # random trips routed as in game (background searches, m
 agps trip-sweep         # random trips planned and followed with the whole addon (gameharness): flights vs walks at
                         # random levels, detours, frame budget; data/debug/trip-sweep/report.json (nightly task too)
 agps buildings         # buildings as ground routes don't walk through (--write: Data/Buildings.lua; --render X Y R)
-agps media             # the portrait logo in sizes from assets/logo.png (Media/Portrait<px>.tga)
+agps media             # the corner logo in sizes from assets/logo.png (Media/CornerLogo<px>.tga, Portrait<px>.tga)
 agps caves             # build the caves (renders + summary in data/debug/caves/; --write: Data/Caves.lua)
 agps capitals          # build the capitals (renders in data/debug/capitals/; --write: Data/Capitals.lua; --check: 3D route checks)
 agps instances         # build the dungeons and raids (renders in data/debug/instances/; --write: Data/Instances.lua; --check: entrance-to-boss 3D checks)

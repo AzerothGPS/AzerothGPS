@@ -402,10 +402,14 @@ local function BuildWindow()
   local ok, f = pcall(CreateFrame, "Frame", "AzerothGPSOptions", UIParent, "PortraitFrameTemplate")
   local framed = ok and f and f.NineSlice
   if framed then
-    -- the game's metal window frame, the AzerothGPS logo in its round portrait
+    -- the game's metal window frame, the AzerothGPS logo top left (on its plate or in the round
+    -- portrait: ns.ApplyLogoLook; dragging the plate moves the window)
     if f.SetTitle then f:SetTitle("AzerothGPS Options")
     elseif f.TitleContainer and f.TitleContainer.TitleText then f.TitleContainer.TitleText:SetText("AzerothGPS Options") end
-    ns.SetLogoPortrait(f)
+    ns.SetLogoPortrait(f, nil, function(starting)
+      local fn = f:GetScript(starting and "OnDragStart" or "OnDragStop")
+      if fn then fn(f) end
+    end)
     -- close with a plain Hide: the template's own close goes through the game's panel
     -- manager, which can refuse during combat
     if f.CloseButton then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
@@ -542,6 +546,11 @@ local function BuildWindow()
     function() return GPS().locked end, function(v) GPS().locked = v end)
   check("Window frame", "The game-style window frame around the map: title bar, logo and close button. Off: just the map.",
     function() return GPS().windowFrame ~= false end, function(v) GPS().windowFrame = v end)
+  check("Logo in a round portrait", "The AzerothGPS logo at the top left of the map and this window in the round portrait, as the game's windows have it. Off: the logo on its own, without the circle.",
+    function() return GPS().roundLogo end, function(v)
+      GPS().roundLogo = v
+      if ns.ApplyLogoLook then ns.ApplyLogoLook() end
+    end)
   check("Reopen following me", "With a route set: if you hid the map while looking around it (dragged or zoomed out to the world map), it opens again centered on you, following your position. Off: it opens where you left it (the button at the bottom right brings it back to you).",
     function() return GPS().reopenFollow end, function(v) GPS().reopenFollow = v end)
   check("Zoom in near a stop", "Within 50 yards of your next stop, the map zooms in smoothly so you can see exactly where it is, and back out to your zoom once you're there. Zooming yourself keeps your zoom for that stop.",

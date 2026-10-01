@@ -1,4 +1,5 @@
-"""The addon's own art from assets/ (`agps media`): the logo in the windows' round portrait, pre-scaled.
+"""The addon's own art from assets/ (`agps media`): the windows' corner logo, pre-scaled: in the round
+portrait (Portrait<px>.tga) and without the circle, on a plate cut to its outline (CornerLogo<px>.tga).
 
 A 128-pixel logo shrunk by the graphics card to the portrait's 62 UI units looked soft. The portrait is
 written in sizes (Media/Portrait<px>.tga), each made at that size from the high-resolution logo
@@ -10,13 +11,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 # The sizes written (pixels square): the 62-unit portrait at 1080p with a small UI scale to 4K at 1.
 # Keep in step with Core.lua's ns.PORTRAIT_PX.
 PORTRAIT_PX = (48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 256, 288)
 PORTRAIT_BG = (33, 19, 10, 255)  # the title bar's brown, under the logo (the round mask cuts it)
 PORTRAIT_SHARE = 0.8  # the logo's longer side, as a share of the portrait's
+CORNER_MASTER = 1024  # the corner logo drawn this big first, then scaled to each size
+CORNER_PLATE = 18  # ... on a plate of the title bar's brown cut to its outline this many pixels out (at 1024)
+CORNER_RIM = (92, 66, 30)  # ... edged in a dark gold line, like the frame's trim (4 pixels more)
 
 
 def portrait(logo: Path, px: int) -> Image.Image:
@@ -33,6 +37,33 @@ def portrait(logo: Path, px: int) -> Image.Image:
     return out
 
 
+def corner_master(logo: Path, size: int = CORNER_MASTER) -> Image.Image:
+    """The corner logo without the circle (as AzerothGPS-StreetView's game logo): the logo (its visible
+    part) the square's width less a margin, on a plate of the title bar's brown following its outline
+    (its alpha over 40, CORNER_PLATE pixels out, softened), edged in CORNER_RIM, centered."""
+    pad = CORNER_PLATE + 8
+    im = Image.open(logo).convert("RGBA")
+    im = im.crop(im.getchannel("A").getbbox())
+    w = size - 2 * pad
+    h = round(im.height * w / im.width)
+    art = im.convert("RGBa").resize((w, h), Image.LANCZOS).convert("RGBA")
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.paste(art, (pad, (size - h) // 2))
+    alpha = canvas.getchannel("A").point(lambda a: 255 if a > 40 else 0)
+    plate = alpha.filter(ImageFilter.MaxFilter(2 * CORNER_PLATE + 1)).filter(ImageFilter.GaussianBlur(2))
+    rim = alpha.filter(ImageFilter.MaxFilter(2 * CORNER_PLATE + 9)).filter(ImageFilter.GaussianBlur(2))
+    out = Image.new("RGBA", (size, size), CORNER_RIM + (0,))
+    out.putalpha(rim)
+    brown = Image.new("RGBA", (size, size), PORTRAIT_BG[:3] + (0,))
+    brown.putalpha(plate)
+    return Image.alpha_composite(Image.alpha_composite(out, brown), canvas)
+
+
+def scaled(master: Image.Image, px: int) -> Image.Image:
+    """`master` px pixels square (Lanczos, premultiplied alpha)."""
+    return master.convert("RGBa").resize((px, px), Image.LANCZOS).convert("RGBA")
+
+
 def on_canvas(img: Image.Image) -> Image.Image:
     """`img` in the top-left corner of the smallest power-of-two canvas that holds it."""
     pot = 1
@@ -44,12 +75,16 @@ def on_canvas(img: Image.Image) -> Image.Image:
 
 
 def make(media: Path, assets: Path) -> list[Path]:
-    """Media/Portrait<px>.tga for every PORTRAIT_PX, from assets/logo.png. Returns the files written."""
+    """Media/Portrait<px>.tga and CornerLogo<px>.tga for every PORTRAIT_PX, from assets/logo.png.
+    Returns the files written."""
     out = []
+    master = corner_master(assets / "logo.png")
     for px in PORTRAIT_PX:
         f = media / f"Portrait{px}.tga"
         on_canvas(portrait(assets / "logo.png", px)).save(f)
-        out.append(f)
+        g = media / f"CornerLogo{px}.tga"
+        on_canvas(scaled(master, px)).save(g)
+        out += [f, g]
     old = media / "Logo.tga"  # (the one size of before)
     if old.exists():
         old.unlink()

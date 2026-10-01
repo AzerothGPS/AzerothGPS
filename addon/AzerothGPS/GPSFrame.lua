@@ -4507,9 +4507,17 @@ function G.Init()
     if chrome.SetTitle then chrome:SetTitle("AzerothGPS")
     elseif chrome.TitleContainer and chrome.TitleContainer.TitleText then chrome.TitleContainer.TitleText:SetText("AzerothGPS") end
     G.CenterTitle(chrome)
-    -- the AzerothGPS logo in the round portrait (top left); the map's top panel moves
-    -- right of it while unlocked (ApplySettings)
-    ns.SetLogoPortrait(chrome)
+    -- the AzerothGPS logo top left, on its plate or in the round portrait (ns.ApplyLogoLook); the map's
+    -- top panel moves right of it while unlocked (ApplySettings); dragging the plate moves the map, as
+    -- the title bar does
+    ns.SetLogoPortrait(chrome, nil, function(starting)
+      if starting then
+        if not S().locked then frame:StartMoving() end
+      else
+        frame:StopMovingOrSizing()
+        SavePosition()
+      end
+    end)
     if chrome.CloseButton then
       chrome.CloseButton:SetScript("OnClick", function()
         S().shown = false
