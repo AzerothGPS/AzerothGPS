@@ -1007,6 +1007,77 @@ def build_all(cd: ClientData, data_dir, log=print, only=None) -> list[dict]:
     return out
 
 
+SPLIT_Z_TOL = 2.0  # yards: a road's floor this far off the straight line between its ends' heights gets a node there
+SPLIT_STEP = 2.0  # yards: the floor's height read this often along a road
+
+
+def split_by_height(nodes, edges, hs, floor, skip=()):
+    """Roads cut where the floor's height bends (asked by StreetView, 2026-10-02: a spot's height is read
+    straight between its road's two nodes; on a long road climbing between levels it ended in rock, 18 yd
+    under Orgrimmar's street, or in the air in Darnassus). `nodes` [(x, y)], `edges` [(a, b, points)], `hs`
+    each node's floor height (None: unknown, then the floor next to it along a road), `floor(x, y)` the floor
+    height there or None. Each road keeps its index (its first piece); its other pieces come after all
+    edges, their new nodes after all nodes. `skip`: edge indices left whole (drops, stairs, lifts)."""
+    nodes, hs, out, extra = list(nodes), list(hs), [], []
+    for i, (a, b, pts) in enumerate(edges):
+        if i in skip or len(pts) < 2:
+            out.append((a, b, pts))
+            continue
+        # the floor along it, every SPLIT_STEP yards: (along, x, y, z, an original point?)
+        samp, along = [], 0.0
+        for k in range(len(pts) - 1):
+            (x0, y0), (x1, y1) = pts[k], pts[k + 1]
+            seg = math.hypot(x1 - x0, y1 - y0)
+            n = max(1, int(seg / SPLIT_STEP))
+            for j in range(n):
+                t = j / n
+                x, y = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+                samp.append((along + seg * t, x, y, floor(x, y), j == 0))
+            along += seg
+        samp.append((along, pts[-1][0], pts[-1][1], floor(*pts[-1]), True))
+        zs = [s[3] for s in samp if s[3] is not None]
+        if not zs:
+            out.append((a, b, pts))
+            continue
+        if hs[a] is None:
+            hs[a] = zs[0]
+        if hs[b] is None:
+            hs[b] = zs[-1]
+        cuts = []
+
+        def cut(s, t, zs_, zt_):
+            best, at = SPLIT_Z_TOL, None
+            span = samp[t][0] - samp[s][0]
+            for k in range(s + 1, t):
+                z = samp[k][3]
+                if z is None or span <= 0:
+                    continue
+                line = zs_ + (zt_ - zs_) * (samp[k][0] - samp[s][0]) / span
+                if abs(z - line) > best:
+                    best, at = abs(z - line), k
+            if at is not None:
+                cut(s, at, zs_, samp[at][3])
+                cuts.append(at)
+                cut(at, t, samp[at][3], zt_)
+        cut(0, len(samp) - 1, hs[a], hs[b])
+        if not cuts:
+            out.append((a, b, pts))
+            continue
+        ends, prev = [], a
+        for k in cuts:  # (in order along the road)
+            nodes.append((samp[k][1], samp[k][2]))
+            hs.append(samp[k][3])
+            ends.append(len(nodes) - 1)
+        bounds = [0] + cuts + [len(samp) - 1]
+        ids = [a] + ends + [b]
+        for p in range(len(bounds) - 1):
+            s, t = bounds[p], bounds[p + 1]
+            piece = [(samp[s][1], samp[s][2])] + [(q[1], q[2]) for q in samp[s + 1:t] if q[4]] + [(samp[t][1], samp[t][2])]
+            (out if p == 0 else extra).append((ids[p], ids[p + 1], piece))
+            prev = ids[p + 1]
+    return nodes, out + extra, hs
+
+
 def key_of(cap: Capital) -> str:
     return "capital_" + cap.name.lower().replace(" ", "_")
 
@@ -1131,9 +1202,15 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                 ok = 0 <= r < uu["H"] and 0 <= c < uu["W"] and np.isfinite(uu["top"][r, c])
                 out_.append(float(uu["top"][r, c]) if ok else None)
             return out_
+
+        def floor_of(uu):
+            return lambda x, y: heights_at(uu, [(x, y)])[0]
         for u in lst:
             nodes, edges, drops = cave_roads(u)
             hs = heights_at(u, nodes)
+            # (a node where the floor's height bends along a road: StreetView's spots between nodes, 2026-10-02)
+            fixed = set(drops) | {i for i, e in enumerate(u["graph"].edges.values()) if e.source in ("lift", "stair")}
+            nodes, edges, hs = split_by_height(nodes, edges, hs, floor_of(u), skip=fixed)
             order = {nid: i for i, nid in enumerate(sorted(u["graph"].nodes))}
             joins = [order[j] for j, q in u["joins"] if q is not None and j in order]
             lift_yd = {i: LIFT_SECONDS * 7 for i, e in enumerate(u["graph"].edges.values()) if e.source == "lift"}
@@ -1156,8 +1233,10 @@ def capitals_lua(cd: ClientData, log=print, data_dir=None, debug_dir=None, built
                     if e.source == "stair":
                         ustairs.add(len(uedges))
                     uedges.append((order[e.a], order[e.b], [tuple(q) for q in e.pts]))
+                uhs = heights_at(un["low"], unodes)
+                unodes, uedges, uhs = split_by_height(unodes, uedges, uhs, floor_of(un["low"]), skip=set(udrops) | ustairs)
                 # (no gap links to or from them: a straight line there may be up or down a level)
-                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}, heights_at(un["low"], unodes), ustairs))
+                under.append((unodes, uedges, udrops, [order[j] for j in un["joins"]], [], {}, uhs, ustairs))
         roads("capitals", land, cave=False)
         roads("capitals (under others, in a mountain)", under, cave=True)
         out.append("end")
