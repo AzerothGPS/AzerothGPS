@@ -2165,6 +2165,24 @@ function N.AbilityLabel(a)
   return a.icon and string.format("|T%s:12|t %s", a.icon, a.name) or a.name
 end
 
+-- The times line: `yards` to go on foot plus `ride` seconds of rides. Mounted: just the mounted time. On foot:
+-- walking (or the movement ability while it's on), then only the fastest other way the character has, a
+-- movement ability or a mount (asked 2026-10-02: a shaman with Ghost Wolf and riding sees "Walk ... Mount ...",
+-- not all three). The mount's speed is the riding skill's (60% at apprentice, 100% at journeyman) until it's
+-- seen on a mount, then that (N.Speeds).
+function N.TimesLine(yards, ride, walk, mount, mounted, ability)
+  if mount and mounted then return "Mount " .. N.FormatTime(yards / mount + ride) end
+  local on = ability and ability.active
+  local line = (on and N.AbilityLabel(ability) or "Walk") .. " " .. N.FormatTime(yards / walk + ride)
+  local other = ability and not on and ability.speed
+  if mount and mount > (other or walk) then
+    line = line .. "    Mount " .. N.FormatTime(yards / mount + ride)
+  elseif other and other > walk then
+    line = line .. "    " .. N.AbilityLabel(ability) .. " " .. N.FormatTime(yards / other + ride)
+  end
+  return line
+end
+
 -- Riding skill rank (0 if not learned). Classic keeps riding as a skill line.
 local riding, ridingAt -- cached: Speeds() runs every redraw
 function N.RidingRank()
@@ -2698,18 +2716,7 @@ function N.Status(px, py, cont)
     local planned = N.PlannedStops()
     line = (planned < #N.stops and not N.loop) and string.format("Next %d stops: ", planned) or "All stops: "
   end
-  -- mounted: just the mounted time; on foot: walking (or the movement ability while it's on),
-  -- the ability's time when one is known, and mounted if the character can ride
-  if mount and mounted then
-    line = line .. "Mount " .. N.FormatTime(yards / mount + ride)
-  else
-    local on = ability and ability.active
-    line = line .. (on and N.AbilityLabel(ability) or "Walk") .. " " .. N.FormatTime(yards / walk + ride)
-    if ability and not on then
-      line = line .. "    " .. N.AbilityLabel(ability) .. " " .. N.FormatTime(yards / ability.speed + ride)
-    end
-    if mount then line = line .. "    Mount " .. N.FormatTime(yards / mount + ride) end
-  end
+  line = line .. N.TimesLine(yards, ride, walk, mount, mounted, ability)
   -- in another quest's area on the way: its objectives first (the times line stays last:
   -- the collapsed panel shows just that)
   if N.areaQuests then

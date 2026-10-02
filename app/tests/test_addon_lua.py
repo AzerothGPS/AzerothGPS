@@ -5724,3 +5724,22 @@ def test_a_flight_with_stops_counts_down_along_its_path(nav_env):
     qx, qy = via[2] + (b[2] - via[2]) * 0.5, via[3] + (b[3] - via[3]) * 0.5
     left2, path2 = N.FlightLeft(a[4], b[4], qx, qy, L)
     assert left2 < left1 and len(path2) == 4 and abs(left2 - dist(qx, qy)) < 1
+
+
+def test_the_times_line_shows_walking_and_the_fastest_other_way(nav_env):
+    # (asked 2026-10-02) "Walk (time)" and then only the fastest way the character has: a shaman with Ghost Wolf
+    # only sees the wolf; with riding too, the mount (faster), not the wolf; journeyman riding just makes the
+    # mount's time shorter; mounted, the mounted time alone
+    lua, ns = nav_env
+    N = ns.Nav
+    wolf = lua.eval("{ name = 'Ghost Wolf', speed = 9.8, active = false }")
+    yards = 1400.0
+    assert N.TimesLine(yards, 0, 7.0, None, False, wolf) == "Walk 3m 20s    Ghost Wolf 2m 23s"
+    assert N.TimesLine(yards, 0, 7.0, 11.2, False, wolf) == "Walk 3m 20s    Mount 2m 05s"  # (apprentice: 60%)
+    assert N.TimesLine(yards, 0, 7.0, 14.0, False, wolf) == "Walk 3m 20s    Mount 1m 40s"  # (journeyman: 100%)
+    assert N.TimesLine(yards, 0, 7.0, 11.2, True, wolf) == "Mount 2m 05s"
+    assert N.TimesLine(yards, 0, 7.0, None, False, None) == "Walk 3m 20s"
+    # the wolf on: it's the walking time, and a faster mount beside it
+    wolf.active = True
+    assert N.TimesLine(yards, 0, 9.8, 11.2, False, wolf) == "Ghost Wolf 2m 23s    Mount 2m 05s"
+    assert N.TimesLine(yards, 0, 9.8, None, False, wolf) == "Ghost Wolf 2m 23s"
