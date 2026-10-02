@@ -129,6 +129,19 @@ end)
 T.DOCK_YD = 45 -- this close to a dock: waiting there (or aboard, docked)
 T.RIDE_YD = 60 -- carried this far from it without walking: it left
 T.CARRY_YD = 1.5 -- moved this far between checks without walking: carried
+T.CYCLE_SHARPEN = 0.02 -- a second departure sharpens the cycle only this close to the data's (a server restart
+-- between the two shifted the timetable, and up to 10% let it bend the cycle: the timer drifted off, 2026-10-02)
+T.RIDE_LOG_MAX = 20
+
+-- What the ride detector saw (ns.db.rideLog, the last RIDE_LOG_MAX): each departure learned, and each time the
+-- player left a dock's reach without one ("rode it and the timer didn't fix itself", 2026-10-02).
+function T.LogRide(text)
+  if not ns.db then return end
+  ns.db.rideLog = ns.db.rideLog or {}
+  local log = ns.db.rideLog
+  log[#log + 1] = (date and date("%m-%d %H:%M:%S ") or "") .. text
+  while #log > T.RIDE_LOG_MAX do table.remove(log, 1) end
+end
 
 local function Realm() return (GetRealmName and GetRealmName()) or "?" end
 local function RowKey(t) return (t[9] or "?") .. " | " .. (t[10] or "?") end
@@ -170,10 +183,12 @@ function T.Departed(i, side, at)
     local n = math.floor((at - old.at) / t.cycle + 0.5)
     if n >= 1 and n <= 40 then
       local c = (at - old.at) / n
-      if math.abs(c - t.cycle) < t.cycle * 0.1 then cycle = c end
+      if math.abs(c - t.cycle) < t.cycle * T.CYCLE_SHARPEN then cycle = c end
     end
   end
   seen[key] = { side = side, at = at, cycle = cycle }
+  T.LogRide(string.format("departed %s side %d at %.0f (was %s; cycle %s)", key, side, at,
+    old and tostring(old.at) or "unknown", cycle and string.format("%.1f", cycle) or "data's"))
 end
 
 -- Called every half second: near a dock, then carried away from it (not walking): it left.
@@ -197,6 +212,16 @@ function T.TransportTick(now, serverNow, px, py, cont, speed)
     and math.sqrt((px - last.x) ^ 2 + (py - last.y) ^ 2) >= T.CARRY_YD
   rideStreak = carriedNow and rideStreak + 1 or 0
   local i, side = T.DockAt(cont, px, py)
+  -- (out of a zeppelin's or boat's reach with no departure seen: what the detector saw, for the log)
+  if near and not i and not near.left and not carried and near.cont == cont then -- (carried: it departs below)
+    local t = ns.Transports[near.i]
+    local d = near.x and math.sqrt((px - near.x) ^ 2 + (py - near.y) ^ 2) or 0
+    if d >= T.RIDE_YD and t and (t[8] == "zeppelin" or t[8] == "boat") then
+      near.left = true
+      T.LogRide(string.format("left %s side %d, no departure seen (speed %s, carried %s, streak %d)", RowKey(t),
+        near.side, tostring(speed), tostring(carried), streak))
+    end
+  end
   if i then
     near = { i = i, side = side, since = near and near.i == i and near.side == side and near.since or now, cont = cont }
     local t = ns.Transports[i]

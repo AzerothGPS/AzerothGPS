@@ -5268,6 +5268,39 @@ def test_zeppelin_timetable_learned_from_a_ride(env):
     assert T.Sightings()[f"{t[9]} | {t[10]}"] is None
 
 
+def test_a_ride_after_a_server_restart_resets_the_timetable(env):
+    # (reported 2026-10-02: after a server restart the zeppelin's timer was off, and riding it didn't fix it) a
+    # departure seen after a restart replaces the old one, and the restart's shift in the timetable doesn't bend
+    # the cycle (a second sighting within 40 cycles sharpened it by up to 10%); the ride log says what was seen
+    lua, ns = env
+    lua.execute("GetRealmName = function() return 'Test' end")
+    lua.execute("CreateFrame = function() return { RegisterEvent = function() end, SetScript = function() end } end")
+    ns.db = lua.eval("{}")
+    load(lua, ns, "Data/Transports.lua", "Taxi.lua")
+    T = ns.Taxi
+    i = next(k for k in range(1, len(ns.Transports) + 1)
+             if ns.Transports[k][9] == "Jaggedswine Farm, Durotar" and ns.Transports[k][10] == "Brill, Tirisfal Glades")
+    t = ns.Transports[i]
+    key = f"{t[9]} | {t[10]}"
+    T.Departed(i, 2, 5000)
+    restart = 5000 + 3 * t.cycle + 0.07 * t.cycle  # (three cycles on, shifted 7% by the restart)
+    T.Departed(i, 2, restart)
+    seen = T.Sightings()[key]
+    assert seen.at == restart and seen.cycle is None  # (the data's cycle kept, not bent to the shift)
+    arr, dep, _ = T.TransportTimes(i, 2, restart + 5)
+    assert dep == pytest.approx(t.cycle - 5, abs=0.01)  # (the timer from the new departure)
+    T.Departed(i, 2, restart + 2 * t.cycle + 1.5)  # (a true second sighting: a little off the data's cycle)
+    assert T.Sightings()[key].cycle == pytest.approx((2 * t.cycle + 1.5) / 2, abs=0.01)
+    log = list(ns.db.rideLog.values())
+    assert len(log) == 3 and all("departed" in line and key in line for line in log)
+    # off the tower without a departure seen (walking down the stairs): logged with what the detector had
+    bx, by = t[5], t[6]
+    for k in range(20):
+        T.TransportTick(100 + k * 0.5, 9000 + k, bx + 10 + k * 4, by, 0, 7.0)
+    last = list(ns.db.rideLog.values())[-1]
+    assert "no departure seen" in last and "speed 7" in last and key in last
+
+
 def test_boats_and_zeppelins_only_of_the_players_faction(nav_env):
     lua, ns = nav_env
     load(lua, ns, "Data/Hostile.lua")
