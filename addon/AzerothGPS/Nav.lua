@@ -2705,8 +2705,11 @@ function N.LearnOnRoute(r)
   local st = ns.settings and ns.settings.gps
   if not (r and r.parts) or r.flying or (st and st.useFlights == false) or N.corpse then return nil end
   local fac = Faction()
-  local known, count = N.KnownFlightNodes()
-  if not fac or count < 1 then return nil end
+  -- (a character that knows no flight path yet gets them too: a new one, the user's Alliance character in
+  -- Elwynn, 2026-10-01, walked past Lakeshire's with none suggested; one not seen yet, known already, goes when
+  -- a flight map's opened, or with right-click, Remove?)
+  local known = N.KnownFlightNodes()
+  if not fac then return nil end
   local at = math.floor((r.consumed or 0) / 50)
   if r.learnAt == at then return r.learnHint or nil end
   if not mastersList then

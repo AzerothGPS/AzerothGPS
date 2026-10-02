@@ -1620,3 +1620,25 @@ def test_the_route_stays_shown_while_a_finished_search_works_it_out_again(game):
     finally:
         R.WARM, R.SYNC_WALKS = False, True
         N.Clear()
+
+
+def test_a_character_whose_name_isnt_known_yet_isnt_saved_as_unknown(game):
+    # (seen 2026-10-01 on the private server: right after logging in UnitName said "Unknown", and the
+    # character's flight paths and faction were saved under "<realm>-Unknown") until the name is known a
+    # stand-in for this session; then what went there moves into the character's own record
+    lua, ns = game
+    lua.execute("AGPS_UN = UnitName\nUnitName = function() return 'Unknown' end")
+    try:
+        assert ns.CharKey().endswith("-Unknown")
+        c = ns.CharDB()
+        c.faction = "Alliance"
+        c.taxiNodes[1463] = lua.eval("{ nodes = { { nodeID = 5, known = true } } }")
+        ns.db.lastChar = ns.CharKey()
+        lua.execute("UnitName = function() return 'Newbie' end")
+        own = ns.CharDB()
+        key = ns.CharKey()
+        assert key.endswith("-Newbie") and own.faction == "Alliance" and own.taxiNodes[1463].nodes[1].known
+        assert not any(str(k).endswith("-Unknown") for k in ns.db.chars.keys()) and ns.db.lastChar == key
+    finally:
+        lua.execute("UnitName = AGPS_UN")
+        ns.db.chars[lua.eval("GetRealmName and GetRealmName() or '?'") + "-Newbie"] = None

@@ -5647,3 +5647,15 @@ def test_nav_draws_no_line_when_there_is_no_way(nav_env):
     finally:
         R.Route = real
         N.Clear()
+
+
+def test_a_character_knowing_no_flight_path_is_offered_detours(nav_env):
+    # (reported, 2026-10-01: an Alliance character with no flight path learned walked past Lakeshire's flight
+    # master with no detour) knowing none is no reason to suggest none: Brill toward Hammerfall, nothing learned
+    lua, ns = _flight_env(nav_env, [])
+    N = ns.Nav
+    ns.CharDB().faction = "Horde"
+    N.SetDestination(-1300.0, -3400.0, 0, "Hammerfall way")
+    r = N.Route(2254.0, 293.0, 0)
+    names = [h.name for h in (N.LearnOnRoute(r) or lua.table()).values()]
+    assert "Tarren Mill" in names

@@ -184,13 +184,42 @@ function ns.SetIcon(tex, icon, fallback)
   tex:SetTexture(icon)
 end
 
+-- The character's name, or nil while the game hasn't given it yet: right after logging in (a new
+-- character's first login above all) UnitName says "Unknown", and everything was saved under
+-- "<realm>-Unknown" (seen 2026-10-01 on the private server: flight paths and faction filed there).
+local function PlayerName()
+  local n = UnitName and UnitName("player")
+  if not n or n == "" or n == "Unknown" or n == UNKNOWNOBJECT then return nil end
+  return n
+end
+ns.PlayerName = PlayerName
+
 function ns.CharKey()
-  return (GetRealmName() or "?") .. "-" .. (UnitName("player") or "?")
+  return (GetRealmName() or "?") .. "-" .. (PlayerName() or "Unknown")
 end
 
+-- This character's saved table. Until the name is known, a stand-in for this session ("<realm>-Unknown");
+-- once it is, what was put there meanwhile moves into the character's own (anything it hasn't got yet).
+local pendingKey
 function ns.CharDB()
   local db = AzerothGPSDB
   local key = ns.CharKey()
+  if PlayerName() then
+    if pendingKey and pendingKey ~= key then
+      local tmp = db.chars[pendingKey]
+      db.chars[pendingKey] = nil
+      local own = db.chars[key] or {}
+      for k, v in pairs(tmp or {}) do
+        if own[k] == nil or (type(v) == "table" and type(own[k]) == "table" and next(own[k]) == nil) then own[k] = v end
+      end
+      db.chars[key] = own
+      if db.lastChar == pendingKey then db.lastChar = key end
+    end
+    pendingKey = nil
+  elseif not pendingKey then
+    pendingKey = key
+    db.chars[key] = nil -- (a stand-in left by an earlier session: whose it was can't be told)
+  end
   db.chars[key] = db.chars[key] or { taxiNodes = {}, flights = {} }
   return db.chars[key]
 end
@@ -232,6 +261,10 @@ local function InitDB()
   db.offroadOff108, db.offroadNote = nil, nil
   Merge(db.settings, ns.DEFAULTS)
   db.chars = db.chars or {}
+  -- (stand-ins saved before the character's name was known, by older versions: whose can't be told)
+  for key in pairs(db.chars) do
+    if type(key) == "string" and key:find("%-Unknown$") then db.chars[key] = nil end
+  end
   db.probes = db.probes or {}
   ns.db = db
   ns.settings = db.settings

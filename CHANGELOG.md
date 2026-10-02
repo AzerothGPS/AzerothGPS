@@ -100,6 +100,8 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - Roads vanished from the map when zoomed out (road and wall tools).
 - Ironforge's roads, and road tool edits there, didn't show on the city's map.
 - Clicking the open sea on a continent's map opened a black terrain view.
+- A character that knew no flight paths yet got no detour to learn one it walked past.
+- Right after logging in (a new character above all), your flight paths and faction could be saved under "Unknown" instead of your character.
 
 ### Known limits
 
