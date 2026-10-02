@@ -166,12 +166,8 @@ function ns.PerfReport()
   return #rows > 0 and out or { "nothing measured yet" }
 end
 
--- Icons are drawn smaller than their art (the game's icons are 64 pixels, the map's 14 to 22 UI units):
--- read from the art's smaller copies (mipmaps), as Blizzard's own map does with the art it shrinks.
--- The default filter samples the full-size art, so small icons came out jagged and coarse, like a
--- low-resolution picture (the user, 2026-10-01: city places and pins). Every icon the map, the arrow
--- and the pin picker show is set with it.
-ns.ICON_FILTER = "TRILINEAR"
+-- (Never pass a filter mode above "LINEAR" to SetTexture or SetAtlas: client 1.60.1.70124 asserts
+-- `flags.m_filter <= GxTex_Linear` and crashes; "TRILINEAR" did, 2026-10-01. wowmock.lua refuses it.)
 
 -- Set a texture from a file path/ID, or from a UI atlas written "atlas:<name>" (falling back
 -- to `fallback` if the client doesn't know the atlas).
@@ -179,13 +175,13 @@ function ns.SetIcon(tex, icon, fallback)
   local atlas = type(icon) == "string" and icon:match("^atlas:(.+)$")
   if atlas then
     if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
-      tex:SetAtlas(atlas, false, ns.ICON_FILTER)
+      tex:SetAtlas(atlas)
       return
     end
     icon = fallback
   end
   tex:SetTexCoord(0, 1, 0, 1) -- undo a previous atlas's coordinates
-  tex:SetTexture(icon, nil, nil, ns.ICON_FILTER)
+  tex:SetTexture(icon)
 end
 
 function ns.CharKey()

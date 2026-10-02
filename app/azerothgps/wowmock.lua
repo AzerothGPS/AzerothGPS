@@ -61,8 +61,15 @@ M.GetRect = function() return 100, 100, 400, 400 end
 M.GetFrameStrata = function() return "MEDIUM" end
 M.GetChecked = function(s) return s._checked or false end
 M.SetChecked = function(s, v) s._checked = v end
-M.SetTexture = function(s, t, _, _, filter) s._tex, s._filter = t, filter end
-M.SetAtlas = function(s, a, _, filter) s._atlas, s._filter = a, filter end
+-- The client asserts `flags.m_filter <= GxTex_Linear` and crashes on any filter mode above LINEAR
+-- ("TRILINEAR" did, 1.60.1.70124, 2026-10-01): the stand-in fails the same way.
+local function FilterOK(filter)
+  if filter ~= nil and filter ~= "LINEAR" and filter ~= "NEAREST" then
+    error("ASSERT(flags.m_filter <= GxTex_Linear): filter mode " .. tostring(filter) .. " crashes the client", 3)
+  end
+end
+M.SetTexture = function(s, t, _, _, filter) FilterOK(filter) s._tex, s._filter = t, filter end
+M.SetAtlas = function(s, a, _, filter) FilterOK(filter) s._atlas, s._filter = a, filter end
 M.GetTexture = function(s) return s._tex end
 M.AddMaskTexture = function(s, m) s._masks = s._masks or {} s._masks[#s._masks + 1] = m end
 M.SetColorTexture = function(s, r, g, b) s._tex = string.format("color:%.2f,%.2f,%.2f", r, g, b) end

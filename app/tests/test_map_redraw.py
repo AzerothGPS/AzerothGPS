@@ -719,12 +719,12 @@ def test_party_members_show_their_class_icon(game):
         G.Update()
         (pin,) = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dot and w._shown]
         assert pin.dot._tex == G.CLASS_SHEET
-        # (asked: sharp, as the other map icons) read through its mipmaps, the class sheet and the atlas alike
-        assert pin.dot._filter == "TRILINEAR"
+        # (never a filter mode above LINEAR: the client crashes on one, wowmock.lua fails the same way)
+        assert pin.dot._filter in (None, "LINEAR")
         lua.execute("AGPS_OLD_CT = C_Texture C_Texture = { GetAtlasInfo = function() return {} end }")
         try:
             t = lua.eval("CreateFrame('Frame'):CreateTexture()")
-            assert G.ClassIcon(t, "MAGE") and t._atlas == "classicon-mage" and t._filter == "TRILINEAR"
+            assert G.ClassIcon(t, "MAGE") and t._atlas == "classicon-mage" and t._filter in (None, "LINEAR")
         finally:
             lua.execute("C_Texture = AGPS_OLD_CT")
         # (asked) round: the icon and its class-colored ring each cut to a circle by the portrait mask
@@ -1120,11 +1120,12 @@ def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     assert not list(media.glob("Portrait*.tga")) and ns.FitPortrait is None
 
 
-def test_map_icons_read_their_mipmaps_and_labels_sit_on_whole_pixels(game):
+def test_map_icons_never_crash_the_client_and_labels_sit_on_whole_pixels(game):
     # (reported: city places and custom pins looked low-resolution; then the place names and city labels too)
-    # every icon on the map is read through its art's smaller copies, as Blizzard's map does with the art it
-    # shrinks ("TRILINEAR"), not sampled from the 64-pixel art; and a label's top-left goes on a whole screen
-    # pixel (the map scrolls smoothly, and text between pixels is smeared), its shadow one pixel off
+    # The icons' fix, the "TRILINEAR" filter mode, crashed client 1.60.1.70124 (an assert: the filter at most
+    # LINEAR), so no icon is set with a filter above LINEAR (wowmock.lua fails on one as the client does);
+    # a label's top-left goes on a whole screen pixel (the map scrolls smoothly, and text between pixels is
+    # smeared), its shadow one pixel off
     lua, ns = game
     G, P, N = ns.GPS, ns.Pins, ns.Nav
     N.Clear()
@@ -1133,18 +1134,21 @@ def test_map_icons_read_their_mipmaps_and_labels_sit_on_whole_pixels(game):
         lua.execute("AGPS_T = 900")
         G.Update()
         pins = _shown(lua, lambda w: w.pin is not None and w.pin.name == "Sharp")
-        assert len(pins) == 1 and pins[0].icon._tex == 136777 and pins[0].icon._filter == "TRILINEAR"
+        assert len(pins) == 1 and pins[0].icon._tex == 136777 and pins[0].icon._filter in (None, "LINEAR")
         pins[0]._scripts.OnDoubleClick(pins[0])  # (as a stop: its marker too)
         lua.execute("AGPS_T = 901")
         G.Update()
         stop = _shown(lua, lambda w: w.pendingIndex == 1)
-        assert len(stop) == 1 and stop[0].icon._filter == "TRILINEAR"
+        assert len(stop) == 1 and stop[0].icon._filter in (None, "LINEAR")
         G.RemovePending(1)
     finally:
         P.Remove(pin)
     t = lua.eval("CreateFrame('Frame'):CreateTexture()")  # (city places, POIs, overlays: ns.SetIcon)
     ns.SetIcon(t, "Interface\\Icons\\INV_Misc_Bag_10_Blue")
-    assert t._filter == "TRILINEAR"
+    assert t._filter in (None, "LINEAR")
+
+    with pytest.raises(Exception, match="GxTex_Linear"):  # (the stand-in crashes as the client does)
+        lua.eval("function(t) t:SetTexture(136777, nil, nil, 'TRILINEAR') end")(t)
     lua.execute("AGPS_OLD_PSS = GetPhysicalScreenSize\nGetPhysicalScreenSize = function() return 2560, 1440 end")
     try:
         fs = lua.eval("""(function()
