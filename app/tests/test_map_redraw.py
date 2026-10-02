@@ -1128,6 +1128,66 @@ def test_a_zeppelin_dock_that_is_a_stop_still_shows_its_timer(game):
         lua.execute("AGPS_NS.Taxi.TransportTimes = AGPS_TT AGPS_T = AGPS_T + 1")
 
 
+def test_shift_click_on_a_dock_pastes_its_times_in_chat(game):
+    # (asked 2026-10-02) Shift + left-click on a zeppelin's dock with its timetable known: a line with its times
+    # in the chat box (the one being typed in, else a new one), never sent by itself; on the route's ride icon
+    # there too; with no timetable yet, nothing pasted
+    import math
+    lua, ns = game
+    G, N, st = ns.GPS, ns.Nav, ns.settings.gps
+    brill = (2254.0, 293.0)
+    docks = [(math.hypot(t[2 + 3 * k] - brill[0], t[3 + 3 * k] - brill[1]), t[2 + 3 * k], t[3 + 3 * k], i, k + 1)
+             for i, t in ns.Transports.items() for k in (0, 1) if t[8] == "zeppelin" and t[1 + 3 * k] == 0]
+    _, x, y, i, side = min(docks)
+    t = ns.Transports[i]
+    here, there = (t[9], t[10]) if side == 1 else (t[10], t[9])
+    want = f"Zeppelin from {here.split(',')[0]} to {there.split(',')[0]}: arrives in 2:10, leaves in 3:20"
+    lua.execute("""AGPS_TT = AGPS_NS.Taxi.TransportTimes AGPS_NS.Taxi.TransportTimes = function() return 130, 200, 10 end
+      AGPS_OLD_CHAT = { ChatFrame_OpenChat, IsShiftKeyDown, C_ChatInfo and C_ChatInfo.SendChatMessage, SendChatMessage }
+      AGPS_PASTED, AGPS_SENT = {}, 0
+      ChatFrame_OpenChat = function(text) table.insert(AGPS_PASTED, text) end
+      SendChatMessage = function() AGPS_SENT = AGPS_SENT + 1 end
+      IsShiftKeyDown = function() return AGPS_SHIFT end""")
+    zoom = st.zoom
+    pasted = lambda: list(lua.eval("AGPS_PASTED").values())  # noqa: E731
+
+    def button():
+        b = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dock and w._shown and w.wx == x and w.wy == y]
+        return b[0] if b else None
+
+    try:
+        st.zoom = 900.0
+        N.Clear()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        b = button()
+        assert b is not None
+        lua.execute("AGPS_SHIFT = false")
+        b._scripts.OnClick(b, "LeftButton")
+        assert pasted() == []  # (a plain click: nothing)
+        lua.execute("AGPS_SHIFT = true")
+        b._scripts.OnClick(b, "LeftButton")
+        assert pasted() == [want] and lua.eval("AGPS_SENT") == 0 and "|" not in want
+        # the route's ride icon on that dock (a route to Grom'gol takes it): the same
+        N.SetStops(lua.eval("{ { x = -12420.0, y = 200.0, cont = 0, name = 'Grom' } }"), False, "red")
+        _frames(lua, 4, fps=10)
+        r = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dock and w.title is not None and w._shown]
+        assert r, "no ride icon on the dock"
+        lua.execute("AGPS_PASTED = {}")
+        r[0]._scripts.OnClick(r[0], "LeftButton")
+        assert len(pasted()) == 1 and pasted()[0].startswith("Zeppelin from ")
+        # no timetable yet: nothing pasted
+        lua.execute("AGPS_NS.Taxi.TransportTimes = function() return nil end AGPS_PASTED = {}")
+        b._scripts.OnClick(b, "LeftButton")
+        assert pasted() == [] and G.DockShareText(i, side) is None
+    finally:
+        st.zoom = zoom
+        N.Clear()
+        lua.execute("""AGPS_NS.Taxi.TransportTimes = AGPS_TT
+          ChatFrame_OpenChat, IsShiftKeyDown, SendChatMessage = AGPS_OLD_CHAT[1], AGPS_OLD_CHAT[2], AGPS_OLD_CHAT[4]
+          AGPS_T = AGPS_T + 1""")
+
+
 def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     # (asked: the logo in the round portrait looked soft, one 128-pixel picture shrunk by the graphics card)
     # the pre-scaled size nearest the pixels the 62-unit portrait covers, shown 1:1

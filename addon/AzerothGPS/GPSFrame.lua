@@ -1923,6 +1923,9 @@ local function PoiButton(i)
     end
     if self.note then GameTooltip:AddLine(self.note, 0.7, 0.7, 0.7) end
     GameTooltip:AddLine("Double-click: add as a stop", 0.4, 0.8, 1)
+    if self.dock and G.DockShareText(self.dock[1], self.dock[2]) then
+      GameTooltip:AddLine("Shift-click: paste its times in chat", 0.4, 0.8, 1)
+    end
     if self.pin then GameTooltip:AddLine("Right-click: remove this pin", 0.4, 0.8, 1) end
     GameTooltip:Show()
   end)
@@ -1946,6 +1949,10 @@ local function PoiButton(i)
       elseif IsShiftKeyDown and IsShiftKeyDown() then
         ns.Import.LinkMapPin()
       end
+      return
+    end
+    if button == "LeftButton" and self.dock and IsShiftKeyDown and IsShiftKeyDown() then -- (its times pasted in chat)
+      G.ShareDock(self.dock)
       return
     end
     if button == "LeftButton" and self.bossKey and IsShiftKeyDown and IsShiftKeyDown() -- (another addon's: API.OnIconShiftClick)
@@ -2003,7 +2010,36 @@ function G.DockTimes(i, side)
   end
   return short, lines, docked
 end
-local BOSS_ICON = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
+
+-- A dock's times as a chat line (asked 2026-10-02: Shift-click a zeppelin with known timing to paste it, never
+-- sent by itself): "Zeppelin from Brill to Grom'gol Base Camp: arrives in 2:10, leaves in 3:10"; nil while
+-- its timetable isn't known yet.
+function G.DockShareText(i, side)
+  local t = ns.Transports and ns.Transports[i]
+  local T = ns.Taxi
+  if not (t and T and T.TransportTimes) then return nil end
+  local now = GetServerTime and GetServerTime() or (time and time()) or 0
+  local arr, dep = T.TransportTimes(i, side, now)
+  if not arr then return nil end
+  local function Town(name) return (((name or "?"):match("^[^,]+") or "?"):gsub("|", "")) end
+  local here, there = Town(side == 1 and t[9] or t[10]), Town(side == 1 and t[10] or t[9])
+  local kind = t[8] == "boat" and "Boat" or "Zeppelin"
+  local wait = side == 1 and t.wait1 or t.wait2
+  local when = dep <= wait and ("at the dock, leaves in " .. Clock(dep))
+    or ("arrives in " .. Clock(arr) .. ", leaves in " .. Clock(dep))
+  return string.format("%s from %s to %s: %s", kind, here, there, when)
+end
+
+-- Shift-click on a dock (its map icon, or the route's ride icon there): its times pasted in chat.
+function G.ShareDock(dock)
+  local text = dock and G.DockShareText(dock[1], dock[2])
+  if not text then
+    ns.Print("No timetable for this one yet: ride it once and AzerothGPS learns it.")
+    return false
+  end
+  return ns.Import.PasteInChat(text)
+end
+local BOSS_ICON ="Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
 local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 
 -- A map label on whole screen pixels (the user, 2026-10-01: place names and city labels looked soft). The
@@ -2190,8 +2226,14 @@ local function StopPin(i)
   b:SetFrameLevel(keepLayer:GetFrameLevel() + 2)
   b.icon = b:CreateTexture(nil, "OVERLAY")
   b.icon:SetAllPoints()
-  b:RegisterForClicks("RightButtonUp")
-  b:SetScript("OnClick", function(self) G.AskRemove(self) end)
+  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  b:SetScript("OnClick", function(self, button)
+    if button == "LeftButton" then -- (a dock's: Shift-click pastes its times in chat)
+      if self.dock and IsShiftKeyDown and IsShiftKeyDown() then G.ShareDock(self.dock) end
+      return
+    end
+    G.AskRemove(self)
+  end)
   b:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(self.title, 1, 1, 1)
@@ -2200,6 +2242,9 @@ local function StopPin(i)
       for _, l in ipairs(lines or {}) do GameTooltip:AddLine(l, 1, 0.82, 0) end
     end
     GameTooltip:AddLine(G.PinHint(self), 0.7, 0.7, 0.7)
+    if self.dock and G.DockShareText(self.dock[1], self.dock[2]) then
+      GameTooltip:AddLine("Shift-click: paste its times in chat", 0.7, 0.7, 0.7)
+    end
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", GameTooltip_Hide)

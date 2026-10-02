@@ -407,6 +407,12 @@ local function InsertInChat(text)
   return true
 end
 
+-- `text` into the chat box being typed in, else a new one, for the player to send (a dock's times,
+-- GPSFrame's Shift-click). Nothing is sent. Whether a box took it.
+function I.PasteInChat(text)
+  return InsertInChat(text)
+end
+
 function I.io.chat(text, channel, target)
   local slash
   if channel == "WHISPER" and target then
