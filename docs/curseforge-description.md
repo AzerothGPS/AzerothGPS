@@ -2,7 +2,7 @@
 
 _Want the full rundown of every feature, option and command? Because it's a lot! It's all in the **[AzerothGPS wiki](https://github.com/AzerothGPS/AzerothGPS/wiki)**._
 
-![Double-clicking Brill and a spot on the map, confirming, then following the route with the direction arrow](https://i.imgur.com/LnZbC2x.gif)
+![Double-clicking Goldshire and a spot nearby, confirming, then following the route with the direction arrow](https://github.com/user-attachments/assets/81709111-9f3d-43d0-af64-d24932cbcadb)
 
 _Double-click where you want to go, confirm, and follow the arrow._
 
@@ -10,15 +10,15 @@ _Double-click where you want to go, confirm, and follow the arrow._
 
 No more running straight at a mountain and wondering why you're stuck. When cliffs or ridges are in the way, the route goes around them and in through the pass. It sticks to the roads where that makes sense, and when you're off the road it joins up where you're headed, not back at the closest bit behind you. Take your own shortcut and it just adjusts. Got a bunch of places to hit? Add as many stops as you like and it sorts them into the fastest order.
 
-![A route around a mountain ridge and in through the pass to a walled-off valley](https://i.imgur.com/IyVpGiY.png)
+![A route around a mountain ridge and in through the pass to a walled-off valley](https://github.com/user-attachments/assets/404db654-3b13-4a3f-86c6-c693e3181844)
 
-![A three-stop route around Brill and the Undercity, with the direction arrow](https://i.imgur.com/lOUdHxl.png)
+![A three-stop trip in Mulgore along the roads, with the direction arrow above the map](https://github.com/user-attachments/assets/9f86bb86-8e44-48eb-9a78-725811e2667c)
 
 ## Your quest log, routed
 
 Quest areas show up on the map just like on your minimap. One click and it routes you through your whole quest log: every objective and every turn-in, in the fastest order. A stop in a quest area waits until you've finished that quest's objectives, then the route moves on.
 
-![Clicking the Sprint button: the route zooms out over every quest stop and turn-in](https://i.imgur.com/g67YfqD.gif)
+![In Tirisfal: the Quest Route button, the route through the quest log's objectives and turn-ins](https://github.com/user-attachments/assets/b2d377c4-7d35-4f0c-a86e-b83bfc3e105e)
 
 ## Stays out of your way
 
@@ -31,13 +31,13 @@ Quest areas show up on the map just like on your minimap. One click and it route
 
 Every herb and ore node you gather, hover over on the minimap, or right-click without the profession ("Requires Herbalism") gets remembered across all your characters. Draw around a spot and it routes a loop through every node in it.
 
-![Drawing a farming area and following the loop](https://i.imgur.com/ABt7arU.gif)
+![On Zephras Isle: the herb and ore buttons, Draw a Farming Area, a loop drawn round the nodes, the route through them](https://github.com/user-attachments/assets/09e4ea32-aa55-4921-8526-1164ee2e7709)
 
 ## Spot a mistake? Fix it
 
 If a route misses a trail or walks you into a wall, draw the fix right on the map and routes use it straight away. Send it by following directions in "Help improve" menu (`/reload`, then **Copy Map Data…**) and if it checks out, it ships in the next version for everybody.
 
-![Road tools in Duskwood: circling a false road to erase it, then drawing the real one](https://i.imgur.com/WjwnjW1.gif)
+![Road tools in Silverpine: circling a road to erase it, drawing the real one, the route taking it](https://github.com/user-attachments/assets/f6d11814-0bcb-4ba4-bba6-59afa1f9f3ba)
 
 ## Also in there
 

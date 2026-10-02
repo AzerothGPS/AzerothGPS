@@ -15,38 +15,44 @@ game's roads, with turn-by-turn directions, multi-stop trips (boats and zeppelin
 included), quests on the map, and TomTom `/way` import and sharing.
 
 <p align="center">
-  <img src="https://i.imgur.com/LnZbC2x.gif" alt="Placing stops, then following the route with the direction arrow" width="540">
+  <img src="https://github.com/user-attachments/assets/81709111-9f3d-43d0-af64-d24932cbcadb" alt="Double-clicking Goldshire and a spot nearby, confirming, then following the route with the direction arrow" width="540">
   <br><em>Double-click to place stops, then follow the direction arrow stop by stop.</em>
 </p>
 
 | Exploring the map | Importing <code>/way</code> waypoints |
 |---|---|
-| <img src="https://i.imgur.com/pIXbXdS.gif" alt="Panning, zooming and picking a spot from the world map" width="400"> | <img src="https://i.imgur.com/SvecrT3.gif" alt="Pasting /way lines into the import window" width="400"> |
+| <img src="https://github.com/user-attachments/assets/9a342cd0-a3ae-4a8d-939a-bb2c5a0f4850" alt="Panning, zooming and picking a spot from the world map" width="400"> | <img src="https://github.com/user-attachments/assets/3d9a2af0-0980-40d4-89c8-b3d45e432e43" alt="Pasting /way lines into the import window" width="400"> |
 | Drag, zoom, or right-click out to the world map to pick a spot. | Paste TomTom lines and the route is ready, zeppelin included. |
 
 <p align="center">
-  <img src="https://i.imgur.com/lOUdHxl.png" alt="A three-stop route around Brill and the Undercity with the direction arrow" width="700">
+  <img src="https://github.com/user-attachments/assets/9f86bb86-8e44-48eb-9a78-725811e2667c" alt="A three-stop trip in Mulgore along the roads, with the direction arrow above the map" width="700">
   <br><em>A three-stop trip: each leg in its stop's color, the steps with times, and the direction arrow (top left). The map is enlarged here; size and opacity are adjustable.</em>
 </p>
 
 <p align="center">
-  <img src="https://i.imgur.com/gqISXPx.png" alt="Terrain, World Map and No Spoiler map styles" width="700">
+  <img src="https://github.com/user-attachments/assets/4493cdc1-c3fe-4176-9bf4-b974e36e31b9" alt="The same spot near Razor Hill in Terrain, World Map and No Spoiler" width="700">
   <br><em>Three map styles: Terrain, World Map, and No Spoiler (only what you've explored).</em>
 </p>
 
 | Direction arrow | Quest areas |
 |---|---|
-| <img src="https://i.imgur.com/pCqMfOT.png" alt="The direction arrow window" width="400"> | <img src="https://i.imgur.com/NLye6Xh.png" alt="Quest area outlines with a quest tooltip" width="400"> |
+| <img src="https://github.com/user-attachments/assets/e3062cea-ce82-410f-b8ef-11eb23ae4431" alt="The direction arrow above the map in Mulgore: the next turn, the stop's distance and ETA, the stops after it" width="400"> | <img src="https://github.com/user-attachments/assets/ee5e73a8-0b70-4f17-8f6a-9d57b5fa2dd2" alt="Quest area outlines with a quest tooltip" width="400"> |
 | Next maneuver, the stop's distance and ETA, and the stops after it. | Quest areas outlined like on the minimap; hover for the objectives. |
 | **Sharing a route** | **Drawn roads** |
-| <img src="https://i.imgur.com/mUgJa9g.png" alt="The import and share window" width="400"> | <img src="https://i.imgur.com/6U6bU8C.png" alt="A drawn road joining the road network" width="400"> |
+| <img src="https://github.com/user-attachments/assets/134bff8b-795f-4a1a-b08a-28398172314a" alt="The waypoint window with a Mulgore route copied as /way lines" width="400"> | <img src="https://github.com/user-attachments/assets/06d4058a-a63c-4494-8c3e-200dc0befd10" alt="Road tools on near Razor Hill: a drawn road joining the road network" width="400"> |
 | Copy your route as <code>/way</code> lines, or send it in game. | Draw a missing road on the map and routes use it right away. |
 | **Search** | **Hearthstone in routes** |
-| <img src="https://i.imgur.com/Qb3HwWf.png" alt="Searching places on Zephras Isle" width="400"> | <img src="https://i.imgur.com/m1Trl0w.png" alt="A route that starts with Use your Hearthstone" width="400"> |
+| <img src="https://github.com/user-attachments/assets/8012fb12-c9f1-4881-9889-e6c1b6563852" alt="Searching &quot;ri&quot; on Zephras Isle, each result with its kind" width="400"> | <img src="https://github.com/user-attachments/assets/7bdb905f-ca31-4046-8f06-bf88ab0de96c" alt="In the Barrens, a route whose first step is Use your Hearthstone, in the arrow window and the route panel" width="400"> |
 | Type a few letters and pick a town, zone, landmark, flight master or dock. | Hearth home when it's faster; one click on the button turns it on or off. |
 | **Farming routes** | **Importing herb and ore nodes** |
-| <img src="https://i.imgur.com/ABt7arU.gif" alt="Drawing a farming area and following the loop route" width="400"> | <img src="https://i.imgur.com/KXUz2RU.png" alt="The waypoint window with Import as herb/ore nodes" width="400"> |
+| <img src="https://github.com/user-attachments/assets/09e4ea32-aa55-4921-8526-1164ee2e7709" alt="On Zephras Isle: the herb and ore buttons, Draw a Farming Area, a loop drawn round the nodes, the route through them" width="400"> | <img src="https://github.com/user-attachments/assets/3e19339d-b59e-4764-9614-1e3c22e958cc" alt="The waypoint window with Import as herb/ore nodes ticked, Durotar herbs" width="400"> |
 | Draw around herb or ore nodes and the route loops through them. | Paste <code>/way</code> node lists; they show faded until you gather there. |
+| **Your raid on the map** | **A bigger map** |
+| <img src="https://github.com/user-attachments/assets/8f65e156-c3af-46f1-a3e1-c3755bb95991" alt="Your raid in open-world PvP, each member's class icon on the map" width="400"> | <img src="https://github.com/user-attachments/assets/e0db657e-87ab-46aa-a531-f089d7f28a24" alt="Dragging the map window's corner to resize it" width="400"> |
+| Where your raid or party is, by class, in open-world PvP or anywhere. | Drag the corner to resize (Lock map size off). |
+| **Dungeons** | **Zeppelins and boats** |
+| <img src="https://github.com/user-attachments/assets/c697343f-1eed-45e0-8a2e-4b32cc35aeef" alt="Ragefire Chasm's map: marking where you are, the next boss" width="400"> | <img src="https://github.com/user-attachments/assets/5bff3157-49cc-464c-a0df-cab9a715145d" alt="A zeppelin tower's countdown and tooltip" width="400"> |
+| A dungeon's map with its bosses in order and the usual way through; mark where you are and bosses down. | Every dock counts down to its next zeppelin or boat. |
 
 **Get it:** download the zip from the [latest release](https://github.com/AzerothGPS/AzerothGPS/releases/latest)
 and extract the `AzerothGPS` folder into `_classic_beta_\Interface\AddOns`. In game,
