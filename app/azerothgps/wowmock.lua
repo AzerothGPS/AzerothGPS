@@ -209,6 +209,18 @@ GetNumSkillLines = function() return 0 end
 PlaySound = function() end
 PlaySoundFile = function() end
 hooksecurefunc = function() end
+-- chat message filters and EventRegistry callbacks, kept for the tests to call (AGPS_CHAT_FILTERS[event],
+-- AGPS_CALLBACKS[event]: lists of functions)
+AGPS_CHAT_FILTERS, AGPS_CALLBACKS = {}, {}
+ChatFrame_OpenChat = function(text) AGPS_CHAT_OPENED = text end -- (a chat box opened with text, unsent)
+ChatFrame_AddMessageEventFilter = function(event, fn)
+  AGPS_CHAT_FILTERS[event] = AGPS_CHAT_FILTERS[event] or {}
+  table.insert(AGPS_CHAT_FILTERS[event], fn)
+end
+EventRegistry = { RegisterCallback = function(self, event, fn, owner)
+  AGPS_CALLBACKS[event] = AGPS_CALLBACKS[event] or {}
+  table.insert(AGPS_CALLBACKS[event], fn)
+end }
 SetOverrideBindingClick = function() end
 ClearOverrideBindings = function() end
 GetBindingKey = function() return nil end

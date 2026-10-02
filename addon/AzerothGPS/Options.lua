@@ -688,7 +688,7 @@ local function BuildWindow()
     function() return GPS().acceptWay ~= false end, function(v) GPS().acceptWay = v end)
   check("Map pin links add stops", "Clicking a map pin someone posted in chat (\"[Map Pin Location]\") adds a stop there. To share a spot yourself, Ctrl + left-click it on the map for the map pin (a diamond, the game's own waypoint), then Shift + left-click the pin; Ctrl + left-click it again removes it.",
     function() return GPS().acceptMapPins ~= false end, function(v) GPS().acceptMapPins = v end)
-  check("Accept routes shared by players", "Other AzerothGPS users can send you their route (Import and share waypoints window). You're always asked before it replaces yours.",
+  check("Accept routes shared by players", "Route links other AzerothGPS users post in chat (\"[AzerothGPS Route: 3 stops]\", from the Import and share waypoints window) can be clicked to get their route. Nothing comes in unless you click one, and you're asked before it replaces yours.",
     function() return GPS().acceptShared ~= false end, function(v) GPS().acceptShared = v end)
   place(Button(page, "Import / share waypoints...", 200, function() ns.Import.Toggle() end), 30, 4)
 

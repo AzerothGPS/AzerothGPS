@@ -3002,6 +3002,72 @@ def test_share_route_in_game_messages(importer):
     assert I.Receive(msgs[1], "Other", 100) is None
 
 
+
+def test_routes_are_shared_as_chat_links(importer):
+    # (asked 2026-10-02) sharing puts a short link in the chat box, sent by the player; nothing pops up
+    # unasked: the route's stops go only to who clicks the link, and only routes asked for are offered
+    lua, ns = importer
+    I = ns.Import
+    sent, offered = [], []
+    real_send, real_offer = I.io.send, I.Offer
+    lua.execute("""AGPS_OLD_CHAT = { ChatFrame_OpenChat, ChatEdit_GetActiveWindow, UnitName }
+      ChatFrame_OpenChat = function(t) AGPS_OPENED = t end
+      ChatEdit_GetActiveWindow = function() return nil end
+      UnitName = function() return "Tester" end""")
+    printed, real_print = [], ns.Print
+    ns.Print = lambda *a: printed.append(" ".join(str(x) for x in a))
+    try:
+        I.io.send = lambda prefix, msg, channel, target: sent.append((msg, channel, target))
+        I.Offer = lambda sender, stops: offered.append((sender, len(stops)))
+        stops, _ = I.Parse("/way Durotar 52.0 41.0 Razor Hill\n/way Durotar 45.0 10.0", None)
+        ns.Nav.SetStops(stops)
+        assert I.Send("WHISPER", "Ann")[1] and lua.eval("AGPS_OPENED").startswith("/w Ann [AzerothGPS Route ")
+        n, rid = I.Send("PARTY", None)
+        tag = lua.eval("AGPS_OPENED")
+        assert n == 2 and tag == "/p [AzerothGPS Route %s: 2 stops]" % rid and not sent
+        # someone without AzerothGPS reads the short line; with it, a link to ask "Tester" for the route
+        line = I.LinkifyRoutes("look " + tag[3:] + " here", "Tester")
+        assert "|Haddon:AzerothGPS:route:%s:Tester|h[AzerothGPS Route: 2 stops]|h" % rid in line and line.startswith("look ")
+        assert I.LinkifyRoutes("no route here", "Tester") == "no route here"
+        # your own link clicked: nothing asked
+        assert I.OnRouteLink("addon:AzerothGPS:route:%s:Tester" % rid) and not sent and "your route" in printed[-1]
+        assert not I.OnRouteLink("item:6948")
+        # Bob clicks it: his ask is answered with the stops, to him only; asking again at once isn't
+        I.OnAddonMessage("AzerothGPS", "?\t" + rid, "WHISPER", "Bob-Realm")
+        assert len(sent) == 2 and all(c == "WHISPER" and t == "Bob-Realm" for _, c, t in sent)
+        I.OnAddonMessage("AzerothGPS", "?\t" + rid, "WHISPER", "Bob-Realm")
+        I.OnAddonMessage("AzerothGPS", "?\tabcdef", "WHISPER", "Cat")  # (a route never linked)
+        I.OnAddonMessage("AzerothGPS", "?\t" + rid, "PARTY", "Cat")  # (asks only by whisper)
+        assert len(sent) == 2
+        route = [m for m, _, _ in sent]
+        # stops nobody asked for are ignored (the old way: a route pushed at you)
+        for m in route:
+            I.OnAddonMessage("AzerothGPS", m, "WHISPER", "Dan")
+        assert not offered
+        # clicking Dan's link asks him; his answer is offered, someone else's isn't
+        sent.clear()
+        assert I.OnRouteLink("addon:AzerothGPS:route:%s:Dan-Realm" % rid)
+        assert sent == [("?\t" + rid, "WHISPER", "Dan-Realm")] and "Asking Dan-Realm" in printed[-1]
+        for m in route:
+            I.OnAddonMessage("AzerothGPS", m, "WHISPER", "Eve")
+        assert not offered
+        for m in route:
+            I.OnAddonMessage("AzerothGPS", m, "WHISPER", "Dan-Realm")
+        assert offered == [("Dan-Realm", 2)]
+        for m in route:  # (once: the same again isn't)
+            I.OnAddonMessage("AzerothGPS", m, "WHISPER", "Dan-Realm")
+        assert len(offered) == 1
+        # only the last few routes linked are answered for
+        for _ in range(I.POSTED_MAX):
+            I.Send("PARTY", None)
+        sent.clear()
+        I.OnAddonMessage("AzerothGPS", "?\t" + rid, "WHISPER", "Fay")
+        assert not sent
+    finally:
+        I.io.send, I.Offer = real_send, real_offer
+        ns.Print = real_print
+        lua.execute("ChatFrame_OpenChat, ChatEdit_GetActiveWindow, UnitName = AGPS_OLD_CHAT[1], AGPS_OLD_CHAT[2], AGPS_OLD_CHAT[3]")
+
 def test_route_across_pieces_of_the_road_network_uses_roads(nav_env):
     # Durotar's roads and the ones near this Kalimdor spot aren't connected in the data;
     # the route still follows roads, joining the pieces across the gaps

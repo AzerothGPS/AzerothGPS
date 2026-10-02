@@ -63,6 +63,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 
 ### Changed
 
+- **Sharing a route in game is a link now.** "Link To" a player or your group (Import and share waypoints) puts a short line in the chat box, "[AzerothGPS Route: 3 stops]", for you to send like a map pin. Players without AzerothGPS only see that line. AzerothGPS users click it to get your route, and are still asked before it replaces theirs. Nothing arrives unless you click a link, so no more surprise popups in the middle of a run.
 - **Zones way above your level:** "Keep this route?" now comes before the route is drawn or followed, and it's asked again if you leave a ride out and the new way runs through one. A quicker safe way, like the tram, always comes first.
 - **No more straight lines over mountains.** When there's genuinely no way to walk somewhere (no roads join up and a wall or a mountain's in the way), you get "No way there found" instead of a line over the top. Across open ground or water, a straight line still counts.
 - **Flights at a low level** are weighed against the walk as it's really routed, so you'll fly when walking would go the long way round zones too high for you (like Brill into Arathi Highlands at level 14).

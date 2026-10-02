@@ -316,10 +316,19 @@ function I.ExportText(stops)
   return table.concat(lines, "\n"), skipped
 end
 
--- In game, to other AzerothGPS users: one addon message per stop,
--- "version \t id \t i \t n \t cont \t x \t y \t name". Nothing is used until they accept.
+-- In game, to other AzerothGPS users, as a link (asked 2026-10-02: like a map pin's, so nothing pops up
+-- unasked and nobody's navigation is interrupted). Sharing puts a short line in your chat box,
+-- "[AzerothGPS Route 1a2b3c: 3 stops]", sent when you press Enter: plain text for players without
+-- AzerothGPS, a link for those with it. Clicking the link asks you for the route (an addon whisper,
+-- "?\tid"), and only then are its stops sent, to that player alone: one addon message per stop,
+-- "version \t id \t i \t n \t cont \t x \t y \t name". Stops nobody asked for are ignored, and nothing
+-- is used until they accept.
 I.PREFIX = "AzerothGPS"
 I.SHARE_TIMEOUT = 30 -- seconds to wait for a route's remaining stops
+I.ASK_TIMEOUT = 30 -- seconds a clicked link's route is waited for
+I.POSTED_MAX = 5 -- routes linked lately that are still answered for
+I.POSTED_TTL = 3600 -- (an hour each)
+I.ANSWER_GAP = 5 -- seconds before the same player gets the same route again
 local SHARE_VERSION = "1"
 -- Stops sent in game (the next ones): addon messages are rate limited, and the other
 -- player's popup lists them all. Copy as /way has no limit.
@@ -378,25 +387,149 @@ function I.io.send(prefix, msg, channel, target)
   return send(prefix, msg, channel, target)
 end
 
--- Send the route: channel "WHISPER" (to `target`), "PARTY" or "RAID". Returns the number
--- of stops sent, or nil and why not.
+-- The chat box opened with `text` for `channel` ("WHISPER" to `target`, "PARTY", "RAID"; nil: the chat box
+-- being typed in, else a new one), for the player to send. Nothing is sent here. Whether a box took it.
+local function InsertInChat(text)
+  local box = I.ChatBox()
+  if box then
+    if ChatFrameUtil and ChatFrameUtil.InsertLink then
+      ChatFrameUtil.InsertLink(text)
+    elseif ChatEdit_InsertLink then
+      ChatEdit_InsertLink(text)
+    else
+      box:Insert(text)
+    end
+    return true
+  end
+  local open = ChatFrameUtil and ChatFrameUtil.OpenChat or ChatFrame_OpenChat
+  if not open then return false end
+  open(text)
+  return true
+end
+
+function I.io.chat(text, channel, target)
+  local slash
+  if channel == "WHISPER" and target then
+    slash = (SLASH_WHISPER1 or "/w") .. " " .. target .. " "
+  elseif channel == "PARTY" then
+    slash = (SLASH_PARTY1 or "/p") .. " "
+  elseif channel == "RAID" then
+    slash = (SLASH_RAID1 or "/raid") .. " "
+  end
+  if not slash then return InsertInChat(text) end
+  local open = ChatFrameUtil and ChatFrameUtil.OpenChat or ChatFrame_OpenChat
+  if not open then return false end
+  open(slash .. text) -- (as the game's own "Whisper" does: the box parses the slash command)
+  return true
+end
+
+-- A route's line in chat: "[AzerothGPS Route 1a2b3c: 3 stops]" (I.LinkifyRoutes makes it a link).
+function I.RouteTag(id, n)
+  return string.format("[AzerothGPS Route %s: %d stop%s]", id, n, n == 1 and "" or "s")
+end
+local TAG_PATTERN = "%[AzerothGPS Route (%x+): (%d+) stops?%]"
+
+local posted, postedOrder = {}, {} -- [id] = { msgs, t }: the routes you linked lately, as they were then
+I.posted = posted
+
+function I.Post(id, msgs, now)
+  posted[id] = { msgs = msgs, t = now or GetTime() }
+  postedOrder[#postedOrder + 1] = id
+  while #postedOrder > I.POSTED_MAX do posted[table.remove(postedOrder, 1)] = nil end
+end
+
+-- Link the route in chat: channel "WHISPER" (to `target`), "PARTY" or "RAID", or nil (the chat box
+-- being typed in). Nothing is sent: the chat box opens with the link, for you to send. Returns the
+-- number of stops it carries and its id, or nil and why not.
 function I.Send(channel, target)
   local stops = ns.Nav.stops
-  if #stops == 0 then return nil, "No route to send." end
-  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage or SendAddonMessage) then
-    return nil, "Sending isn't available in this client."
-  end
-  local msgs = I.ShareMessages(stops, string.format("%x", math.random(0, 0xFFFFFF)))
-  for _, m in ipairs(msgs) do I.io.send(I.PREFIX, m, channel, target) end
-  return #msgs
+  if #stops == 0 then return nil, "No route to share." end
+  local id = string.format("%x", math.random(0x100000, 0xFFFFFF))
+  local msgs = I.ShareMessages(stops, id)
+  if not I.io.chat(I.RouteTag(id, #msgs), channel, target) then return nil, "Couldn't open a chat box." end
+  I.Post(id, msgs)
+  return #msgs, id
 end
 
 function I.AcceptShared()
   return not ns.settings or ns.settings.gps.acceptShared ~= false
 end
 
--- A route someone sent: ask before using it. (I.Offer: the dev addon's checks swap it to see
--- what would be offered without the popup.)
+-- A player's name to compare by: without the realm, lower case.
+local function Who(name)
+  return ((name or ""):match("^[^-]*")):lower()
+end
+
+local function IsMe(name)
+  local me = UnitName and UnitName("player")
+  return me ~= nil and Who(name) == Who(me)
+end
+
+local answered = {} -- [who \t id] = when
+
+-- Someone clicked your route's link and asks for it: its stops, to them only (a route you linked in
+-- the last hour; once in ANSWER_GAP seconds each). How many messages went.
+function I.Answer(sender, id, now)
+  local p = posted[id]
+  if not p or now - p.t > I.POSTED_TTL then return 0 end
+  local key = Who(sender) .. "\t" .. id
+  if answered[key] and now - answered[key] < I.ANSWER_GAP then return 0 end
+  answered[key] = now
+  for _, m in ipairs(p.msgs) do I.io.send(I.PREFIX, m, "WHISPER", sender) end
+  return #p.msgs
+end
+
+local askedFor = {} -- [who] = { id, t }: the route last asked for from each player (its link clicked)
+
+-- A route `sender`'s stops are taken in for (I.Expect: the dev addon's fake players answer through it).
+function I.Expect(sender, id, now)
+  askedFor[Who(sender)] = { id = id, t = now or GetTime() }
+end
+
+function I.Request(sender, id)
+  I.Expect(sender, id)
+  I.io.send(I.PREFIX, "?\t" .. id, "WHISPER", sender)
+  local name = Ambiguate and Ambiguate(sender, "none") or sender
+  if C_Timer and C_Timer.After then
+    C_Timer.After(I.ASK_TIMEOUT, function()
+      local a = askedFor[Who(sender)]
+      if a and a.id == id then
+        askedFor[Who(sender)] = nil
+        ns.Print(string.format("No route from %s: the link may be over an hour old, or they're offline.", name))
+      end
+    end)
+  end
+  ns.Print(string.format("Asking %s for the route...", name))
+end
+
+-- "[AzerothGPS Route id: n stops]" in a chat line from `author`: a link that asks them for it.
+function I.LinkifyRoutes(msg, author)
+  if type(msg) ~= "string" or not msg:find("[AzerothGPS Route ", 1, true) or not I.AcceptShared() then return msg end
+  author = (author or ""):gsub("[:|]", "")
+  if author == "" then return msg end
+  return (msg:gsub(TAG_PATTERN, function(id, n)
+    return string.format("|cff33ff99|Haddon:AzerothGPS:route:%s:%s|h[AzerothGPS Route: %s stop%s]|h|r",
+      id, author, n, n == "1" and "" or "s")
+  end))
+end
+
+-- A route link clicked (I.LinkifyRoutes): its author is asked for it. Whether `link` was one.
+function I.OnRouteLink(link)
+  if type(link) ~= "string" then return false end
+  local id, who = link:match("^addon:AzerothGPS:route:(%x+):(.+)$")
+  if not id then return false end
+  if IsMe(who) then
+    ns.Print("That's your route's link: AzerothGPS users who click it are sent your route.")
+  elseif not I.AcceptShared() then
+    ns.Print("Routes from other players are turned off (AzerothGPS options: Accept routes shared by players).")
+  else
+    I.Request(who, id)
+  end
+  return true
+end
+
+-- A route you asked for (its link clicked): ask before using it. (I.Offer: the dev addon's checks swap
+-- it to see what would be offered without the popup.)
 function I.Offer(sender, stops)
   local who = Ambiguate and Ambiguate(sender, "none") or sender
   local names = {}
@@ -404,7 +537,7 @@ function I.Offer(sender, stops)
   -- (AzerothGPS's popup without a title bar, ns.Ask; gone unanswered after a minute)
   I.offered = { stops = stops, who = who }
   I.offerBox = ns.Ask("AzerothGPSSharedRoute",
-    string.format("%s shared a route with you (AzerothGPS):\n\n%s\n\nUse it as your route?", who, table.concat(names, "\n")),
+    string.format("%s's route (AzerothGPS):\n\n%s\n\nUse it as your route?", who, table.concat(names, "\n")),
     "Use Route", "Ignore", function()
       local n = I.Apply(stops, false)
       ns.Print(string.format("route from %s: %d stop%s", who, n, n > 1 and "s" or ""))
@@ -417,14 +550,31 @@ end
 
 local SHARE_CHANNELS = { WHISPER = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
 
--- An addon message received (CHAT_MSG_ADDON): a stop of a route someone shares; offered once all
--- its stops are in. (I.OnAddonMessage: the dev addon feeds it fake players' messages.)
+-- The chat a route's line becomes a link in.
+I.LINK_EVENTS = { "CHAT_MSG_WHISPER", "CHAT_MSG_WHISPER_INFORM", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER",
+  "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT",
+  "CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_SAY", "CHAT_MSG_YELL",
+  "CHAT_MSG_CHANNEL" }
+
+-- An addon message received (CHAT_MSG_ADDON): someone asking for a route you linked (answered), or a
+-- stop of a route you asked for, offered once all its stops are in; any other route is ignored.
+-- (I.OnAddonMessage: the dev addon feeds it fake players' messages.)
 function I.OnAddonMessage(prefix, text, channel, sender)
-  if prefix ~= I.PREFIX or not SHARE_CHANNELS[channel] or not I.AcceptShared() then return end
-  local me = UnitName("player")
-  if sender == me or (Ambiguate and Ambiguate(sender, "none") == me) then return end
-  local stops = I.Receive(text, sender, GetTime())
-  if stops then I.Offer(sender, stops) end
+  if prefix ~= I.PREFIX or not SHARE_CHANNELS[channel] or type(text) ~= "string" or IsMe(sender) then return end
+  local now = GetTime()
+  local want = text:match("^%?\t(%x+)$")
+  if want then
+    if channel == "WHISPER" then I.Answer(sender, want, now) end
+    return
+  end
+  if not I.AcceptShared() then return end
+  local a = askedFor[Who(sender)]
+  if not (a and text:match("^%d+\t(%w+)\t") == a.id and now - a.t <= I.ASK_TIMEOUT) then return end
+  local stops = I.Receive(text, sender, now)
+  if stops then
+    askedFor[Who(sender)] = nil
+    I.Offer(sender, stops)
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -493,7 +643,7 @@ local function Build()
 
   local sendLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   sendLabel:SetPoint("LEFT", copy, "RIGHT", 12, 0)
-  sendLabel:SetText("Send To")
+  sendLabel:SetText("Link To")
   local who = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
   who:SetSize(100, 20)
   who:SetPoint("LEFT", sendLabel, "RIGHT", 10, 0)
@@ -503,7 +653,7 @@ local function Build()
   f.who = who
   who:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Send To", 1, 1, 1)
+    GameTooltip:SetText("Link To", 1, 1, 1)
     GameTooltip:AddLine("A player's name (Name or Name-Realm). Shift+click a name in chat to fill it in, or target the player before opening this window.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
@@ -511,8 +661,8 @@ local function Build()
   local function Sent(n, err, to)
     if n then
       local more = #ns.Nav.stops > n and string.format(" (the next %d; use Copy route as /way for all %d)", n, #ns.Nav.stops) or ""
-      status:SetText(string.format("Sent %d stop%s%s to %s. They need AzerothGPS, and get asked before it's used.",
-        n, n > 1 and "s" or "", more, to))
+      status:SetText(string.format("A link to your route (%d stop%s%s) is in the chat box to %s: press Enter to send it. "
+        .. "AzerothGPS users click it to get the route; others only see the short line.", n, n > 1 and "s" or "", more, to))
     else
       status:SetText("|cffff6060" .. err .. "|r")
     end
@@ -546,8 +696,9 @@ local function Build()
   for _, b in ipairs({ whisper, group }) do
     b:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:SetText(self == whisper and "Send to a player" or "Send to your group", 1, 1, 1)
-      GameTooltip:AddLine("Sends your route's stops to other AzerothGPS users in game. They're asked before it replaces their route.", nil, nil, nil, true)
+      GameTooltip:SetText(self == whisper and "Link to a player" or "Link to your group", 1, 1, 1)
+      GameTooltip:AddLine("Puts a link to your route in the chat box (a whisper, or party or raid chat) for you to send. "
+        .. "AzerothGPS users who click it get your route's stops, and are asked before it replaces theirs. Nothing is sent until you press Enter.", nil, nil, nil, true)
       GameTooltip:Show()
     end)
     b:SetScript("OnLeave", GameTooltip_Hide)
@@ -618,7 +769,7 @@ local function Build()
   cancel:SetScript("OnClick", function() f:Hide() end)
 
   f:SetScript("OnShow", function()
-    status:SetText("|cff9d9d9dTip: Shift+click a player's name in chat to put it in \"Send to\".|r")
+    status:SetText("|cff9d9d9dTip: Shift+click a player's name in chat to put it in \"Link to\".|r")
     add:SetChecked(false)
     add:SetEnabled(#ns.Nav.stops > 0)
     -- your target, if it's another player, is the default recipient
@@ -715,11 +866,33 @@ function I.Init()
     local box = _G["ChatFrame" .. i .. "EditBox"]
     if box then box:HookScript("OnTextChanged", OnChatText) end
   end
+  -- route lines in chat as links (I.LinkifyRoutes); a click on one asks its author for the route (the game
+  -- hands "addon:" links to EventRegistry's "SetItemRef"; SetItemRef's hook as well: one ask per click)
+  local addFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatFrame_AddMessageEventFilter
+  if addFilter then
+    local function Filter(_, event, msg, author, ...)
+      if event == "CHAT_MSG_WHISPER_INFORM" or event == "CHAT_MSG_BN_WHISPER_INFORM" then author = UnitName("player") end
+      local out = I.LinkifyRoutes(msg, author)
+      if out ~= msg then return false, out, author, ... end
+    end
+    for _, e in ipairs(I.LINK_EVENTS) do addFilter(e, Filter) end
+  end
+  local lastLink, lastAt
+  local function RouteClick(link)
+    if type(link) ~= "string" or not link:find("^addon:AzerothGPS:route:") then return false end
+    if link == lastLink and GetTime() - lastAt < 0.5 then return true end
+    lastLink, lastAt = link, GetTime()
+    return I.OnRouteLink(link)
+  end
+  if EventRegistry and EventRegistry.RegisterCallback then
+    EventRegistry:RegisterCallback("SetItemRef", function(_, link) RouteClick(link) end, I)
+  end
   hooksecurefunc("SetItemRef", function(link)
+    if RouteClick(link) then return end
     -- a click on a map pin someone shared in chat: it becomes a stop
     if I.OnMapPinLink(link) then return end
     if type(link) ~= "string" or not IsModifiedClick("CHATLINK") then return end
-    -- Shift+click on a player's name in chat, with this window open: fills in "Send to"
+    -- Shift+click on a player's name in chat, with this window open: fills in "Link to"
     if not win or not win:IsShown() then return end
     local name = link:match("^player:([^:]+)")
     if name and name ~= "" then

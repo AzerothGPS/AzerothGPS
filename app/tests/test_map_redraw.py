@@ -477,12 +477,45 @@ def test_the_dev_hooks_for_sharing(game):
         I.io.send = lambda prefix, msg, channel, target: sent.append((prefix, msg, channel, target))
         I.Offer = lambda sender, stops: offered.append((sender, [stops[i].name for i in range(1, len(stops) + 1)]))
         ns.Nav.SetStops(lua.eval("{ { x = 2250, y = 250, cont = 0, name = 'Brill' }, { x = 1600, y = 240, cont = 0, name = 'Ruins' } }"), False, "red")
-        assert I.Send("WHISPER", "Friend-Realm") == 2 and len(sent) == 2 and sent[0][0] == "AzerothGPS"
-        for _, msg, _, _ in sent:  # (back in as another player's)
+        lua.execute("AGPS_OLD_OC = ChatFrame_OpenChat ChatFrame_OpenChat = function(t) AGPS_OPENED = t end")
+        n, rid = I.Send("WHISPER", "Friend-Realm")
+        assert n == 2 and not sent  # (a link in the chat box: nothing sent)
+        I.OnAddonMessage("AzerothGPS", "?\t" + rid, "WHISPER", "Friend-Realm")  # (they clicked it)
+        assert len(sent) == 2 and sent[0][0] == "AzerothGPS" and all(t == "Friend-Realm" for _, _, _, t in sent)
+        I.Expect("Friend-Realm", rid)  # (and back in as another player's, asked for)
+        for _, msg, _, _ in sent:
             I.OnAddonMessage("AzerothGPS", msg, "WHISPER", "Friend-Realm")
         assert offered == [("Friend-Realm", ["Brill", "Ruins"])]
     finally:
         I.io.send, I.Offer = real_send, real_offer
+        lua.execute("ChatFrame_OpenChat = AGPS_OLD_OC")
+
+
+def test_route_links_in_chat_are_wired_up_at_login(game):
+    # (Import.Init) a route's line in whisper, party or raid chat becomes a link; clicking it (the game hands
+    # "addon:" links to EventRegistry's SetItemRef) asks its author for the route, once per click
+    lua, ns = game
+    I = ns.Import
+    sent, real_send = [], I.io.send
+    try:
+        I.io.send = lambda prefix, msg, channel, target: sent.append((msg, channel, target))
+        for event in ("CHAT_MSG_WHISPER", "CHAT_MSG_PARTY", "CHAT_MSG_RAID"):
+            (f,) = lua.eval("AGPS_CHAT_FILTERS")[event].values()
+            hide, msg, author = f(None, event, "go [AzerothGPS Route a1b2c3: 3 stops]", "Ann-Realm")
+            assert not hide and author == "Ann-Realm"
+            assert msg == "go |cff33ff99|Haddon:AzerothGPS:route:a1b2c3:Ann-Realm|h[AzerothGPS Route: 3 stops]|h|r"
+            assert f(None, event, "nothing to link", "Ann-Realm") is None
+        # your own whisper out: the link is yours (nothing asked when clicked)
+        (f,) = lua.eval("AGPS_CHAT_FILTERS")["CHAT_MSG_WHISPER_INFORM"].values()
+        assert ":route:a1b2c3:Tester|h" in f(None, "CHAT_MSG_WHISPER_INFORM", "[AzerothGPS Route a1b2c3: 1 stop]", "Ann")[1]
+        (click,) = lua.eval("AGPS_CALLBACKS")["SetItemRef"].values()
+        click(None, "addon:AzerothGPS:route:a1b2c3:Tester")
+        assert not sent
+        click(None, "addon:AzerothGPS:route:a1b2c3:Ann-Realm")
+        click(None, "addon:AzerothGPS:route:a1b2c3:Ann-Realm")  # (the same click by SetItemRef's hook)
+        assert sent == [("?\ta1b2c3", "WHISPER", "Ann-Realm")]
+    finally:
+        I.io.send = real_send
 
 
 def test_no_dev_tool_ships_with_the_addon():
