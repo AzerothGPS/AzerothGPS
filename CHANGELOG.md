@@ -91,7 +91,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - The map stayed on Ironforge's outside after making or cancelling a route out of the city.
 - The map's title says the city you're in (Ironforge, not Dun Morogh), and it's centered.
 - The corner logo stands on its own without the circle, and it's sharp.
-- City places, pins, stops made from them and party members' class icons looked grainy; they're drawn at a size the game shrinks cleanly now (a little bigger), and sharp. Place names and city labels on the map are crisp too (they sat between screen pixels and looked smeared).
+- City places, pins, stops made from them and party members' class icons looked grainy; they're drawn at a size the game shrinks cleanly now, and sharp. Place names and city labels on the map are crisp too (they sat between screen pixels and looked smeared).
 - The Deeprun Tram's map was blank.
 - A zeppelin to Zephras Isle had no line on the map.
 - A dock that was a stop lost its countdown.

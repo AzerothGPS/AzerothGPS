@@ -1988,11 +1988,11 @@ function G.SnapPoint(parent, x, y)
   return math.floor((pcx + x) * ppu + 0.5) / ppu - pcx, math.floor((pcy + y) * ppu + 0.5) / ppu - pcy
 end
 
--- Game icons (64-pixel art) drawn at exactly half their pixels, ICON_PX on the screen, on whole pixels (the
--- user, 2026-10-01: city places, pins, stops made from them, party members' class icons looked grainy). The
--- client shrinks with the plain filter only (a finer one, "TRILINEAR", crashed it); at an exact half every
--- screen pixel blends one 2x2 block of the art evenly, sharp instead of grainy.
-G.ICON_PX = 32
+-- Game icons (64-pixel art) drawn at an exact quarter of their pixels, ICON_PX on the screen, on whole pixels
+-- (the user, 2026-10-01: city places, pins, stops made from them, party members' class icons looked grainy;
+-- half, 32, was too large). The client shrinks with the plain filter only (a finer one, "TRILINEAR", crashed
+-- it); at a whole fraction every screen pixel takes the same share of the art, not grainy.
+G.ICON_PX = 16
 function G.IsGameIcon(tex)
   if type(tex) == "number" then return true end
   return type(tex) == "string" and tex:lower():find("^interface[\\/]icons[\\/]") ~= nil
@@ -2116,7 +2116,7 @@ local function DrawPois(pois, zoom)
       b:SetAlpha(p.dim and 0.35 or 1)
       b.icon:SetShown(not p.under) -- (a dock under a stop: the stop's marker over it, its timer still under)
       b:ClearAllPoints()
-      -- (a pin's or a city place's game icon: exactly half its pixels, on whole pixels, G.ICON_PX)
+      -- (a pin's or a city place's game icon: G.ICON_PX, on whole pixels)
       local exact = (p[1] == 12 and G.IsGameIcon(ns.Pins.IconTexture(p.icon))) or (p[1] == 4 and p.city and G.IsGameIcon(p.icon))
       if exact then
         local u = G.PxUnits(poiLayer, G.ICON_PX)
@@ -2213,7 +2213,7 @@ local function DrawStopPins(toScreen, viewCont)
     if d.learnNode or d.ride then -- (where the map's icon is, its size: that icon, right-clickable)
       b:SetSize(16, 16)
       b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
-    elseif G.IsGameIcon(ns.Nav.StopIcon(d)) then -- (a city place's or pin's icon: exactly half its pixels)
+    elseif G.IsGameIcon(ns.Nav.StopIcon(d)) then -- (a city place's or pin's icon: G.ICON_PX)
       local u = G.PxUnits(poiLayer, G.ICON_PX)
       b:SetSize(u, u)
       b:SetPoint("BOTTOM", poiLayer, "CENTER", G.SnapPoint(poiLayer, sx, sy - 4))
@@ -2338,7 +2338,7 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
         if not icon then b.dot:SetColorTexture(r, g, bl, 1) end
         b.name = m.name
         b:ClearAllPoints()
-        -- (the class icon at exactly half its art's pixels, G.ICON_PX, in a 2-pixel ring, on whole pixels;
+        -- (the class icon at G.ICON_PX, in a 2-pixel ring, on whole pixels;
         -- the plain dot as before)
         local ring = icon and G.PxUnits(poiLayer, 2) or 1.5
         local u = icon and G.PxUnits(poiLayer, G.ICON_PX) + 2 * ring or 16
