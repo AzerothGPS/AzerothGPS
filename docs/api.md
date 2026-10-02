@@ -1,6 +1,6 @@
 # Public API for companion addons
 
-`Api.lua` publishes a global table `AzerothGPS` (version 11) so other addons, such as
+`Api.lua` publishes a global table `AzerothGPS` (version 12) so other addons, such as
 AzerothGPS-StreetView, can read the map's geometry and draw on the map. It stays display
 only, like the rest of AzerothGPS. Declare `## Dependencies: AzerothGPS` in your toc.
 
@@ -73,6 +73,7 @@ center, +x right and +y up.
   inside, the title centered), movable and closed by Escape; a plain dark box with a border where the
   client lacks the template. It starts hidden; put its content from `f.top` (negative) down, and
   change the title with `f:SetWindowTitle(text)`.
+- `OnIconShiftClick(owner, fn, hint)` (version 12): a Shift-click on a boss icon in a dungeon's map is offered to `fn(info)` first (`info`: `kind = "boss"`, `name`, `x`, `y`, `z`, `cont` = the dungeon's level); `fn` returns true when it used it. `hint` (a string, or `hint(info)`) says what it does: the boss's tooltip shows "Shift-click: <hint>" and, inside the dungeon, the map's top line "Shift-click a boss: <hint>". `fn = nil` removes it.
 - `ShowMap()`: shows the map window when the player has it hidden.
 - `TopPanelInset()`: the left inset (pixels) the top panel starts at: past the window frame's
   portrait when the frame is on, else 4. Line up a panel of your own there with it.

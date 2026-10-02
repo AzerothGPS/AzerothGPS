@@ -1657,6 +1657,28 @@ end
 -- map's own (clipped, rotated, no fading). G.roadOwners[owner] = { r, g, b }: the road network
 -- is shown, in that color, while anyone asks (the player's own road option wins).
 G.overlays, G.roadOwners = {}, {}
+-- Other addons' Shift-clicks on a dungeon map's boss icons (API.OnIconShiftClick): owner -> { click, hint }.
+G.iconClicks = {}
+function G.IconShiftClick(info)
+  for _, h in pairs(G.iconClicks) do
+    local ok, used = pcall(h.click, info)
+    if ok and used then return true end
+  end
+  return false
+end
+-- What a Shift-click on that icon does (info.x nil: on any of the dungeon's bosses), or nil.
+function G.IconHint(info)
+  for _, h in pairs(G.iconClicks) do
+    local text = h.hint
+    if type(text) == "function" then
+      local ok, t = pcall(text, info)
+      text = ok and t or nil
+    end
+    if type(text) == "string" and text ~= "" then return text end
+  end
+end
+-- A boss icon's name without its place in the usual order ("2. Taragaman" -> "Taragaman").
+local function BossName(name) return (tostring(name or ""):gsub("^%d+%. ", "")) end
 -- The map held by another addon (a game on it, AzerothGPS-StreetView's): G.holders[owner] =
 -- { click = fn(x, y, cont) }. While held, the route (still followed: Nav, the arrow window), the
 -- stops' pins, the crosshair with Confirm Route and the top panel aren't shown, and a
@@ -1926,6 +1948,11 @@ local function PoiButton(i)
       end
       return
     end
+    if button == "LeftButton" and self.bossKey and IsShiftKeyDown and IsShiftKeyDown() -- (another addon's: API.OnIconShiftClick)
+      and G.IconShiftClick({ kind = "boss", name = BossName(self.name), x = self.wx, y = self.wy, z = self.z,
+        cont = self.level or view.cont }) then
+      return
+    end
     if button == "RightButton" then -- (a pin: "Remove?"; a boss: defeated or not, by hand)
       if self.pin then G.AskRemove(self) end
       if self.bossKey and self.level then
@@ -2074,6 +2101,8 @@ local function DrawPois(pois, zoom)
         b.note = (p.dead and "|cff40ff40Defeated|r" or p.next and "|cffffd100Next|r" or p.optional and "Optional" or "")
           .. (p.dead and "\nRight-click: not defeated after all" or "\nRight-click: mark defeated")
         b.bossKey, b.dead = p.bossKey, p.dead -- (right-click: its kill marked by hand, Nav.SetBossDead)
+        local shift = G.IconHint({ kind = "boss", name = BossName(b.name), x = b.wx, y = b.wy, cont = b.level })
+        if shift then b.note = b.note .. "\nShift-click: " .. shift end
         b:SetSize(p.next and 22 or 18, p.next and 22 or 18)
       elseif p[1] == 9 then -- stairs to another floor (a dungeon's), up or down
         ns.SetIcon(b.icon, p.up and "atlas:poi-door-up" or "atlas:poi-door-down",
@@ -3053,6 +3082,8 @@ function G.Update()
     local n = #G.BossOrder(hidden)
     status = (b and string.format("Next: |cffffd100%s|r  (%d of %d)", b[1], i, n) or "|cff40ff40All the bosses are down|r")
       .. "\n|cff9d9d9dDouble-click: mark where you are   Right-click a boss: defeated|r"
+    local shift = G.IconHint({ kind = "boss", cont = hidden }) -- (another addon's, e.g. StreetView's)
+    if shift then status = status .. "\n|cff9d9d9dShift-click a boss: " .. shift .. "|r" end
   else
     status = ns.Nav.Status(px, py, cont)
   end

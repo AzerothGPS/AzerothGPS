@@ -4799,11 +4799,33 @@ def test_public_api_exposes_documented_functions(api):
     for name in ("Instance", "InstanceFloors", "PlayerWorld", "Facing", "BaseContinent", "LocateWorld", "MapToWorld", "Roads",
                  "NearestRoad", "RoadEdge", "MapFrame", "MapCanvas", "MapButtonParent", "MapShown",
                  "View", "CursorWorld", "WorldToMap", "SetOverlay", "ShowRoads", "Redraw", "MapButton",
-                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent"):
+                 "HoldMap", "LookAt", "Follow", "ShowMap", "TopPanelInset", "OnLayout", "ShowWorld", "ToContinent", "OnIconShiftClick"):
         assert A[name] is not None, name
-    assert A.version == 11
+    assert A.version == 12
     assert A.TopPanelInset() == 4  # (no window frame in the tests)
     assert A.MapButton("recenter") is None  # (no map built in the tests)
+
+
+def test_public_api_shift_click_on_a_boss_goes_to_another_addon(api):
+    # (StreetView asked, API 12, the user 2026-10-02: Shift-click a boss in a dungeon's map for its street view,
+    # said at the top of the map) the click is offered to the owner with the boss and its dungeon; its hint
+    # names what it does; a click it doesn't use is not taken; removed, no hint
+    lua, ns, A = api
+    G = ns.GPS
+    got = lua.eval("{}")
+    lua.execute("""
+      function SHIFT_FN(t) return function(info) t.name, t.x, t.cont = info.name, info.x, info.cont; return info.cont == 20389 end end
+      function SHIFT_HINT(info) if info.cont == 20389 then return "its street view" end end
+    """)
+    assert G.IconHint(lua.eval('{ kind = "boss", cont = 20389 }')) is None
+    A.OnIconShiftClick("StreetView", lua.globals().SHIFT_FN(got), lua.globals().SHIFT_HINT)
+    info = lua.eval('{ kind = "boss", name = "Taragaman the Hungerer", x = -244.7, y = 150.1, cont = 20389 }')
+    assert G.IconShiftClick(info) is True and (got.name, got.x, got.cont) == ("Taragaman the Hungerer", -244.7, 20389)
+    assert G.IconHint(lua.eval('{ kind = "boss", cont = 20389 }')) == "its street view"
+    assert G.IconShiftClick(lua.eval('{ kind = "boss", cont = 20036 }')) is False  # (not used: not taken)
+    assert G.IconHint(lua.eval('{ kind = "boss", cont = 20036 }')) is None
+    A.OnIconShiftClick("StreetView", None)
+    assert G.IconShiftClick(info) is False and G.IconHint(info) is None
 
 
 def test_public_api_hold_map_takes_double_clicks_until_let_go(api):

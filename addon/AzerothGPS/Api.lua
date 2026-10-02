@@ -4,7 +4,7 @@
 -- order). Everything here is safe to call before the map exists; it returns nil then.
 local _, ns = ...
 
-local API = { version = 11 }
+local API = { version = 12 }
 _G.AzerothGPS = API
 
 local function GPS() return ns.GPS end
@@ -163,6 +163,17 @@ end
 -- game's metal border, title bar and close button, a dark inside, the title centered), movable, closed
 -- by Escape. Hidden; its content goes from f.top (negative) down; f:SetWindowTitle(text).
 function API.Window(name, width, height, title, strata) return ns.Window(name, width, height, title, strata) end
+-- (Version 12) Shift-click on a boss icon in a dungeon's map: fn(info) is offered it first, info =
+-- { kind = "boss", name, x, y, z, cont } (cont: the dungeon's level, 20000 + its MapID); fn returns true when
+-- it used the click. `hint` (a string, or hint(info) giving one or nil) says what the click does, e.g.
+-- "its street view": the boss's tooltip shows "Shift-click: <hint>", and inside the dungeon the map's top
+-- line "Shift-click a boss: <hint>" (info has no x, y there). fn = nil removes it.
+function API.OnIconShiftClick(owner, fn, hint)
+  local G = GPS()
+  if not G then return end
+  G.iconClicks[owner] = fn and { click = fn, hint = hint } or nil
+  G.Redraw()
+end
 -- Back to following the player.
 function API.Follow()
   if GPS() then GPS().Follow() end

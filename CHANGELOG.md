@@ -58,7 +58,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - **New defaults:** the map is 450 wide, Quest Route and Use Hearthstone live in the map button's menu, and in combat the map stays shown, fully opaque and clickable (Options → Opacity). Your own settings stay as they are; Reset to defaults takes these.
 - **Road and wall tools:** the road tools show the road network while they're on, "Show extracted roads" and "Show extracted walls" are one button now (**Show Roads and Walls**, under Undo), and Undo takes back your last road or wall change, whichever came last.
 - **Fixing floors over floors** (Undercity, under Orgrimmar's Drag and Stormwind's bridges, caves and mines): with the road or wall tools on, **Shift + mouse wheel** picks the floor you're editing. The hint under the map says which one ("Editing: floor 2 of 3 here"), and what you draw or erase changes only that floor.
-- **For other addons:** API versions 3 to 11 (HoldMap with a map style held while it's on, icons in overlays, popup windows in AzerothGPS's style, LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
+- **For other addons:** API versions 3 to 12 (HoldMap with a map style held while it's on, icons in overlays, popup windows in AzerothGPS's style, Shift-click on a dungeon boss handed to another addon (OnIconShiftClick), LookAt, Follow, ShowMap, ShowWorld, ToContinent, SaveView and RestoreView, TopPanelInset). See docs/api.md.
 
 ### Changed
 
