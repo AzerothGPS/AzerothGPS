@@ -106,6 +106,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - Clicking the open sea on a continent's map opened a black terrain view.
 - The "lands in" countdown on a flight stayed stuck at the flight's full time, and flight times were never learned. It counts down now, along the flight's path through any stops, which the map draws too.
 - A character that knew no flight paths yet got no detour to learn one it walked past.
+- A stop in the other faction's town (Dun Garok, from Tarren Mill) was reached by a straight walk over the hills instead of the road in: the guards of the town you're heading to (or leaving) no longer push the route off the road. Passing other towns still bends the route around them.
 - A boss's kill sometimes didn't count, so the boss route kept sending you back to it (no kill reported by the server). A boss you see dead, targeted, moused over or looted, counts now, and where the game hides who died, right-click a boss on the dungeon's map to mark it defeated (or not).
 - Right after logging in (a new character above all), your flight paths and faction could be saved under "Unknown" instead of your character.
 

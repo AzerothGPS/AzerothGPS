@@ -1429,6 +1429,7 @@ function BuildGraph(cont)
   pt = P0()
   local adj = {}
   local ratio = {} -- [edge] = its cost per yard, where more than 1 (past guards)
+  local edgeTowns = {} -- [edge] = { [town] = yards past its guards }, where it has any
   local edgeZones, hasZones = {}, ns.Zones and ns.Zones[cont] ~= nil -- [edge] = { [zone] = yards }
   local side = HostileSide()
   for ei, e in ipairs(edges) do
@@ -1438,15 +1439,19 @@ function BuildGraph(cont)
     adj[b] = adj[b] or {}
     if not drops[ei] then
       -- (cost: its length, and more where it passes the other faction's guards)
-      local cost = len
+      local cost, towns = len, nil
       if side then
+        towns = {}
         for i = 5, #e - 3, 2 do
-          cost = cost + R.HostileYards(cont, e[i], e[i + 1], e[i + 2], e[i + 3], side) * (R.HOSTILE_FACTOR - 1)
+          cost = cost + R.HostileYards(cont, e[i], e[i + 1], e[i + 2], e[i + 3], side, nil, towns) * (R.HOSTILE_FACTOR - 1)
         end
       end
       adj[a][#adj[a] + 1] = { b, len, ei, true, cost }
       adj[b][#adj[b] + 1] = { a, len, ei, false, cost }
-      if cost > len then ratio[ei] = cost / math.max(len, 1) end
+      if cost > len then
+        ratio[ei] = cost / math.max(len, 1)
+        edgeTowns[ei] = towns -- (the yards past each town's guards: a route to or from a town doesn't pay for it)
+      end
       -- (yards in each zone: for keeping out of zones too high for the player)
       if hasZones then
         local zy = {}
@@ -1472,7 +1477,7 @@ function BuildGraph(cont)
   end
   P1("router: build roads: gap links", pt)
   local g = { adj = adj, n = nodes, e = edges, count = #nodes / 2, bridges = bridges, drops = drops, side = side,
-    ratio = ratio, cave = caveEdges, caveNode = noBridge, zones = edgeZones, z = zs, nz = next(nodeZ) and nodeZ or nil }
+    ratio = ratio, towns = edgeTowns, cave = caveEdges, caveNode = noBridge, zones = edgeZones, z = zs, nz = next(nodeZ) and nodeZ or nil }
   -- (an underground city's floors over floors: the roads' heights near a spot, for the road and wall
   -- tools' floor (GPSFrame.OtherFloor, FloorText); not a dungeon's, where they can't be used)
   local lvl = ns.CityLevels and ns.CityLevels[cont]
@@ -1556,33 +1561,98 @@ local function HostileBuckets(cont, side)
   hostileIdx[key] = idx
   return idx
 end
--- Whether (x, y) is within reach of guards hostile to the player (`side`: HostileSide()).
-function R.HostileAt(cont, x, y, side)
+-- The guards' towns: circles this near each other (their reaches less TOWN_GAP apart) are one town. A route
+-- that starts or ends in a town doesn't pay for that town's guards (asked 2026-10-02: a stop at Dun Garok, the
+-- Alliance's, from Tarren Mill came back as a straight walk over the hills, the road into it being "past their
+-- guards"), as the zones a route starts and ends in don't count as too high (LEVEL_FACTOR).
+R.TOWN_GAP = 60 -- yards
+R.TOWN_NEAR = 60 -- yards: a start or stop this near a town's guards is in it
+local hostileTowns = {}
+function R.HostileTowns(cont, side)
+  local key = cont .. side
+  local town = hostileTowns[key]
+  if town then return town end
+  town = {}
+  local list = ns.Hostile and ns.Hostile[cont] and ns.Hostile[cont][side] or {}
+  local idx = HostileBuckets(cont, side)
+  local parent = {}
+  local function find(i)
+    while parent[i] and parent[i] ~= i do i = parent[i] end
+    return i
+  end
+  for i = 1, #list - 2, 3 do parent[i] = i end
+  local gap = R.TOWN_GAP
+  for i = 1, #list - 2, 3 do
+    local x, y, r = list[i], list[i + 1], list[i + 2]
+    for kx = math.floor((x - r - gap) / HB), math.floor((x + r + gap) / HB) do
+      for ky = math.floor((y - r - gap) / HB), math.floor((y + r + gap) / HB) do
+        for _, j in ipairs(idx[kx * 65536 + ky] or {}) do
+          if j ~= i and (list[j] - x) ^ 2 + (list[j + 1] - y) ^ 2 <= (r + list[j + 2] + gap) ^ 2 then
+            local a, b = find(i), find(j)
+            if a ~= b then parent[a] = b end
+          end
+        end
+      end
+    end
+  end
+  for i = 1, #list - 2, 3 do town[i] = find(i) end
+  hostileTowns[key] = town
+  return town
+end
+-- The towns (a set) whose guards stand within TOWN_NEAR of their reach of any of the points (x, y, ...).
+function R.HostileTownsNear(cont, side, ...)
+  local list = side and ns.Hostile and ns.Hostile[cont] and ns.Hostile[cont][side]
+  if not list then return nil end
+  local town, out, pts = R.HostileTowns(cont, side), nil, { ... }
+  local near = R.TOWN_NEAR
+  for p = 1, #pts - 1, 2 do
+    local x, y = pts[p], pts[p + 1]
+    for i = 1, #list - 2, 3 do
+      if (list[i] - x) ^ 2 + (list[i + 1] - y) ^ 2 <= (list[i + 2] + near) ^ 2 then
+        out = out or {}
+        out[town[i]] = true
+      end
+    end
+  end
+  return out
+end
+-- Whether (x, y) is within reach of guards hostile to the player (`side`: HostileSide()), not counting the
+-- towns in `exempt` (a set, R.HostileTownsNear); with `acc`, the town whose guard it is.
+function R.HostileAt(cont, x, y, side, exempt)
   side = side or HostileSide()
   if not side then return false end
   local list = ns.Hostile and ns.Hostile[cont] and ns.Hostile[cont][side]
   if not list then return false end
   local b = HostileBuckets(cont, side)[math.floor(x / HB) * 65536 + math.floor(y / HB)]
+  local town = exempt and R.HostileTowns(cont, side)
   for _, i in ipairs(b or {}) do
-    if (list[i] - x) ^ 2 + (list[i + 1] - y) ^ 2 <= list[i + 2] ^ 2 then return true end
+    if (list[i] - x) ^ 2 + (list[i + 1] - y) ^ 2 <= list[i + 2] ^ 2 and not (town and exempt[town[i]]) then
+      return true, i
+    end
   end
   return false
 end
--- Yards of the leg (x1, y1)-(x2, y2) within their reach.
-function R.HostileYards(cont, x1, y1, x2, y2, side)
+-- Yards of the leg (x1, y1)-(x2, y2) within their reach (`exempt` towns not counted). With `acc`, the yards
+-- also added up per town into it ({ [town] = yards }).
+function R.HostileYards(cont, x1, y1, x2, y2, side, exempt, acc)
   side = side or HostileSide()
   if not (side and ns.Hostile and ns.Hostile[cont]) then return 0 end
   local d = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
   local n = math.max(1, math.ceil(d / R.HOSTILE_STEP))
   local inside = 0
+  local town = acc and R.HostileTowns(cont, side)
   for k = 0, n - 1 do
     local t = (k + 0.5) / n
-    if R.HostileAt(cont, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, side) then inside = inside + 1 end
+    local hit, i = R.HostileAt(cont, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, side, exempt)
+    if hit then
+      inside = inside + 1
+      if acc then acc[town[i]] = (acc[town[i]] or 0) + d / n end
+    end
   end
   return d * inside / n
 end
-local function HostileExtra(cont, x1, y1, x2, y2)
-  return R.HostileYards(cont, x1, y1, x2, y2) * (R.HOSTILE_FACTOR - 1)
+local function HostileExtra(cont, x1, y1, x2, y2, exempt)
+  return R.HostileYards(cont, x1, y1, x2, y2, nil, exempt) * (R.HOSTILE_FACTOR - 1)
 end
 
 -- Zones too high for the player (option avoidHighZones, on by default): their lowest level
@@ -2720,6 +2790,23 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     if not red then return 0 end
     return Danger(R.ZoneYards(cont, x1, y1, x2, y2))
   end
+  -- (the guards' towns the route starts or ends in: not paid for, R.HostileTownsNear; a stop at Dun Garok)
+  local exempt = R.HostileTownsNear(cont, HostileSide(), sx, sy, tx, ty)
+  local roadRatio = {} -- [edge] = its cost per yard past guards, the exempt towns left out (memo)
+  local function RoadRatio(ei)
+    local r = g and g.ratio and g.ratio[ei]
+    if not (r and exempt) then return r or 1 end
+    local v = roadRatio[ei]
+    if v == nil then
+      local extra = 0
+      for t, yd in pairs(g.towns and g.towns[ei] or {}) do
+        if not exempt[t] then extra = extra + yd end
+      end
+      v = 1 + extra * (R.HOSTILE_FACTOR - 1) / math.max(g.e[ei][3], 1)
+      roadRatio[ei] = v
+    end
+    return v
+  end
   local edgeDanger = {} -- [edge] = extra cost per yard (memo)
   local function EdgeDanger(ei)
     if not red then return 0 end
@@ -2743,7 +2830,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     if not (sz and tz and math.abs(sz - tz) <= R.LAYER_Z) then direct = nil end
   end
   -- (straight past the other faction's guards isn't a way to go if there's another)
-  if direct and R.HostileYards(cont, sx, sy, tx, ty) > 0 then direct = nil end
+  if direct and R.HostileYards(cont, sx, sy, tx, ty, nil, exempt) > 0 then direct = nil end
   Breathe(1, 1)
   -- (straight at once when it's open, unless through a zone too high for the player: then it's
   -- weighed against the ways round, below)
@@ -2849,10 +2936,10 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
     local h = 0 -- (past the other faction's guards, and through zones too high for the player)
     if path then
       for i = 1, #path - 2, 2 do
-        h = h + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
+        h = h + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3], exempt) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
       end
     else
-      h = HostileExtra(cont, x1, y1, x2, y2) + DangerLine(x1, y1, x2, y2)
+      h = HostileExtra(cont, x1, y1, x2, y2, exempt) + DangerLine(x1, y1, x2, y2)
     end
     if offroad then
       if c then return (c + h) * R.OFFROAD_TIE, pieces end
@@ -2871,7 +2958,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
   end
 
   -- (yards along part of an edge, as cost: more past the other faction's guards)
-  local function part(ei, yd) return yd * ((g.ratio and g.ratio[ei] or 1) + EdgeDanger(ei)) end
+  local function part(ei, yd) return yd * (RoadRatio(ei) + EdgeDanger(ei)) end
   local START, GOAL = -1, -2
   local gscore, came, open, closed = { [START] = 0 }, {}, {}, {}
   local function h(n)
@@ -3078,7 +3165,7 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
         local e = g.e[a[3]]
         local drop = g.drops and g.drops[a[3]]
         if not drop or drop <= maxDrop then -- (a drop only when the fall is safe, and worth it)
-          relax(n, a[1], (a[5] or a[2]) + a[2] * EdgeDanger(a[3]) + (drop and R.DROP_COST or 0),
+          relax(n, a[1], (exempt and a[2] * RoadRatio(a[3]) or a[5] or a[2]) + a[2] * EdgeDanger(a[3]) + (drop and R.DROP_COST or 0),
             { { kind = ROAD, edge = a[3], from = a[4] and 0 or e[3], to = a[4] and e[3] or 0 } })
         end
       end
@@ -3137,10 +3224,10 @@ function RouteOne(cont, sx, sy, tx, ty, opts)
       if c then -- (past the other faction's guards, through zones too high for the player: more)
         if path then
           for i = 1, #path - 2, 2 do
-            c = c + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3]) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
+            c = c + HostileExtra(cont, path[i], path[i + 1], path[i + 2], path[i + 3], exempt) + DangerLine(path[i], path[i + 1], path[i + 2], path[i + 3])
           end
         else
-          c = c + HostileExtra(cont, sx, sy, tx, ty) + DangerLine(sx, sy, tx, ty)
+          c = c + HostileExtra(cont, sx, sy, tx, ty, exempt) + DangerLine(sx, sy, tx, ty)
         end
       end
       if c and c * directFactor < best then

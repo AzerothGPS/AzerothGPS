@@ -179,3 +179,28 @@ def test_ironforges_tram_is_walked_to_inside_the_city(caves_world):
     R.Reset()
     r = R.Route(0, -4944.0, -1232.0, -4840.3, -1330.5, lua.table(offroad=False))
     assert r.length < 400
+
+
+def test_a_stop_in_the_other_factions_town_is_reached_by_the_road(caves_world):
+    # (reported 2026-10-02, the capture PC's night: Tarren Mill to Dun Garok came back as a straight walk over
+    # Hillsbrad's hills, ignoring the roads) Dun Garok is the Alliance's: the road into it runs past its guards,
+    # and their reach cost 20 times a yard, so walking in over the hills looked cheaper. A route doesn't pay
+    # for the guards of a town it starts or ends in (R.HostileTownsNear), as with the zones it starts and ends in;
+    # passing another town still does
+    lua, ns = caves_world
+    from test_addon_lua import load  # noqa: F401  (the addon's own loader)
+    had = ns.Hostile
+    load(lua, ns, "Data/Hostile.lua")
+    nav = ns.Nav
+    ns.Nav = lua.eval("{ Faction = function() return 'H' end }")
+    try:
+        ns.Router.Reset()
+        r = ns.Router.Route(0, -34.1, -923.4, -1256.0, -1189.0, lua.table(offroad=False))
+        assert not r.unconnected and r.road > 0.8 * r.length, (r.road, r.length)
+        # (Dun Garok's guards form one town; the trip ends in it)
+        towns = ns.Router.HostileTownsNear(0, "H", -1256.0, -1189.0)
+        assert towns and len(list(towns.keys())) >= 1
+        assert ns.Router.HostileTownsNear(0, "H", -34.1, -923.4) is None  # (Tarren Mill: the Horde's own)
+    finally:
+        ns.Nav, ns.Hostile = nav, had
+        ns.Router.Reset()
