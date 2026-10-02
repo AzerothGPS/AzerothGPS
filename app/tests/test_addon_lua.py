@@ -5676,3 +5676,29 @@ def test_a_character_knowing_no_flight_path_is_offered_detours(nav_env):
     r = N.Route(2254.0, 293.0, 0)
     names = [h.name for h in (N.LearnOnRoute(r) or lua.table()).values()]
     assert "Tarren Mill" in names
+
+
+def test_a_flight_with_stops_counts_down_along_its_path(nav_env):
+    # (reported 2026-10-01: the countdown in the air stalled on a flight with stops) the time left is at least
+    # the yards left along the flight's path (through the flight masters it stops over) at flight speed, not
+    # the straight line to the landing, which a path round a bend kept up; the line drawn follows the path
+    lua, ns = _flight_env(nav_env, [10, 13, 17])  # the Sepulcher, Tarren Mill, Hammerfall: no direct flight
+    N = ns.Nav
+    m = {p[5]: p for c in ns.Pois.values() for p in c.values() if p[1] == 1}
+    a, via, b = m[10], m[13], m[17]
+    L = lua.table(0, b[2], b[3])
+
+    def dist(x, y):
+        return ((b[2] - x) ** 2 + (b[3] - y) ** 2) ** 0.5
+
+    left0, path0 = N.FlightLeft(a[4], b[4], a[2], a[3], L)
+    assert len(path0) == 6 and left0 > dist(a[2], a[3])  # (through Tarren Mill)
+    # halfway to Tarren Mill: less left, still more than the straight line from there
+    hx, hy = (a[2] + via[2]) / 2, (a[3] + via[3]) / 2
+    left1, path1 = N.FlightLeft(a[4], b[4], hx, hy, L)
+    assert left1 < left0 and left1 > dist(hx, hy)
+    assert (path1[1], path1[2]) == (hx, hy) and (path1[5], path1[6]) == (b[2], b[3])
+    # past Tarren Mill, toward Hammerfall: the last leg only
+    qx, qy = via[2] + (b[2] - via[2]) * 0.5, via[3] + (b[3] - via[3]) * 0.5
+    left2, path2 = N.FlightLeft(a[4], b[4], qx, qy, L)
+    assert left2 < left1 and len(path2) == 4 and abs(left2 - dist(qx, qy)) < 1

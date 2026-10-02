@@ -1136,6 +1136,37 @@ local function FlightSeconds(from, to)
   return row and row[7] - N.FLIGHT_OVERHEAD
 end
 
+-- On a flight from `from` to `to` (names), at (px, py), landing at L: the yards left along its path
+-- (through the flight masters it stops over, Flights()' trip), and that path from the player on
+-- ({ x, y, ... }). Without the trip: the straight line to the landing.
+function N.FlightLeft(from, to, px, py, L)
+  local _, a = MasterNamed(from)
+  local _, b = MasterNamed(to)
+  local fl = a and b and Flights()
+  local trip = fl and fl.trips[a] and fl.trips[a][b]
+  local p = trip and trip.pts
+  if not (p and #p >= 4) then
+    return math.sqrt((L[2] - px) ^ 2 + (L[3] - py) ^ 2), { px, py, L[2], L[3] }
+  end
+  -- (the leg the player is on: the one nearest them)
+  local bi, bx, by, bd
+  for i = 1, #p - 3, 2 do
+    local ax, ay, vx, vy = p[i], p[i + 1], p[i + 2] - p[i], p[i + 3] - p[i + 1]
+    local L2 = vx * vx + vy * vy
+    local t = L2 > 0 and math.max(0, math.min(1, ((px - ax) * vx + (py - ay) * vy) / L2)) or 0
+    local qx, qy = ax + vx * t, ay + vy * t
+    local d = (qx - px) ^ 2 + (qy - py) ^ 2
+    if not bd or d < bd then bi, bx, by, bd = i, qx, qy, d end
+  end
+  local left = math.sqrt((bx - px) ^ 2 + (by - py) ^ 2) + math.sqrt((p[bi + 2] - bx) ^ 2 + (p[bi + 3] - by) ^ 2)
+  local path = { px, py }
+  for i = bi + 2, #p - 1, 2 do
+    path[#path + 1], path[#path + 2] = p[i], p[i + 1]
+    if i + 3 <= #p then left = left + math.sqrt((p[i + 2] - p[i]) ^ 2 + (p[i + 3] - p[i + 1]) ^ 2) end
+  end
+  return left, path
+end
+
 function N.FlyingRoute(px, py, cont, walk, offroad, f)
   local L = MasterNamed(f.to)
   if not L or L[1] ~= cont then return nil end
@@ -1154,14 +1185,16 @@ function N.FlyingRoute(px, py, cont, walk, offroad, f)
   end
   local rest = flyingRest.st
   if not rest then return nil end
-  -- time left in the air: the planned flight time counting down, at least the straight
-  -- distance left at flight speed
-  local left = math.sqrt((L[2] - px) ^ 2 + (L[3] - py) ^ 2)
+  -- time left in the air: the planned flight time counting down, at least the distance left
+  -- along the flight's path at flight speed (N.FlightLeft: through its stops on the way; a
+  -- straight line to the landing held a flight with stops up, reported 2026-10-01)
+  local left, path = N.FlightLeft(f.from, f.to, px, py, L)
   local secs = left / N.FLIGHT_SPEED
   local total = FlightSeconds(f.from, f.to)
   if total then secs = math.max(secs, total - (GetTime() - f.start)) end
   local row = { cont, px, py, L[1], L[2], L[3], secs, "flight", f.from or "?", f.to, "flight master", flying = true }
-  local flight = { cont = cont, pts = { px, py, L[2], L[3] }, kinds = { N.KIND_TRANSPORT }, stop = 1 }
+  local flight = { cont = cont, pts = path, kinds = {}, stop = 1 }
+  for k = 1, #path / 2 - 1 do flight.kinds[k] = N.KIND_TRANSPORT end
   local parts = { flight }
   for _, p in ipairs(rest.parts) do
     p.stop = 1
