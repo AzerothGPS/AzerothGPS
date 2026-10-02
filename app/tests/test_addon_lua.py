@@ -3695,6 +3695,24 @@ def test_route_while_flying_waits_for_the_landing(nav_env):
     assert not r3.flying
 
 
+def test_brill_to_gromgol_takes_the_direct_zeppelin(nav_env):
+    # (seen 2026-10-02) the Brill - Grom'gol zeppelin's time was its 16k-yard path at an assumed speed (666 s; the
+    # server's timetable rides it in 106.5 s), so routes took two zeppelins by way of Durotar; every transport with
+    # the server's timetable is planned at its ride plus the average wait
+    lua, ns = nav_env
+    rides = []
+    for i in range(1, len(ns.Transports) + 1):
+        t = ns.Transports[i]
+        if t.server:
+            assert abs(t[7] - ((t.ride1 + t.ride2) / 2 + 120)) <= 1, (t[9], t[10], t[7])
+    legs, _ = ns.Nav.Plan(0, 2254.0, 293.0, 7.0, lua.eval("{ x = -12420.0, y = 200.0, cont = 0 }"))
+    for i in range(1, len(legs) + 1):
+        t = legs[i].ride
+        if t:
+            rides.append((t[9], t[10]))
+    assert rides == [("Grom'gol Base Camp, Stranglethorn Vale", "Brill, Tirisfal Glades")], rides
+
+
 def test_a_flight_out_through_undercity_is_flown_not_rerouted(nav_env):
     # (reported 2026-10-02, a video: the bat from Undercity flies through the city and its sewers, where the game
     # puts the player on Undercity's map, and the route kept going back to the flight master, "151 yd... 328 yd to

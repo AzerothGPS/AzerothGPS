@@ -309,7 +309,10 @@ def transports_lua(cd: ClientData) -> str:
             continue
         seen.add(key)
         kind = "zeppelin" if a["Loc"][2] > 30 and b["Loc"][2] > 30 else "boat"
-        secs = dist / TRANSPORT_SPEED + TRANSPORT_WAIT
+        # the planner's time: the ride (the server's timetable when known: the path's length at TRANSPORT_SPEED
+        # made Brill to Grom'gol's 16k-yard path 666 s against its 106.5 s ride, and routes took two
+        # zeppelins by way of Durotar instead, 2026-10-02) plus an average wait
+        secs = ((ride1 + ride2) / 2 if pid in periods else dist / TRANSPORT_SPEED) + TRANSPORT_WAIT
         (c1, x1, y1), (c2, x2, y2) = (a["ContinentID"], *a["Loc"][:2]), (b["ContinentID"], *b["Loc"][:2])
         rows.append(f'  {{ {c1}, {x1:.1f}, {y1:.1f}, {c2}, {x2:.1f}, {y2:.1f}, {secs:.0f}, "{kind}", '
                     f'{_lua_str(place_name(c1, x1, y1))}, {_lua_str(place_name(c2, x2, y2))}, '
