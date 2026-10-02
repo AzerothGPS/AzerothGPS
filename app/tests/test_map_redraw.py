@@ -721,6 +721,7 @@ def test_party_members_show_their_class_icon(game):
         assert pin.dot._tex == G.CLASS_SHEET
         # (never a filter mode above LINEAR: the client crashes on one, wowmock.lua fails the same way)
         assert pin.dot._filter in (None, "LINEAR")
+        assert pin._w == 32 + 2 * 2  # (asked: the icon at exactly half its art, G.ICON_PX, in a 2-pixel ring)
         lua.execute("AGPS_OLD_CT = C_Texture C_Texture = { GetAtlasInfo = function() return {} end }")
         try:
             t = lua.eval("CreateFrame('Frame'):CreateTexture()")
@@ -1125,24 +1126,41 @@ def test_map_icons_never_crash_the_client_and_labels_sit_on_whole_pixels(game):
     # The icons' fix, the "TRILINEAR" filter mode, crashed client 1.60.1.70124 (an assert: the filter at most
     # LINEAR), so no icon is set with a filter above LINEAR (wowmock.lua fails on one as the client does);
     # a label's top-left goes on a whole screen pixel (the map scrolls smoothly, and text between pixels is
-    # smeared), its shadow one pixel off
+    # smeared), its shadow one pixel off. (asked, after the crash) a pin's and a stop's game icon instead drawn at
+    # exactly half its 64 pixels (G.ICON_PX, 32 on the screen) on whole pixels: the plain filter then blends each
+    # 2x2 block of the art evenly
     lua, ns = game
     G, P, N = ns.GPS, ns.Pins, ns.Nav
     N.Clear()
+    ppu = 1440 / 768  # (the stand-in's frames: effective scale 1)
+    lua.execute("AGPS_OLD_PSS0 = GetPhysicalScreenSize\nGetPhysicalScreenSize = function() return 2560, 1440 end")
+
+    def whole_px(v, middle=300):  # (the stand-in's frames' middle: 300, 300)
+        px = (middle + v) * ppu
+        return abs(px - round(px)) < 1e-6
+
     pin = P.Add(lua.eval("{ level = 0, x = 2254, y = 293, name = 'Sharp', icon = 136777 }"))
     try:
         lua.execute("AGPS_T = 900")
         G.Update()
         pins = _shown(lua, lambda w: w.pin is not None and w.pin.name == "Sharp")
         assert len(pins) == 1 and pins[0].icon._tex == 136777 and pins[0].icon._filter in (None, "LINEAR")
-        pins[0]._scripts.OnDoubleClick(pins[0])  # (as a stop: its marker too)
+        b = pins[0]
+        assert abs(b._w * ppu - 32) < 1e-9 and abs(b._h * ppu - 32) < 1e-9
+        assert b._pt[1] == "CENTER" and whole_px(b._pt[4]) and whole_px(b._pt[5])
+        b._scripts.OnDoubleClick(b)  # (as a stop: its marker too)
         lua.execute("AGPS_T = 901")
         G.Update()
         stop = _shown(lua, lambda w: w.pendingIndex == 1)
         assert len(stop) == 1 and stop[0].icon._filter in (None, "LINEAR")
+        assert abs(stop[0]._w * ppu - 32) < 1e-9 and whole_px(stop[0]._pt[4]) and whole_px(stop[0]._pt[5])
         G.RemovePending(1)
+        # a city place's icon too; a game icon is a file id or an Interface\Icons path, other art isn't
+        assert G.IsGameIcon(136777) and G.IsGameIcon("Interface\\Icons\\Trade_Alchemy")
+        assert not G.IsGameIcon("Interface\\AddOns\\AzerothGPS\\Media\\Ship") and not G.IsGameIcon("atlas:poi-door")
     finally:
         P.Remove(pin)
+        lua.execute("GetPhysicalScreenSize = AGPS_OLD_PSS0")
     t = lua.eval("CreateFrame('Frame'):CreateTexture()")  # (city places, POIs, overlays: ns.SetIcon)
     ns.SetIcon(t, "Interface\\Icons\\INV_Misc_Bag_10_Blue")
     assert t._filter in (None, "LINEAR")

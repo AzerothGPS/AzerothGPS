@@ -68,6 +68,8 @@ local function FilterOK(filter)
     error("ASSERT(flags.m_filter <= GxTex_Linear): filter mode " .. tostring(filter) .. " crashes the client", 3)
   end
 end
+M.SetSize = function(s, w, h) s._w, s._h = w, h end -- (recorded; GetSize stays the stand-in's)
+M.SetPoint = function(s, ...) s._pt = { ... } end -- (the last one)
 M.SetTexture = function(s, t, _, _, filter) FilterOK(filter) s._tex, s._filter = t, filter end
 M.SetAtlas = function(s, a, _, filter) FilterOK(filter) s._atlas, s._filter = a, filter end
 M.GetTexture = function(s) return s._tex end

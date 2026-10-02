@@ -1974,15 +1974,32 @@ local EXIT_ICON = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
 function G.PinText(fs, parent, point, x, y)
   local ppu = ns.PixelsPerUnit(parent:GetEffectiveScale())
   local w, h = fs:GetStringWidth() or 0, fs:GetStringHeight() or 0
-  local left, top = x - w / 2, point == "BOTTOM" and y + h or y + h / 2
-  local pcx, pcy = parent:GetCenter()
-  if pcx and pcy then
-    left = math.floor((pcx + left) * ppu + 0.5) / ppu - pcx
-    top = math.floor((pcy + top) * ppu + 0.5) / ppu - pcy
-  end
+  local left, top = G.SnapPoint(parent, x - w / 2, point == "BOTTOM" and y + h or y + h / 2)
   fs:ClearAllPoints()
   fs:SetPoint("TOPLEFT", parent, "CENTER", left, top)
   fs:SetShadowOffset(1 / ppu, -1 / ppu)
+end
+
+-- An offset from `parent`'s middle moved onto the nearest whole screen pixel.
+function G.SnapPoint(parent, x, y)
+  local ppu = ns.PixelsPerUnit(parent:GetEffectiveScale())
+  local pcx, pcy = parent:GetCenter()
+  if not (pcx and pcy) then return x, y end
+  return math.floor((pcx + x) * ppu + 0.5) / ppu - pcx, math.floor((pcy + y) * ppu + 0.5) / ppu - pcy
+end
+
+-- Game icons (64-pixel art) drawn at exactly half their pixels, ICON_PX on the screen, on whole pixels (the
+-- user, 2026-10-01: city places, pins, stops made from them, party members' class icons looked grainy). The
+-- client shrinks with the plain filter only (a finer one, "TRILINEAR", crashed it); at an exact half every
+-- screen pixel blends one 2x2 block of the art evenly, sharp instead of grainy.
+G.ICON_PX = 32
+function G.IsGameIcon(tex)
+  if type(tex) == "number" then return true end
+  return type(tex) == "string" and tex:lower():find("^interface[\\/]icons[\\/]") ~= nil
+end
+-- `px` screen pixels in `frame`'s UI units.
+function G.PxUnits(frame, px)
+  return px / ns.PixelsPerUnit(frame:GetEffectiveScale())
 end
 
 local function DrawPois(pois, zoom)
@@ -2099,7 +2116,15 @@ local function DrawPois(pois, zoom)
       b:SetAlpha(p.dim and 0.35 or 1)
       b.icon:SetShown(not p.under) -- (a dock under a stop: the stop's marker over it, its timer still under)
       b:ClearAllPoints()
-      b:SetPoint("CENTER", poiLayer, "CENTER", p[2], p[3])
+      -- (a pin's or a city place's game icon: exactly half its pixels, on whole pixels, G.ICON_PX)
+      local exact = (p[1] == 12 and G.IsGameIcon(ns.Pins.IconTexture(p.icon))) or (p[1] == 4 and p.city and G.IsGameIcon(p.icon))
+      if exact then
+        local u = G.PxUnits(poiLayer, G.ICON_PX)
+        b:SetSize(u, u)
+        b:SetPoint("CENTER", poiLayer, "CENTER", G.SnapPoint(poiLayer, p[2], p[3]))
+      else
+        b:SetPoint("CENTER", poiLayer, "CENTER", p[2], p[3])
+      end
       b:Show()
     end
   end
@@ -2188,6 +2213,10 @@ local function DrawStopPins(toScreen, viewCont)
     if d.learnNode or d.ride then -- (where the map's icon is, its size: that icon, right-clickable)
       b:SetSize(16, 16)
       b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
+    elseif G.IsGameIcon(ns.Nav.StopIcon(d)) then -- (a city place's or pin's icon: exactly half its pixels)
+      local u = G.PxUnits(poiLayer, G.ICON_PX)
+      b:SetSize(u, u)
+      b:SetPoint("BOTTOM", poiLayer, "CENTER", G.SnapPoint(poiLayer, sx, sy - 4))
     else
       b:SetSize(18, 18)
       b:SetPoint("BOTTOM", poiLayer, "CENTER", sx, sy - 4)
@@ -2305,10 +2334,19 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
         local c = RAID_CLASS_COLORS and m.class and RAID_CLASS_COLORS[m.class]
         local r, g, bl = c and c.r or G.PARTY_COLOR[1], c and c.g or G.PARTY_COLOR[2], c and c.b or G.PARTY_COLOR[3]
         b.edge:SetColorTexture(r, g, bl, 1)
-        if not G.ClassIcon(b.dot, m.class) then b.dot:SetColorTexture(r, g, bl, 1) end
+        local icon = G.ClassIcon(b.dot, m.class)
+        if not icon then b.dot:SetColorTexture(r, g, bl, 1) end
         b.name = m.name
         b:ClearAllPoints()
-        b:SetPoint("CENTER", poiLayer, "CENTER", sx, sy)
+        -- (the class icon at exactly half its art's pixels, G.ICON_PX, in a 2-pixel ring, on whole pixels;
+        -- the plain dot as before)
+        local ring = icon and G.PxUnits(poiLayer, 2) or 1.5
+        local u = icon and G.PxUnits(poiLayer, G.ICON_PX) + 2 * ring or 16
+        b:SetSize(u, u)
+        b.dot:ClearAllPoints()
+        b.dot:SetPoint("TOPLEFT", ring, -ring)
+        b.dot:SetPoint("BOTTOMRIGHT", -ring, ring)
+        b:SetPoint("CENTER", poiLayer, "CENTER", G.SnapPoint(poiLayer, sx, sy))
         b:Show()
       end
     end
@@ -2694,7 +2732,7 @@ function G.Update()
       dx, dy = Geo.Rotate(dx * s, dy * s, rot)
       if math.abs(dx) <= half and math.abs(dy) <= half then
         pois[#pois + 1] = { 4, dx, dy, m[4], m[1], m[2], nil, nil, icon = m[3], note = m[5], size = m[6], questID = m[10],
-          r = m[7], g = m[8], b = m[9], preview = m[11], level = m[12], z = m[13] }
+          r = m[7], g = m[8], b = m[9], preview = m[11], level = m[12], z = m[13], city = m[14] }
       end
     end
   end
