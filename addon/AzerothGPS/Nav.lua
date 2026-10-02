@@ -1169,6 +1169,9 @@ end
 
 function N.FlyingRoute(px, py, cont, walk, offroad, f)
   local L = MasterNamed(f.to)
+  -- (a city's level counts as its continent: the bat out of Undercity flies through the city and its
+  -- sewers on Undercity's map, and the route went back to the flight master there, a video 2026-10-02)
+  cont = Geo.Base(cont)
   if not L or L[1] ~= cont then return nil end
   local d = N.dest
   local key = version .. ":" .. f.to .. ":" .. tostring(offroad)

@@ -81,6 +81,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 
 ### Fixed
 
+- **The bat out of Undercity:** while it flies you through the city and its sewers, the route is the flight ("Flying to The Sepulcher, lands in..."), not a walk back to the flight master that kept getting longer.
 - **Lag:** the first route after a /reload and very long walks are worked out in the background (no more freeze); recalculating a route with a flight in it; riding a zeppelin or boat no longer reworks the whole route; the first road display after a /reload, and each road or wall edit.
 - **The capitals' roads are their streets now.** Stormwind's (and Ironforge's, Orgrimmar's, Thunder Bluff's and Darnassus's) roads were a jumble over every floor, some running out over the water. They now follow the streets the guards walk, with ways to every trainer, bank, inn and flight master.
 - In the capitals, routes no longer climb onto a ledge or balcony and jump back down to a trainer underneath (Ironforge's Mystic Ward and Hall of Mysteries).

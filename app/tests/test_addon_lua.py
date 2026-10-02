@@ -3695,6 +3695,27 @@ def test_route_while_flying_waits_for_the_landing(nav_env):
     assert not r3.flying
 
 
+def test_a_flight_out_through_undercity_is_flown_not_rerouted(nav_env):
+    # (reported 2026-10-02, a video: the bat from Undercity flies through the city and its sewers, where the game
+    # puts the player on Undercity's map, and the route kept going back to the flight master, "151 yd... 328 yd to
+    # the flight master", until out in Tirisfal) on the city's level, the flight is the route too
+    lua, ns = _flight_env(nav_env, [10, 11])  # The Sepulcher, Undercity
+    lua.execute("""
+      AGPS_FLYING = { from = "Undercity, Tirisfal", to = "The Sepulcher, Silverpine Forest", start = 0 }
+      AGPS_TAXI = { Current = function() return AGPS_FLYING end }
+    """)
+    ns.Taxi = lua.eval("AGPS_TAXI")
+    N = ns.Nav
+    N.SetDestination(400.0, 1200.0, 0, "Past the Sepulcher")
+    for x, y in ((1595.0, 240.0), (1510.0, 160.0)):  # (in the city, then in its sewers: its level, 10001)
+        r = N.Route(x, y, 10001)
+        assert r and r.flying and r.flying.to == "The Sepulcher, Silverpine Forest", (x, y)
+        assert (r.pts[1], r.pts[2]) == (x, y)  # (the flight's line from the player)
+        assert "Flying to The Sepulcher" in N.Status(x, y, 10001)
+    r = N.Route(1300.0, 400.0, 0)  # (out over Tirisfal: the same flight)
+    assert r.flying
+
+
 def test_no_mount_time_without_riding(nav_env):
     lua, ns = nav_env
     lua.execute("""
