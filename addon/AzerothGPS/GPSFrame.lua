@@ -2614,8 +2614,11 @@ function G.Update()
     if fl.text then
       -- (the note at the bottom: which floor, and what the gold line is)
       local route = st.layerInstances ~= false and "  |cffffc726Gold: the usual way through|r" or ""
+      -- (another addon's Shift-click on the bosses, e.g. StreetView's street views: API.OnIconShiftClick)
+      local shift = G.IconHint({ kind = "boss", cont = inst })
       fl.text:SetText((n < 2 and ns.Instances[inst].name or instFloor == 0 and string.format("All %d floors", n)
-        or string.format("Floor %d of %d, from the top", instFloor, n)) .. route)
+        or string.format("Floor %d of %d, from the top", instFloor, n)) .. route
+        .. (shift and ("\n|cff9d9d9dShift-click a boss: " .. shift .. "|r") or ""))
       fl.count:SetText(n < 2 and "" or instFloor == 0 and "All" or (instFloor .. "/" .. n))
       fl.up:SetShown(n >= 2)
       fl.down:SetShown(n >= 2)
@@ -2657,6 +2660,9 @@ function G.Update()
   if fl.bar then
     fl.bar:SetShown(inst ~= nil and not browse and #G.InstanceFloors(inst) >= 2)
     fl.text:SetShown(inst ~= nil and not browse)
+    -- (Confirm Route above the dungeon's note, not over it)
+    routeBtn:ClearAllPoints()
+    if fl.text:IsShown() then routeBtn:SetPoint("BOTTOM", fl.text, "TOP", 0, 3) else routeBtn:SetPoint("BOTTOM", 0, 22) end
   end
   -- (its floors filled under the art: the parts with none, a courtyard or a raid out in the open,
   -- still show where you can walk)
