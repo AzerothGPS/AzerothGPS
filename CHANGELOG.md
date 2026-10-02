@@ -28,6 +28,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 **Dungeons and raids**
 
 - **Wings get their own icons.** Scarlet Monastery's Graveyard, Library, Armory and Cathedral, Dire Maul's East, West and North, Stratholme's Main Gate and Service Entrance, and Maraudon's Orange and Purple each have an icon, named so you know which door is which. A wing's map shows just its bosses, its usual way through from its own door, and its own boss route; inside, the map goes with the wing you walked in through. Maraudon's inner bosses belong to both sides. Uldaman's back way in and Gnomeregan's Train Depot get named icons too, and show the whole dungeon.
+- **Mark where you are in a dungeon.** The game hides your position inside, so double-click the dungeon's map where you are and your class icon goes there (right-click it to clear). The panel at the top shows the controls, with right-click a boss to mark it defeated.
 - **A stop picked in a dungeon's map** (a spot, a boss or a pin) goes on the dungeon's entrance out in the world, since that's where you're actually heading.
 - **Blackwing Lair** (through Upper Blackrock Spire) and **WoW Forever's own dungeons and raids**: their maps, bosses and entrances. Entrances we don't know yet are learned when you go in; share them with **Copy Map Data...**.
 - **Cave and mine entrances on the map** (double-click one for a stop), in the map menu's new **Caves/Dungeons/Raids** group.

@@ -1856,3 +1856,45 @@ def test_a_boss_is_marked_defeated_by_hand_with_a_right_click(game):
     finally:
         ns.CharDB().bossKills = lua.table()
         G.Follow()
+
+
+def test_in_a_dungeon_a_double_click_marks_where_you_are(game):
+    # (asked 2026-10-01) the game hides the player's position in a dungeon: a double-click on its map, inside it,
+    # puts their class icon there (not a stop); a right-click on it clears it; leaving the dungeon clears it.
+    # The panel at the top says how (the boss's right-click too)
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    lua.execute("""
+      AGPS_OLD_D = { UnitPosition, GetInstanceInfo, UnitClass, CLASS_ICON_TCOORDS }
+      UnitPosition = function() return nil end
+      GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end
+      UnitClass = function() return "Mage", "MAGE" end
+      CLASS_ICON_TCOORDS = { MAGE = { 0.25, 0.5, 0, 0.25 } }
+    """)
+    try:
+        N.Clear()
+        ns.CharDB().youHere = None
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        texts = [str(w._text) for w in lua.eval("AGPS_WIDGETS").values() if w._text and w._shown]
+        assert any("Double-click: mark where you are" in t and "Right-click a boss" in t for t in texts)
+        G.AddPending(10.0, -20.0)
+        me = G.YouHere()
+        assert me and me.level == 20036 and len(N.stops) == 0  # (no stop made)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        (pin,) = [w for w in lua.eval("AGPS_WIDGETS").values() if w._shown and w.dot and w.edge and w._scripts.OnClick]
+        assert pin.dot._tex == G.CLASS_SHEET
+        pin._scripts.OnClick(pin, "RightButton")
+        assert G.YouHere() is None
+        G.AddPending(0.0, 0.0)
+        assert G.YouHere()
+        # out of the dungeon: gone
+        lua.execute('UnitPosition = AGPS_OLD_D[1] GetInstanceInfo = function() return "Tirisfal Glades", "none", 0, "", 0, 0, false, 0 end')
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.YouHere() is None
+    finally:
+        lua.execute("UnitPosition, GetInstanceInfo, UnitClass, CLASS_ICON_TCOORDS = unpack(AGPS_OLD_D, 1, 4)")
+        ns.CharDB().youHere = None
+        G.Follow()

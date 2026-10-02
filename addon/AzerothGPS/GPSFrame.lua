@@ -2374,6 +2374,69 @@ function G.DrawParty(cx, cy, rot, s, viewCont)
   for i = n + 1, #partyPins do partyPins[i]:Hide() end
   return n
 end
+-- "You are here" in a dungeon (asked 2026-10-01): the game hides the player's position there, so a
+-- double-click on its map, inside it, puts their class icon where they say they are (instead of a stop).
+-- Kept for the character (cdb.youHere: { level, x, y }) over a /reload, gone when they leave the dungeon;
+-- a right-click on it takes it away.
+function G.YouHere()
+  local cdb = ns.db and ns.CharDB and ns.CharDB()
+  return cdb and cdb.youHere or nil
+end
+function G.MarkYouHere(level, x, y)
+  ns.CharDB().youHere = level and { level = level, x = x, y = y } or nil
+  G.Redraw()
+end
+local youPin
+function G.DrawYouHere(cx, cy, rot, s, viewCont)
+  local me = G.YouHere()
+  local show = me and me.level == viewCont and canvas and not G.Held()
+  local sx, sy
+  if show then
+    local dx, dy = Geo.ScreenOffset(cx, cy, me.x, me.y)
+    sx, sy = Geo.Rotate(dx * s, dy * s, rot)
+    local half = canvas:GetWidth() / 2
+    show = math.abs(sx) <= half and math.abs(sy) <= half
+  end
+  if not show then
+    if youPin then youPin:Hide() end
+    return
+  end
+  if not youPin then
+    youPin = CreateFrame("Button", nil, keepLayer)
+    youPin:SetFrameLevel(keepLayer:GetFrameLevel() + 2)
+    youPin.edge = youPin:CreateTexture(nil, "ARTWORK")
+    youPin.edge:SetAllPoints()
+    youPin.dot = youPin:CreateTexture(nil, "OVERLAY")
+    G.MakeRound(youPin, youPin.edge)
+    G.MakeRound(youPin, youPin.dot)
+    youPin:RegisterForClicks("RightButtonUp")
+    youPin:SetScript("OnClick", function() G.MarkYouHere(nil) end)
+    youPin:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetText("You (where you marked)", 1, 1, 1)
+      GameTooltip:AddLine("Double-click the map: you're there now", 0.4, 0.8, 1)
+      GameTooltip:AddLine("Right-click: clear", 0.4, 0.8, 1)
+      GameTooltip:Show()
+    end)
+    youPin:SetScript("OnLeave", GameTooltip_Hide)
+  end
+  local class
+  if UnitClass then class = select(2, UnitClass("player")) end
+  local c = RAID_CLASS_COLORS and class and RAID_CLASS_COLORS[class]
+  local r, g, b = c and c.r or 1, c and c.g or 1, c and c.b or 1
+  youPin.edge:SetColorTexture(r, g, b, 1)
+  local icon = G.ClassIcon(youPin.dot, class)
+  if not icon then youPin.dot:SetColorTexture(r, g, b, 1) end
+  local ring = icon and G.PxUnits(poiLayer, 2) or 1.5
+  local u = icon and G.PxUnits(poiLayer, G.ICON_PX) + 2 * ring or 16
+  youPin:SetSize(u, u)
+  youPin.dot:ClearAllPoints()
+  youPin.dot:SetPoint("TOPLEFT", ring, -ring)
+  youPin.dot:SetPoint("BOTTOMRIGHT", -ring, ring)
+  youPin:ClearAllPoints()
+  youPin:SetPoint("CENTER", poiLayer, "CENTER", G.SnapPoint(poiLayer, sx, sy))
+  youPin:Show()
+end
 
 local hiddenShown -- the dungeon whose map was put up because the game hides the player's position in it
 function G.Update()
@@ -2398,6 +2461,7 @@ function G.Update()
     end
   else
     hiddenShown = nil
+    if G.YouHere() then ns.CharDB().youHere = nil end -- (out of the dungeon: the mark goes)
   end
   if not px then
     DrawQuads({})
@@ -2721,6 +2785,7 @@ function G.Update()
     return Geo.Rotate(dx * s, dy * s, rot)
   end, viewCont)
   G.DrawParty(cx, cy, rot, s, viewCont) -- (party members: G, not a local of this file's, the 60 limit)
+  G.DrawYouHere(cx, cy, rot, s, viewCont) -- (in a dungeon: where the player marked themselves)
   -- a farming area being drawn: its outline so far
   local lasso = G.lasso
   if lasso and lasso.cont == viewCont then
@@ -2987,7 +3052,7 @@ function G.Update()
     local i, b = G.NextBoss(hidden)
     local n = #G.BossOrder(hidden)
     status = (b and string.format("Next: |cffffd100%s|r  (%d of %d)", b[1], i, n) or "|cff40ff40All the bosses are down|r")
-      .. "\n|cff9d9d9dThe game hides your position in dungeons|r"
+      .. "\n|cff9d9d9dDouble-click: mark where you are   Right-click a boss: defeated|r"
   else
     status = ns.Nav.Status(px, py, cont)
   end
@@ -4420,6 +4485,11 @@ function G.AddPending(dxUI, dyUI)
   if G.Held() then -- (held by another addon: its double-click)
     local x, y = G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s)
     return HeldClick(x, y, view.cont)
+  end
+  -- (in a dungeon that hides the player's position, its own map: they mark where they are, G.MarkYouHere)
+  if hiddenShown and view.instance == hiddenShown then
+    local x, y = G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s)
+    return G.MarkYouHere(hiddenShown, x, y)
   end
   G.AddStopAt(G.ScreenToWorld(view.x, view.y, dxUI, dyUI, view.rot, view.s))
 end
