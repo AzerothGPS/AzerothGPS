@@ -1710,3 +1710,33 @@ def test_shift_right_click_with_chat_open_puts_a_map_pin_in_it(game):
         st.zoom = zoom
         lua.execute("""IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink, UiMapPoint,
           C_Map.SetUserWaypoint, C_Map.GetUserWaypointHyperlink = unpack(AGPS_OLD, 1, 7)""")
+
+
+def test_a_boss_seen_dead_counts_without_encounter_or_combat_log_events(game):
+    # (reported 2026-10-01, the private server: Oggleflint dead at the player's feet, targeted, and the boss
+    # route still said "Next: Oggleflint"; no encounter events came, and the combat log's kill didn't count)
+    # a boss's corpse targeted (or moused over, looted, still targeted when combat ends): its kill counted
+    lua, ns = game
+    N = ns.Nav
+    DM = 20036
+    lua.execute("""
+      AGPS_OLD_U = { GetInstanceInfo, time, UnitExists, UnitIsDead, UnitGUID, UnitName }
+      GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end
+      time = function() return 50000 end
+      UnitExists = function(u) return u == "target" end
+      UnitIsDead = function(u) return AGPS_DEAD end
+      UnitGUID = function(u) return "Creature-0-5250-36-12-644-00001A2B3C" end
+      UnitName = function(u) return "Rhahk'Zor" end
+      AGPS_DEAD = false
+    """)
+    try:
+        assert ns.CheckDeadUnit("target") == 0  # (alive)
+        assert ns.CheckDeadUnit("mouseover") == 0  # (no such unit)
+        lua.execute("AGPS_DEAD = true")
+        assert ns.CheckDeadUnit("target") == 1 and ns.CheckDeadUnit("target") == 0  # (once)
+        assert N.BossDead(lua.table(cont=DM, boss=644))
+        lua.execute('GetInstanceInfo = function() return "Elwynn Forest", "none", 0, "", 0, 0, false, 0 end')
+        assert ns.CheckDeadUnit("target") == 0  # (not in a dungeon)
+    finally:
+        lua.execute("GetInstanceInfo, time, UnitExists, UnitIsDead, UnitGUID, UnitName = unpack(AGPS_OLD_U, 1, 6)")
+        ns.CharDB().bossKills = lua.table()

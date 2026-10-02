@@ -498,3 +498,4 @@ def test_the_wheel_keeps_a_looked_at_terrain_view_terrain(inst_env):
     z0 = G.WheelZoom(1.0)
     assert G.WheelZoom(1.25) == pytest.approx(z0 * 1.25)
     G.Follow()
+

@@ -280,6 +280,27 @@ local function Describe(v)
 end
 
 -- API probe: prints to chat and appends to AzerothGPSDB.probes (read with `agps probes`).
+-- A boss seen dead (`unit`: the target, focus, mouseover, a nameplate): its kill counted, in the dungeon the
+-- player is in. The encounter events and the combat log can't be counted on: the private server sent no
+-- encounter events and the combat log's kill never came through (2026-10-01: Oggleflint dead at the
+-- player's feet, targeted, and "Next: Oggleflint" stayed). By NPC entry, or name (Forever's own dungeons).
+function ns.CheckDeadUnit(unit)
+  local N = ns.Nav
+  if not (N and N.CurrentInstance and UnitExists and UnitIsDead and UnitGUID) then return 0 end
+  local lvl = N.CurrentInstance()
+  if not lvl then return 0 end
+  local okE, exists = pcall(UnitExists, unit)
+  local okD, dead = pcall(UnitIsDead, unit)
+  if not (okE and okD) or ns.IsSecret(exists) or ns.IsSecret(dead) or not (exists and dead) then return 0 end
+  local okG, guid = pcall(UnitGUID, unit)
+  if not okG or ns.IsSecret(guid) then return 0 end
+  local okN, name = pcall(UnitName, unit)
+  if not okN or ns.IsSecret(name) then name = nil end
+  local n = N.BossKilled(lvl, N.NpcOf(guid), nil, name)
+  if n > 0 and ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+  return n
+end
+
 -- Boss kills, for 1.0.7's instance routes: which of these events this client fires, and
 -- with what (ns.db.encounterLog, the last 20; shown by /agps debug).
 do
@@ -288,6 +309,20 @@ do
     for _, ev in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_ENTERING_WORLD" }) do
       pcall(f.RegisterEvent, f, ev)
     end
+    -- (a dead boss looked at: targeted, moused over, looted, or still targeted when combat ends)
+    local seen = CreateFrame("Frame")
+    for _, ev in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_REGEN_ENABLED", "LOOT_OPENED" }) do
+      pcall(seen.RegisterEvent, seen, ev)
+    end
+    seen:SetScript("OnEvent", function(_, ev)
+      if not ns.db then return end
+      if ev == "UPDATE_MOUSEOVER_UNIT" then
+        pcall(ns.CheckDeadUnit, "mouseover")
+      else
+        pcall(ns.CheckDeadUnit, "target")
+        pcall(ns.CheckDeadUnit, "focus")
+      end
+    end)
     -- (the combat log only in a dungeon or raid: a boss's death there, for its route's stop)
     local combatLog = false
     f:SetScript("OnEvent", function(_, ev, ...)
