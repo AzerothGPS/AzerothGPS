@@ -46,7 +46,16 @@ MIN_ROAD = 30.0  # yards: a cave with less road than this is left out (a nook in
 CAVE_KINDS = ("md_caveden", "md_cavetunnels", "md_goldmine", "md_hordemine", "md_mountaincave", "md_spidermine",
               "md_animalden", "md_dwarven tunnels", "md_timbermawhold", "md_hive", "md_barrowdens",
               "md_barrowdensonerm", "md_crypt", "md_cryptonerm", "md_cryptschool", "md_cryptsimpleent",
-              "md_ogremound", "md_anvilmarpass", "md_stratholme_plaguewood_tunnel", "worgenmicro", "kl_wailing")
+              "md_ogremound", "md_anvilmarpass", "md_stratholme_plaguewood_tunnel", "worgenmicro", "kl_wailing",
+              "az_deadmines")  # (the Defias Hideout, the mine under Moonbrook down to the Deadmines: asked 2026-10-01)
+# Per kind, walknet's rules loosened where a model needs it (the module's values set while it's built):
+# the Defias Hideout's tunnels are lined with mine props (rock within REACH of most cells' middles closed
+# them: only its entrance was reached), and its last ramp down to the Deadmines' door is steeper than a
+# LEDGE a cell (the roads stopped 41 yd short of it).
+CAVE_TUNING = {"az_deadmines": {"REACH": 0.25, "LEDGE": 4.5}}
+# Names by placement where the game's don't fit: the Deadmines' models on the continent are its Defias
+# Hideout, the mine under Moonbrook (its rooms' name), not the dungeon (its own icon says that).
+CAVE_NAMES = {35530: "Defias Hideout", 76922: "Defias Hideout"}
 
 
 class Ground:
@@ -144,7 +153,7 @@ def find_caves(cd: ClientData, cont: int) -> list:
         w = I.read_wmo(cd, p.wmo)
         if not w:
             continue
-        out.append((p, path, cave_name(cd, p, w, names_by)))
+        out.append((p, path, CAVE_NAMES.get(p.uid) or cave_name(cd, p, w, names_by)))
     out.sort(key=lambda t: t[0].uid)
     return out
 
@@ -176,8 +185,17 @@ def build_cave(cd: ClientData, p, ground: Ground, label: str, log=print, cont_at
     for gi, (x0, y0, x1, y1), lz in liquids:
         corners = [xf((qx, qy, lz)) for qx, qy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
         lq.append(([(q[0], q[1]) for q in corners], sum(q[2] for q in corners) / 4))
-    u = walknet.build(fl, wl, lq, label=label, ground=ground.sample, ground_reach=GROUND_REACH, prune=PRUNE, fill=FILL,
-                      log=lambda *a: None)
+    parts = (cd.name(p.wmo) or "").split("/")
+    tuning = CAVE_TUNING.get(parts[3] if len(parts) > 3 else "", {})
+    saved = {k: getattr(walknet, k) for k in tuning}
+    try:
+        for k, v in tuning.items():
+            setattr(walknet, k, v)
+        u = walknet.build(fl, wl, lq, label=label, ground=ground.sample, ground_reach=GROUND_REACH, prune=PRUNE,
+                          fill=FILL, log=lambda *a: None)
+    finally:
+        for k, v in saved.items():
+            setattr(walknet, k, v)
     H, W = u["H"], u["W"]
     # the cave's own cells: the model's footprint (its floors, the rock between them), and
     # the ground taken in at its mouth

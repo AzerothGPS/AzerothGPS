@@ -55,6 +55,7 @@ ns.DEFAULTS = {
     avoidHostile = true, -- routes keep away from the other faction's guards (their towns)
     cityKeepOrder = true, -- ... except stops down in a city: in the order placed
     acceptWay = true, -- TomTom /way commands (typed or pasted in chat) add route stops
+    acceptMapPins = true, -- a map pin link ("[Map Pin Location]") clicked in chat adds a stop there
     acceptShared = true, -- routes other players send (asked before use)
     -- directions
     arrow = true, -- turn-by-turn direction arrow window (TomTom style)

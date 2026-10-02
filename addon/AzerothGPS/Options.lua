@@ -684,6 +684,8 @@ local function BuildWindow()
   header("Waypoints and sharing")
   check("Accept TomTom /way commands", "/way lines typed or pasted in chat add stops to the route (several pasted lines at once become several stops). With TomTom installed, its waypoint is set too.",
     function() return GPS().acceptWay ~= false end, function(v) GPS().acceptWay = v end)
+  check("Map pin links add stops", "Clicking a map pin someone posted in chat (\"[Map Pin Location]\") adds a stop there. To share a spot yourself, open a chat box and Shift + right-click it on the map.",
+    function() return GPS().acceptMapPins ~= false end, function(v) GPS().acceptMapPins = v end)
   check("Accept routes shared by players", "Other AzerothGPS users can send you their route (Import and share waypoints window). You're always asked before it replaces yours.",
     function() return GPS().acceptShared ~= false end, function(v) GPS().acceptShared = v end)
   place(Button(page, "Import / share waypoints...", 200, function() ns.Import.Toggle() end), 30, 4)

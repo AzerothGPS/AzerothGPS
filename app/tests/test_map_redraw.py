@@ -1642,3 +1642,71 @@ def test_a_character_whose_name_isnt_known_yet_isnt_saved_as_unknown(game):
     finally:
         lua.execute("UnitName = AGPS_UN")
         ns.db.chars[lua.eval("GetRealmName and GetRealmName() or '?'") + "-Newbie"] = None
+
+
+def test_a_dungeon_entrance_shows_on_the_inside_map_it_is_in(game):
+    # (asked 2026-10-01: the Deadmines' entrance on the Defias Hideout's map too) indoors down in the hideout,
+    # by the dungeon's door: its inside map, and the Deadmines' entrance icon on it (click for its map)
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    lua.execute("""
+      AGPS_INDOORS_REAL, AGPS_MZT_REAL = IsIndoors, GetMinimapZoneText
+      IsIndoors = function() return true end
+      GetMinimapZoneText = function() return "Defias Hideout" end
+      AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = -11210.0, 1680.0, 0
+    """)
+    zoom = st.zoom
+    try:
+        st.zoom = 150.0
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        assert G.inside is not None  # (the hideout's inside map)
+        icons = _shown(lua, lambda w: w.instance == 20036)
+        assert icons, "no Deadmines entrance on the hideout's map"
+    finally:
+        st.zoom = zoom
+        lua.execute("IsIndoors, GetMinimapZoneText = AGPS_INDOORS_REAL, AGPS_MZT_REAL "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = 2254.0, 293.0, 0")
+
+
+def test_shift_right_click_with_chat_open_puts_a_map_pin_in_it(game):
+    # (asked 2026-10-01) Shift + right-click on the map while typing in a chat box: the game's map pin there
+    # (the player's waypoint, as the world map's Shift-click shares it) and its link in the chat; the map
+    # doesn't zoom out. Without a chat box, Shift + right-click is a right-click as before.
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    lua.execute("""
+      AGPS_OLD = { IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink, UiMapPoint,
+        C_Map.SetUserWaypoint, C_Map.GetUserWaypointHyperlink }
+      IsShiftKeyDown = function() return true end
+      GetCursorPosition = function() return 300, 300 end
+      ChatEdit_GetActiveWindow = function() return AGPS_BOX end
+      ChatEdit_InsertLink = function(l) AGPS_LINK = l return true end
+      UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, x = x, y = y } end }
+      C_Map.SetUserWaypoint = function(p) AGPS_WP = p end
+      C_Map.GetUserWaypointHyperlink = function()
+        return string.format("|cffffff00|Hworldmap:%d:%d:%d|h[Map Pin Location]|h|r", AGPS_WP.uiMapID,
+          math.floor(AGPS_WP.x * 10000), math.floor(AGPS_WP.y * 10000))
+      end
+      AGPS_BOX, AGPS_LINK, AGPS_WP = {}, nil, nil
+    """)
+    zoom = st.zoom
+    try:
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        x, y, c = G.ClickWorld()
+        want = G.LocateWorld(c, x, y)[0]
+        frame = lua.globals().AzerothGPSFrame
+        frame._scripts.OnMouseDown(frame, "RightButton")
+        link = lua.eval("AGPS_LINK")
+        assert link and "worldmap:" in link and lua.eval("AGPS_WP").uiMapID == want
+        assert st.zoom == zoom  # (not zoomed out)
+        pin = ns.Import.ParseMapPin(link.split("|H")[1].split("|h")[0])
+        assert pin and abs(pin.x - x) < 5 and abs(pin.y - y) < 5  # (the link leads back to the spot clicked)
+        lua.execute("AGPS_BOX, AGPS_LINK = nil, nil")
+        frame._scripts.OnMouseDown(frame, "RightButton")
+        assert lua.eval("AGPS_LINK") is None
+    finally:
+        st.zoom = zoom
+        lua.execute("""IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink, UiMapPoint,
+          C_Map.SetUserWaypoint, C_Map.GetUserWaypointHyperlink = unpack(AGPS_OLD, 1, 7)""")

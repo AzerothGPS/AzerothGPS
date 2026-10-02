@@ -124,6 +124,50 @@ function I.ParseMapPin(link)
     name = string.format("Map pin (%s %.1f, %.1f)", m.name or "?", u * 100, v * 100) }
 end
 
+-- The chat box being typed in, or nil.
+function I.ChatBox()
+  local box = (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow())
+    or (ChatFrameUtil and ChatFrameUtil.GetActiveWindow and ChatFrameUtil.GetActiveWindow())
+  return box or nil
+end
+
+-- Shift + right-click on the map with a chat box open (asked 2026-10-01): the game's map pin there, put
+-- in the chat as the world map's own Shift-click on its pin does ("[Map Pin Location]": the link is the
+-- player's waypoint's, so it's set there too). The spot on a zone's (or city's) map; not in a dungeon's.
+-- Returns whether the link went in.
+function I.ShareMapPinAt(cont, x, y)
+  if not (I.ChatBox() and C_Map and C_Map.SetUserWaypoint and C_Map.GetUserWaypointHyperlink and UiMapPoint) then
+    return false
+  end
+  local G = ns.GPS
+  if not (cont and cont < 20000 and G and G.LocateWorld) then return false end
+  local mapID, _, u, v = G.LocateWorld(Geo.Base(cont), x, y)
+  if not mapID then return false end
+  local ok = pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(mapID, u, v))
+  local link = ok and C_Map.GetUserWaypointHyperlink()
+  if not link then return false end
+  if ChatFrameUtil and ChatFrameUtil.InsertLink then
+    ChatFrameUtil.InsertLink(link)
+  elseif ChatEdit_InsertLink then
+    ChatEdit_InsertLink(link)
+  else
+    I.ChatBox():Insert(link)
+  end
+  return true
+end
+
+-- A map pin link clicked in chat (hooked on SetItemRef): a stop there (option acceptMapPins; asked
+-- 2026-10-01: a plain click, it used to take Shift), but not a Shift-click with a chat box open, which is
+-- the game's "put it in the chat". Whether `link` was a map pin.
+function I.OnMapPinLink(link)
+  local pin = type(link) == "string" and I.ParseMapPin(link)
+  if not pin then return false end
+  local relink = IsModifiedClick and IsModifiedClick("CHATLINK") and I.ChatBox()
+  local st = ns.settings and ns.settings.gps
+  if not relink and not (st and st.acceptMapPins == false) then I.AddMapPin(pin) end
+  return true
+end
+
 -- A shared map pin as a stop: added to the route (or a new route), with the route tour on
 -- an open map (see GPS.RouteChanged).
 function I.AddMapPin(pin)
@@ -584,13 +628,9 @@ function I.Init()
     if box then box:HookScript("OnTextChanged", OnChatText) end
   end
   hooksecurefunc("SetItemRef", function(link)
+    -- a click on a map pin someone shared in chat: it becomes a stop
+    if I.OnMapPinLink(link) then return end
     if type(link) ~= "string" or not IsModifiedClick("CHATLINK") then return end
-    -- Shift+click on a map pin someone shared in chat: it becomes a stop
-    local pin = I.ParseMapPin(link)
-    if pin then
-      I.AddMapPin(pin)
-      return
-    end
     -- Shift+click on a player's name in chat, with this window open: fills in "Send to"
     if not win or not win:IsShown() then return end
     local name = link:match("^player:([^:]+)")

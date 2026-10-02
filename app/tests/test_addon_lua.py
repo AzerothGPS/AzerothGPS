@@ -3778,6 +3778,23 @@ def test_shared_map_pin_becomes_a_stop(importer):
     assert len(N.stops) == 1 and N.stops[1].name == pin.name
     I.AddMapPin(I.ParseMapPin("worldmap:1411:5000:5000"))
     assert len(N.stops) == 2  # added to the route
+    # (asked 2026-10-01) a plain click on one adds it (it used to take Shift); a Shift-click with a chat box
+    # open is the game's "put it in the chat", not a stop; the option off, none
+    lua.execute("IsModifiedClick = function() return AGPS_SHIFT end ChatEdit_GetActiveWindow = function() return AGPS_BOX end")
+    N.Clear()
+    assert I.OnMapPinLink("worldmap:1411:4213:6534") and len(N.stops) == 1
+    lua.execute("AGPS_SHIFT, AGPS_BOX = true, {}")
+    assert I.OnMapPinLink("worldmap:1411:5000:5000") and len(N.stops) == 1
+    lua.execute("AGPS_BOX = nil")
+    I.OnMapPinLink("worldmap:1411:5000:5000")
+    assert len(N.stops) == 2  # (Shift without a chat box: a stop, as before)
+    lua.execute("AGPS_SHIFT = false")
+    old = ns.settings
+    ns.settings = lua.eval("{ gps = { acceptMapPins = false } }")
+    I.OnMapPinLink("worldmap:1411:6000:6000")
+    assert len(N.stops) == 2
+    ns.settings = old
+    assert not I.OnMapPinLink("item:6948")
 
 
 def test_guard_directions_become_a_saved_city_location_and_a_stop(importer):

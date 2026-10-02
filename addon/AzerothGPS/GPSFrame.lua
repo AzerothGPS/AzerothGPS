@@ -2933,6 +2933,17 @@ function G.Update()
       end
     end
     AddMarks(pois)
+    -- dungeon and raid entrances in it too (asked 2026-10-01: the Deadmines' door, down in the Defias
+    -- Hideout's map): click for the dungeon's map
+    if st.layerInstances ~= false and G.ShowsTravelMarkers() then
+      for _, e in ipairs(G.InstanceEntrances(Geo.Base(viewCont))) do
+        local dx, dy = Geo.ScreenOffset(cx, cy, e.x, e.y)
+        dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+        if math.abs(dx) <= half and math.abs(dy) <= half then
+          pois[#pois + 1] = { 6, dx, dy, e.name, e.x, e.y, instance = e.level, raid = e.raid, level = e.cont, wing = e.wing }
+        end
+      end
+    end
     AddPins(pois)
     DrawPois(DropUnderStops(pois), zoom)
   else
@@ -4852,6 +4863,17 @@ function G.BrowseState() return browse, free end -- (for the tests)
 function G.ViewState()
   return view.x, view.y, view.cont, view.rot, view.s, canvas and canvas:GetWidth() / 2 or 0
 end
+-- The world spot under the pointer for a click on the map (the map's level; a dungeon's map: its level).
+function G.ClickWorld()
+  if not (canvas and view.cont) then return nil end
+  local ox, oy = canvas:GetCenter()
+  if not ox then return nil end
+  local mx, my = GetCursorPosition()
+  local sc = canvas:GetEffectiveScale()
+  local x, y = G.ScreenToWorld(view.x, view.y, mx / sc - ox, my / sc - oy, view.rot, view.s)
+  return x, y, view.instance or view.cont
+end
+
 function G.CursorWorld()
   if not canvas or not view.cont or not canvas:IsVisible() or not canvas:IsMouseOver() then return nil end
   local ox, oy = canvas:GetCenter()
@@ -4955,6 +4977,11 @@ function G.Init()
         G.lasso = { pts = {}, cont = view.cont, road = G.drawKind == "road" }
       end
       return
+    end
+    -- Shift + right-click with a chat box open: a map pin there, its link in the chat (Import.ShareMapPinAt)
+    if button == "RightButton" and IsShiftKeyDown() and ns.Import and ns.Import.ChatBox() then
+      local x, y, c = G.ClickWorld()
+      if x and ns.Import.ShareMapPinAt(c, x, y) then return end
     end
     if button == "RightButton" then
       if G.IsMapStyle(G.Style()) then
