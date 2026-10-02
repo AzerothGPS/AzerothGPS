@@ -568,6 +568,8 @@ local function BuildWindow()
   sizeWarn:SetWidth(PAGE_W - 60)
   sizeWarn:SetJustifyH("LEFT")
   place(sizeWarn, 26, 4)
+  check("Lock map size", "On: the map's size only changes with the slider above. Off: a grip shows in the map window's bottom-right corner; left-drag it to resize the window.",
+    function() return GPS().lockSize ~= false end, function(v) GPS().lockSize = v end)
   place(KeyBind(page, "Show/hide key"))
   note("Click the button, then press the key you want (with Shift, Ctrl or Alt if you like). Pressing it shows the map, and pressing it again hides it. Escape cancels, right-click the button to clear the key. It's also in the game's Key Bindings, under AddOns: \"Show/Hide AzerothGPS\". Keys can't be changed in combat.")
   header("Minimap")

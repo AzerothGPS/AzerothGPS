@@ -3248,6 +3248,57 @@ local function SavePosition()
   S().point = { p, rel and rel:GetName() or "UIParent", rp, x, y }
 end
 
+-- The map's size by its bottom-right corner (asked 2026-10-02): with "Lock map size" off (`lockSize`, on by
+-- default), a grip there; a left-drag sizes the window (square: the map is), its top-left staying put, within
+-- the size slider's range (G.SIZE_MIN_MAX, and room for the quick buttons, G.ClampSize).
+G.SIZE_MIN_MAX = { 120, 800 }
+function G.SizeFromCursor()
+  local sc = frame:GetEffectiveScale()
+  local cx, cy = GetCursorPosition()
+  local l, t = frame:GetLeft(), frame:GetTop()
+  if not (l and t) then return nil end
+  local v = math.max(cx / sc - l, t - cy / sc)
+  v = math.floor(math.max(G.SIZE_MIN_MAX[1], math.min(G.SIZE_MIN_MAX[2], v)) + 0.5)
+  return G.ClampSize and G.ClampSize(v, true) or v, l, t
+end
+function G.MakeSizeGrip()
+  local grip = CreateFrame("Button", nil, frame)
+  grip:SetSize(16, 16)
+  grip:SetPoint("BOTTOMRIGHT", -2, 2)
+  grip:SetFrameLevel(frame:GetFrameLevel() + 20)
+  local gbg = grip:CreateTexture(nil, "BACKGROUND") -- (visible even if the old art is missing here)
+  gbg:SetPoint("BOTTOMRIGHT")
+  gbg:SetSize(8, 8)
+  gbg:SetColorTexture(0.6, 0.5, 0.25, 0.6)
+  grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+  grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+  grip:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then self.sizing = true end
+  end)
+  grip:SetScript("OnMouseUp", function(self)
+    if not self.sizing then return end
+    self.sizing = false
+    SavePosition()
+  end)
+  grip:SetScript("OnUpdate", function(self)
+    if not self.sizing then return end
+    local v, l, t = G.SizeFromCursor()
+    if not v or v == S().size then return end
+    S().size = v
+    S().point = { "TOPLEFT", "UIParent", "BOTTOMLEFT", l, t } -- (the top-left stays put)
+    G.ApplySettings()
+  end)
+  grip:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Drag to resize the map", 1, 1, 1)
+    GameTooltip:AddLine("Turn on \"Lock map size\" (Options, General) to hide this.", 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  grip:SetScript("OnLeave", GameTooltip_Hide)
+  G.sizeGrip = grip
+  return grip
+end
+
 -- The floor buttons' column: right under the window frame's portrait (it hangs over the map's
 -- top-left), else under the top panel while it shows, else in the corner.
 function G.PlaceFloorBar()
@@ -3285,6 +3336,7 @@ function G.ApplySettings()
   end
   G.sizeShown = st.size
   frame:SetSize(st.size, st.size)
+  if G.sizeGrip then G.sizeGrip:SetShown(st.lockSize == false and not G.clickThrough) end
   local hidden = ns.inCombat and st.combatHideMap
   frame:SetAlpha(ns.inCombat and (st.combatAlpha or st.alpha) or st.alpha)
   if G.RefreshHearthButton then G.RefreshHearthButton() end -- the option may have changed
@@ -5265,6 +5317,7 @@ function G.Init()
   end)
   tab:SetScript("OnLeave", GameTooltip_Hide)
   G.moveTab = tab
+  G.MakeSizeGrip() -- (the corner grip: "Lock map size" off)
 
   -- While unlocked: the game's own window frame (metal border, title bar, portrait, close
   -- button) around the map, from the client's PortraitFrameTemplate. A child of the map, so

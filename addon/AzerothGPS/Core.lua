@@ -6,6 +6,7 @@ ns.DEFAULTS = {
     -- map window
     shown = true,
     size = 450, -- frame edge in UI units (asked, 2026-10-01: 450 by default)
+    lockSize = true, -- the size only by the slider; off: drag the map's bottom-right corner (GPS.MakeSizeGrip)
     alpha = 1, -- whole-frame opacity
     stepsCollapsed = true, -- the map's top panel: only the whole trip's times (the -/+ button)
     stepsAll = false, -- the map's top panel: all the steps, not just the next few (its + button)

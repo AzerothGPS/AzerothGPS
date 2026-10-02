@@ -1925,3 +1925,37 @@ def test_a_flights_clock_starts_without_the_control_events(game):
         lua.execute("AGPS_TAXI = false")
         T.Current()
         lua.execute("UnitOnTaxi, GetTime = unpack(AGPS_OLD_T, 1, 2)")
+
+
+def test_the_map_is_resized_by_its_corner_when_the_size_isnt_locked(game):
+    # (asked 2026-10-02) "Lock map size" (on by default) next to the size slider; off, a grip in the map window's
+    # bottom-right corner, and a left-drag on it sizes the window (square, its top-left staying put), within the
+    # slider's range
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    size, point = st.size, st.point
+    lua.execute("AGPS_OLD_CUR = GetCursorPosition\nGetCursorPosition = function() return AGPS_CX, AGPS_CY end")
+    try:
+        assert st.lockSize is True
+        G.ApplySettings()
+        grip = G.sizeGrip
+        assert grip and not grip._shown
+        st.lockSize = False
+        G.ApplySettings()
+        assert grip._shown
+        # (the stand-in's frames: left 100, top 500, scale 1) the corner dragged to (700, 0): 600 across
+        lua.execute("AGPS_CX, AGPS_CY = 700, 0")
+        grip._scripts.OnMouseDown(grip, "LeftButton")
+        grip._scripts.OnUpdate(grip, 0.02)
+        assert st.size == 600 and st.point[1] == "TOPLEFT" and st.point[4] == 100 and st.point[5] == 500
+        lua.execute("AGPS_CX, AGPS_CY = 5000, -4000")  # (past the slider's top: 800)
+        grip._scripts.OnUpdate(grip, 0.02)
+        assert st.size == 800
+        grip._scripts.OnMouseUp(grip, "LeftButton")
+        lua.execute("AGPS_CX, AGPS_CY = 300, 300")
+        grip._scripts.OnUpdate(grip, 0.02)
+        assert st.size == 800  # (let go: no more sizing)
+    finally:
+        st.lockSize, st.size, st.point = True, size, point
+        lua.execute("GetCursorPosition = AGPS_OLD_CUR")
+        G.ApplySettings()
