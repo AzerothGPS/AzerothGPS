@@ -1671,47 +1671,88 @@ def test_a_dungeon_entrance_shows_on_the_inside_map_it_is_in(game):
                     "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3] = 2254.0, 293.0, 0")
 
 
-def test_shift_right_click_with_chat_open_puts_a_map_pin_in_it(game):
-    # (asked 2026-10-01) Shift + right-click on the map while typing in a chat box: the game's map pin there
-    # (the player's waypoint, as the world map's Shift-click shares it) and its link in the chat; the map
-    # doesn't zoom out. Without a chat box, Shift + right-click is a right-click as before.
+def test_the_map_pin_works_as_on_the_games_world_map(game):
+    # (asked 2026-10-01) Ctrl + left-click on the map: the map pin there (the game's waypoint, a diamond on the
+    # map); Shift + left-click on it: its link in chat; Ctrl + left-click on it: gone. Not a custom pin (not in the
+    # shared map data); kept per character, put back as the game's waypoint at login; the game's waypoint set or
+    # cleared elsewhere moves it
     lua, ns = game
-    G, st = ns.GPS, ns.settings.gps
+    G, I = ns.GPS, ns.Import
     lua.execute("""
-      AGPS_OLD = { IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink, UiMapPoint,
-        C_Map.SetUserWaypoint, C_Map.GetUserWaypointHyperlink }
-      IsShiftKeyDown = function() return true end
+      AGPS_OLD_MP = { IsControlKeyDown, IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink,
+        ChatFrame_OpenChat, UiMapPoint, C_Map.SetUserWaypoint, C_Map.ClearUserWaypoint, C_Map.HasUserWaypoint,
+        C_Map.GetUserWaypoint, C_Map.GetUserWaypointHyperlink }
+      AGPS_CTRL, AGPS_SHIFT, AGPS_BOX, AGPS_LINK, AGPS_OPENED, AGPS_WP = false, false, nil, nil, nil, nil
+      IsControlKeyDown = function() return AGPS_CTRL end
+      IsShiftKeyDown = function() return AGPS_SHIFT end
       GetCursorPosition = function() return 300, 300 end
       ChatEdit_GetActiveWindow = function() return AGPS_BOX end
       ChatEdit_InsertLink = function(l) AGPS_LINK = l return true end
-      UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, x = x, y = y } end }
+      ChatFrame_OpenChat = function(l) AGPS_OPENED = l end
+      UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
       C_Map.SetUserWaypoint = function(p) AGPS_WP = p end
+      C_Map.ClearUserWaypoint = function() AGPS_WP = nil end
+      C_Map.HasUserWaypoint = function() return AGPS_WP ~= nil end
+      C_Map.GetUserWaypoint = function() return AGPS_WP end
       C_Map.GetUserWaypointHyperlink = function()
         return string.format("|cffffff00|Hworldmap:%d:%d:%d|h[Map Pin Location]|h|r", AGPS_WP.uiMapID,
-          math.floor(AGPS_WP.x * 10000), math.floor(AGPS_WP.y * 10000))
+          math.floor(AGPS_WP.position.x * 10000), math.floor(AGPS_WP.position.y * 10000))
       end
-      AGPS_BOX, AGPS_LINK, AGPS_WP = {}, nil, nil
     """)
-    zoom = st.zoom
-    try:
+    frame = lua.globals().AzerothGPSFrame
+
+    def pins():
         lua.execute("AGPS_T = AGPS_T + 1")
         G.Update()
+        return _shown(lua, lambda w: w.mapPin)
+
+    try:
+        ns.CharDB().mapPin = None
+        assert not pins()
         x, y, c = G.ClickWorld()
-        want = G.LocateWorld(c, x, y)[0]
-        frame = lua.globals().AzerothGPSFrame
-        frame._scripts.OnMouseDown(frame, "RightButton")
-        link = lua.eval("AGPS_LINK")
-        assert link and "worldmap:" in link and lua.eval("AGPS_WP").uiMapID == want
-        assert st.zoom == zoom  # (not zoomed out)
-        pin = ns.Import.ParseMapPin(link.split("|H")[1].split("|h")[0])
-        assert pin and abs(pin.x - x) < 5 and abs(pin.y - y) < 5  # (the link leads back to the spot clicked)
-        lua.execute("AGPS_BOX, AGPS_LINK = nil, nil")
-        frame._scripts.OnMouseDown(frame, "RightButton")
-        assert lua.eval("AGPS_LINK") is None
+        lua.execute("AGPS_CTRL = true")
+        frame._scripts.OnMouseDown(frame, "LeftButton")
+        frame._scripts.OnMouseUp(frame, "LeftButton")
+        lua.execute("AGPS_CTRL = false")
+        mp = I.MapPin()
+        assert mp and abs(mp.x - x) < 1 and abs(mp.y - y) < 1
+        wp = lua.eval("AGPS_WP")
+        assert wp and wp.uiMapID == G.LocateWorld(c, x, y)[0]  # (the game's waypoint too)
+        (b,) = pins()
+        assert "Shift-click" in b.note and "Ctrl-click" in b.note
+        # Shift-click: into the chat box being typed in, else a chat box opened with it
+        lua.execute("AGPS_SHIFT, AGPS_BOX = true, {}")
+        b._scripts.OnClick(b, "LeftButton")
+        assert "worldmap:" in lua.eval("AGPS_LINK")
+        lua.execute("AGPS_BOX = nil")
+        b._scripts.OnClick(b, "LeftButton")
+        assert "worldmap:" in lua.eval("AGPS_OPENED")
+        lua.execute("AGPS_SHIFT = false")
+        assert I.MapPin()  # (linking doesn't take it away)
+        # Ctrl-click on it: gone, from the game too
+        lua.execute("AGPS_CTRL = true")
+        b._scripts.OnClick(b, "LeftButton")
+        lua.execute("AGPS_CTRL = false")
+        assert I.MapPin() is None and lua.eval("AGPS_WP") is None and not pins()
+        # the game's waypoint set elsewhere (its world map, a link clicked): the pin follows; cleared: gone
+        lua.execute("AGPS_WP = UiMapPoint.CreateFromCoordinates(1411, 0.5, 0.5)")
+        I.OnUserWaypoint()
+        assert I.MapPin() and I.MapPin().cont == 1  # (Durotar: off this map, so not drawn here)
+        lua.execute("AGPS_WP = nil")
+        I.OnUserWaypoint()
+        assert I.MapPin() is None
+        # saved per character: at login, put back as the game's waypoint when the game has none
+        ns.CharDB().mapPin = lua.eval("{ cont = 1, x = -500, y = -4000 }")
+        I.RestoreMapPin()
+        assert lua.eval("AGPS_WP") is not None and I.MapPin().x == -500
+        # not in the shared map data
+        text = ns.Feedback.RoadsText() if ns.Feedback and ns.Feedback.RoadsText else ""
+        assert "-500" not in str(text)
     finally:
-        st.zoom = zoom
-        lua.execute("""IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink, UiMapPoint,
-          C_Map.SetUserWaypoint, C_Map.GetUserWaypointHyperlink = unpack(AGPS_OLD, 1, 7)""")
+        ns.CharDB().mapPin = None
+        lua.execute("""IsControlKeyDown, IsShiftKeyDown, GetCursorPosition, ChatEdit_GetActiveWindow, ChatEdit_InsertLink,
+          ChatFrame_OpenChat, UiMapPoint, C_Map.SetUserWaypoint, C_Map.ClearUserWaypoint, C_Map.HasUserWaypoint,
+          C_Map.GetUserWaypoint, C_Map.GetUserWaypointHyperlink = unpack(AGPS_OLD_MP, 1, 12)""")
 
 
 def test_a_boss_seen_dead_counts_without_encounter_or_combat_log_events(game):

@@ -40,6 +40,7 @@ The addon is going public, so every change must keep it policy-safe:
 - **Combat hides values (secret values):** e.g. `GetUnitSpeed`, and the quest-area hit tests
   (`C_Minimap.IsInsideQuestBlob` and friends). Quest-area tracing pauses in combat; check
   results with `ns.IsSecret` before testing them.
+- **Who died, in a dungeon:** other units' `UnitGUID` and `UnitName` are secret there (the private server, 2026-10-01: every dead unit checked, both hidden; `ns.db.killLog`), and the private server sends no encounter events. A boss's kill can't be told by itself: `ns.CheckDeadUnit` counts it where the values aren't hidden, and a right-click on its icon marks it by hand (`Nav.SetBossDead`).
 - **Party members' positions are given** (probed grouped): `UnitPosition("party1")` returns their
   world position, and the other player needs no addon (`GPS.party.io.members`, round class icons).
 - **Old button art is missing** (e.g. `UI-PlusButton-Up`): draw simple controls instead.

@@ -301,9 +301,13 @@ function ns.CheckDeadUnit(unit)
   local log = ns.db and ns.db.killLog
   if ns.db and not log then log = {} ns.db.killLog = log end
   if log then
-    log[#log + 1] = string.format("%s %s in %s: guid %s, name %s -> %d", date and date("%H:%M:%S") or "?", unit, tostring(lvl),
+    local what = string.format("%s in %s: guid %s, name %s -> %d", unit, tostring(lvl),
       gs and "hidden" or tostring(npc), nsec and "hidden" or tostring(name), n)
-    while #log > 20 do table.remove(log, 1) end
+    if what ~= ns.lastKillCheck then -- (not the same again: moving the mouse over a corpse)
+      ns.lastKillCheck = what
+      log[#log + 1] = (date and date("%H:%M:%S") or "?") .. " " .. what
+      while #log > 20 do table.remove(log, 1) end
+    end
   end
   if gs and nsec and not ns.killHint then -- (once a session: how to mark it by hand)
     ns.killHint = true

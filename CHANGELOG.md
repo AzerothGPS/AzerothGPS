@@ -37,7 +37,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 
 - **Pins.** Shift + left-click the map, **Create Pin**, give it a name and any icon in the game (the same list a macro uses). Where floors stack up (a dungeon, Undercity, a cave), pick its floor too. Double-click a pin for a stop, right-click to remove it. Pins are kept for all your characters and can go out with your map data. Options → Tools: **Pinning**; Options → Map: **Pins**.
 - **A bigger map shows more.** Resizing the window keeps the scale, so you see more of the world instead of the same bit bigger, and past 450 wide you can zoom out further too.
-- **Map pins in chat.** Click a map pin someone posted ("[Map Pin Location]") and it's a stop; to share a spot, open a chat box and Shift + right-click it on the map (Options → Routing: **Map pin links add stops**).
+- **Map pins, as on the game's world map.** Ctrl + left-click the map to drop the map pin (a diamond, the game's own waypoint), Shift + left-click it to link it in chat, Ctrl + left-click it again to remove it. It stays through reloads and logouts and isn't shared with your map data. Click a map pin someone posted in chat ("[Map Pin Location]") and it's a stop (Options → Routing: **Map pin links add stops**).
 - **Your group on the map,** as round class icons in their class color (Options → Map, Party members). They don't need AzerothGPS themselves.
 - **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the road ahead shows.
 - **Right-click inside a building** shows the outside first; the next right-click, the continent's map.

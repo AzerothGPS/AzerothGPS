@@ -131,29 +131,117 @@ function I.ChatBox()
   return box or nil
 end
 
--- Shift + right-click on the map with a chat box open (asked 2026-10-01): the game's map pin there, put
--- in the chat as the world map's own Shift-click on its pin does ("[Map Pin Location]": the link is the
--- player's waypoint's, so it's set there too). The spot on a zone's (or city's) map; not in a dungeon's.
--- Returns whether the link went in.
-function I.ShareMapPinAt(cont, x, y)
-  if not (I.ChatBox() and C_Map and C_Map.SetUserWaypoint and C_Map.GetUserWaypointHyperlink and UiMapPoint) then
+-- The map pin (asked 2026-10-01: as the game's world map does it): one diamond on the map, the game's own
+-- waypoint (C_Map's user waypoint) where the client has one. Ctrl + left-click on the map puts it there,
+-- Shift + left-click on it links it in chat, Ctrl + left-click on it takes it away. Not a custom pin: never
+-- in the shared map data. Kept per character (cdb.mapPin: { cont, x, y }, world), so it lasts over reloads
+-- and logouts, and put back as the game's waypoint at login when the game has none. The game's waypoint
+-- set or cleared elsewhere (its world map, a link clicked) moves the pin with it.
+local syncing -- (our own change of the game's waypoint: not taken back in from its event)
+
+function I.MapPin()
+  local cdb = ns.db and ns.CharDB and ns.CharDB()
+  return cdb and cdb.mapPin or nil
+end
+
+local function Redraw()
+  if ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
+end
+
+-- The spot as the game's map point: uiMapID, x, y (0-1), on a zone's (or city's) map; not in a dungeon's.
+local function MapPoint(cont, x, y)
+  local G = ns.GPS
+  if not (cont and cont < 20000 and G and G.LocateWorld) then return nil end
+  local mapID, _, u, v = G.LocateWorld(Geo.Base(cont), x, y)
+  return mapID, u, v
+end
+
+function I.SetMapPin(cont, x, y)
+  if not (cont and cont < 20000) then return false end
+  ns.CharDB().mapPin = { cont = Geo.Base(cont), x = x, y = y }
+  local mapID, u, v = MapPoint(cont, x, y)
+  if mapID and C_Map and C_Map.SetUserWaypoint and UiMapPoint then
+    syncing = true
+    pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(mapID, u, v))
+    syncing = false
+  end
+  Redraw()
+  return true
+end
+
+function I.ClearMapPin()
+  ns.CharDB().mapPin = nil
+  if C_Map and C_Map.ClearUserWaypoint then
+    syncing = true
+    pcall(C_Map.ClearUserWaypoint)
+    syncing = false
+  end
+  Redraw()
+end
+
+-- The pin's chat link ("[Map Pin Location]"): the game's for its waypoint, else made the same way.
+function I.MapPinLink()
+  local p = I.MapPin()
+  if not p then return nil end
+  if C_Map and C_Map.HasUserWaypoint and C_Map.GetUserWaypointHyperlink then
+    local ok, has = pcall(C_Map.HasUserWaypoint)
+    if ok and has then
+      local okL, link = pcall(C_Map.GetUserWaypointHyperlink)
+      if okL and link then return link end
+    end
+  end
+  local mapID, u, v = MapPoint(p.cont, p.x, p.y)
+  if not mapID then return nil end
+  return string.format("|cffffff00|Hworldmap:%d:%d:%d|h[Map Pin Location]|h|r", mapID,
+    math.floor(u * 10000 + 0.5), math.floor(v * 10000 + 0.5))
+end
+
+-- Shift + left-click on the pin: its link in the chat box being typed in, else a chat box opened with it.
+function I.LinkMapPin()
+  local link = I.MapPinLink()
+  if not link then return false end
+  if I.ChatBox() then
+    if ChatFrameUtil and ChatFrameUtil.InsertLink then
+      ChatFrameUtil.InsertLink(link)
+    elseif ChatEdit_InsertLink then
+      ChatEdit_InsertLink(link)
+    else
+      I.ChatBox():Insert(link)
+    end
+  elseif ChatFrameUtil and ChatFrameUtil.OpenChat then
+    ChatFrameUtil.OpenChat(link)
+  elseif ChatFrame_OpenChat then
+    ChatFrame_OpenChat(link)
+  else
     return false
   end
-  local G = ns.GPS
-  if not (cont and cont < 20000 and G and G.LocateWorld) then return false end
-  local mapID, _, u, v = G.LocateWorld(Geo.Base(cont), x, y)
-  if not mapID then return false end
-  local ok = pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(mapID, u, v))
-  local link = ok and C_Map.GetUserWaypointHyperlink()
-  if not link then return false end
-  if ChatFrameUtil and ChatFrameUtil.InsertLink then
-    ChatFrameUtil.InsertLink(link)
-  elseif ChatEdit_InsertLink then
-    ChatEdit_InsertLink(link)
-  else
-    I.ChatBox():Insert(link)
-  end
   return true
+end
+
+-- The game's waypoint changed (USER_WAYPOINT_UPDATED): the pin follows it.
+function I.OnUserWaypoint()
+  if syncing or not (C_Map and C_Map.HasUserWaypoint and ns.db) then return end
+  local cdb = ns.CharDB()
+  local ok, has = pcall(C_Map.HasUserWaypoint)
+  if not ok then return end
+  if has then
+    local okW, wp = pcall(C_Map.GetUserWaypoint)
+    local pos = okW and wp and wp.position
+    local x, y, cont
+    if pos and ns.Layers and ns.Layers.MapToWorld then x, y, cont = ns.Layers.MapToWorld(wp.uiMapID, pos.x, pos.y) end
+    if x and cont then cdb.mapPin = { cont = Geo.Base(cont), x = x, y = y } end
+  else
+    cdb.mapPin = nil
+  end
+  Redraw()
+end
+
+-- At login: the saved pin back as the game's waypoint, when the game has none.
+function I.RestoreMapPin()
+  local p = I.MapPin()
+  if not (p and C_Map and C_Map.HasUserWaypoint) then return end
+  local ok, has = pcall(C_Map.HasUserWaypoint)
+  if ok and not has then I.SetMapPin(p.cont, p.x, p.y) end
 end
 
 -- A map pin link clicked in chat (hooked on SetItemRef): a stop there (option acceptMapPins; asked
@@ -639,6 +727,15 @@ function I.Init()
       win.who:SetCursorPosition(0)
     end
   end)
+  -- the map pin: put back as the game's waypoint, then following the game's (I.MapPin)
+  local function Waypoints()
+    pcall(I.RestoreMapPin)
+    local wf = CreateFrame("Frame")
+    if pcall(wf.RegisterEvent, wf, "USER_WAYPOINT_UPDATED") then
+      wf:SetScript("OnEvent", function() pcall(I.OnUserWaypoint) end)
+    end
+  end
+  if C_Timer and C_Timer.After then C_Timer.After(3, Waypoints) else Waypoints() end
   -- routes shared by other players
   local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
   if register then

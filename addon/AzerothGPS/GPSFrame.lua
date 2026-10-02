@@ -1918,6 +1918,14 @@ local function PoiButton(i)
   end)
   b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   b:SetScript("OnClick", function(self, button)
+    if self.mapPin and button == "LeftButton" then -- (the map pin: Ctrl-click takes it away, Shift-click links it)
+      if IsControlKeyDown and IsControlKeyDown() then
+        ns.Import.ClearMapPin()
+      elseif IsShiftKeyDown and IsShiftKeyDown() then
+        ns.Import.LinkMapPin()
+      end
+      return
+    end
     if button == "RightButton" then -- (a pin: "Remove?"; a boss: defeated or not, by hand)
       if self.pin then G.AskRemove(self) end
       if self.bossKey and self.level then
@@ -2030,7 +2038,7 @@ local function DrawPois(pois, zoom)
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.z = p.z -- (a city place's height: its floor, where floors lie over each other)
       b.preview, b.cityMap, b.instance, b.exit, b.wing = nil, nil, nil, nil, nil
-      b.dock, b.pin, b.bossKey, b.dead = nil, nil, nil, nil
+      b.dock, b.pin, b.bossKey, b.dead, b.mapPin = nil, nil, nil, nil, nil
       if b.timer then b.timer:Hide() end
       if p[1] == 10 then -- a zeppelin's or boat's dock: its next arrival under it
         ns.SetIcon(b.icon, DOCK_ICON[p.kind])
@@ -2100,6 +2108,12 @@ local function DrawPois(pois, zoom)
         b.pin = p.pin
         b.note = (p.pin.shipped and "Shared pin" or "Your pin") .. (p.floor and (", " .. p.floor) or "")
         b:SetSize(18, 18)
+      elseif p[1] == 13 then -- the map pin (Import.MapPin): the game's waypoint diamond
+        ns.SetIcon(b.icon, "atlas:Waypoint-MapPin-Untracked", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3")
+        b.stopTex, b.questID = nil, nil
+        b.mapPin = true
+        b.note = "Shift-click: link it in chat\nCtrl-click: remove it"
+        b:SetSize(20, 20)
       elseif p[1] == 4 then -- map layer mark (Layers.lua)
         ns.SetIcon(b.icon, p.icon, ns.Layers and ns.Layers.ICON.objectiveFallback)
         b.icon:SetVertexColor(p.r or 1, p.g or 1, p.b or 1)
@@ -2746,6 +2760,17 @@ function G.Update()
   -- own; else the continent in view and the levels drawn in it), faint on another floor than the one
   -- shown or picked
   local function AddPins(pois, level)
+    -- the map pin (Import.MapPin: the game's waypoint, Ctrl + left-click), on a continent's or zone's map
+    local mp = not level and ns.Import and ns.Import.MapPin and ns.Import.MapPin()
+    local mx_, my_
+    if mp then mx_, my_ = Geo.ToContinent(mp.cont, mp.x, mp.y, viewCont) end
+    if mx_ then
+      local dx, dy = Geo.ScreenOffset(cx, cy, mx_, my_)
+      dx, dy = Geo.Rotate(dx * s, dy * s, rot)
+      if math.abs(dx) <= half and math.abs(dy) <= half then
+        pois[#pois + 1] = { 13, dx, dy, "Map Pin Location", mp.x, mp.y, level = mp.cont }
+      end
+    end
     if st.showCustomPins == false or not (ns.Pins and ns.db) then return end
     for _, pin in ipairs(ns.Pins.All()) do
       local x, y
@@ -5026,11 +5051,6 @@ function G.Init()
       end
       return
     end
-    -- Shift + right-click with a chat box open: a map pin there, its link in the chat (Import.ShareMapPinAt)
-    if button == "RightButton" and IsShiftKeyDown() and ns.Import and ns.Import.ChatBox() then
-      local x, y, c = G.ClickWorld()
-      if x and ns.Import.ShareMapPinAt(c, x, y) then return end
-    end
     if button == "RightButton" then
       if G.IsMapStyle(G.Style()) then
         G.ZoomOut()
@@ -5091,7 +5111,12 @@ function G.Init()
       local now = GetTime()
       local m = browse and ns.Maps[browse]
       local worldMap = m and m.type <= 2 -- a click there opens a zone instead
-      if not worldMap and lastClick and now - lastClick.t <= DOUBLE_CLICK
+      -- Ctrl + left-click: the map pin there (Import.SetMapPin), as on the game's world map
+      local px_, py_, pc_
+      if IsControlKeyDown and IsControlKeyDown() and not G.Held() then px_, py_, pc_ = G.ClickWorld() end
+      if px_ and ns.Import and ns.Import.SetMapPin(pc_, px_, py_) then
+        lastClick = nil
+      elseif not worldMap and lastClick and now - lastClick.t <= DOUBLE_CLICK
           and (dx - lastClick.x) ^ 2 + (dy - lastClick.y) ^ 2 <= 100 then
         lastClick = nil
         G.AddPending(dx, dy)
