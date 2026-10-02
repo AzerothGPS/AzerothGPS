@@ -1436,10 +1436,12 @@ def test_a_stop_picked_in_a_dungeons_map_goes_to_its_entrance(game):
         G.AddStopAt(boss[3], boss[4], boss[1], 20036, r"Interface\Icons\Spell_Shadow_Skull", boss[5])  # (its icon)
         G.AddStopAt(boss[3] + 20.0, boss[4])  # (a double-click on the map there)
         G.ConfirmRoute()
-        way = ns.Instances[20036].entrances[1]
+        # (the Deadmines from outside: the Defias Hideout's way in, G.ENTRANCE_VIA; asked 2026-10-01)
+        hideout = next(c for c in ns.Caves[0].values() if c[2] == "cave35530")
+        mouths = [(hideout[5][k], hideout[5][k + 1]) for k in range(1, len(hideout[5]), 2)]
         assert len(N.stops) == 2
         for d in N.stops.values():
-            assert (d.cont, d.x, d.y, d.name) == (way[1], way[2], way[3], "Deadmines") and d.z is None
+            assert d.cont == 0 and (d.x, d.y) in mouths and "Defias Hideout" in d.name and d.z is None
         _frames(lua, 3, fps=10)
         assert N.route is not None and N.Status(2254.0, 293.0, 0) != N.WORKING_TEXT  # (worked out)
     finally:
@@ -1740,3 +1742,33 @@ def test_a_boss_seen_dead_counts_without_encounter_or_combat_log_events(game):
     finally:
         lua.execute("GetInstanceInfo, time, UnitExists, UnitIsDead, UnitGUID, UnitName = unpack(AGPS_OLD_U, 1, 6)")
         ns.CharDB().bossKills = lua.table()
+
+
+def test_a_stop_at_the_deadmines_from_outside_goes_to_the_defias_hideouts_way_in(game):
+    # (asked 2026-10-01) routing to the Deadmines from outside: the stop is the Defias Hideout's way in (the
+    # house in Moonbrook), and the hideout's map takes it from there; from down in the hideout, the door
+    lua, ns = game
+    G = ns.GPS
+    door = next(e for e in ns.Instances[20036].entrances.values() if e[1] == 0)
+    hideout = next(c for c in ns.Caves[0].values() if c[2] == "cave35530")
+    mouths = [(hideout[5][k], hideout[5][k + 1]) for k in range(1, len(hideout[5]), 2)]
+    via = G.ApproachEntrance(0, door[2], door[3], 0, 2254.0, 293.0)  # (from Brill)
+    assert via and (via.x, via.y) in mouths and "Defias Hideout" in via.name and via.cont == 0
+    assert G.ApproachEntrance(0, door[2] + 200, door[3], 0, 2254.0, 293.0) is None  # (not the door: as it is)
+    # down in the hideout already: the door
+    real = ns.Nav.Indoors
+    ns.Nav.Indoors = lua.eval("function() return true end")
+    try:
+        assert G.ApproachEntrance(0, door[2], door[3], 0, door[2] + 3.0, door[3] + 3.0) is None
+    finally:
+        ns.Nav.Indoors = real
+    # a stop made at the door (its icon double-clicked) from outside, onto a route: at the way in
+    N = ns.Nav
+    N.Clear()
+    N.SetStops(lua.eval("{ { x = 2300, y = 300, cont = 0, name = 'Brill road' } }"), False, "red")
+    try:
+        assert G.AddStopAt(door[2], door[3], "Deadmines", 0)
+        added = [N.stops[i] for i in range(1, len(N.stops) + 1) if N.stops[i].name != "Brill road"]
+        assert len(added) == 1 and (added[0].x, added[0].y) in mouths
+    finally:
+        N.Clear()

@@ -31,7 +31,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - **A stop picked in a dungeon's map** (a spot, a boss or a pin) goes on the dungeon's entrance out in the world, since that's where you're actually heading.
 - **Blackwing Lair** (through Upper Blackrock Spire) and **WoW Forever's own dungeons and raids**: their maps, bosses and entrances. Entrances we don't know yet are learned when you go in; share them with **Copy Map Data...**.
 - **Cave and mine entrances on the map** (double-click one for a stop), in the map menu's new **Caves/Dungeons/Raids** group.
-- **The Defias Hideout** under Moonbrook has its roads, down the spiral stairs and the ramps to the Deadmines' door, and the dungeon's entrance shows on its map.
+- **The Defias Hideout** under Moonbrook has its roads, down the spiral stairs and the ramps to the Deadmines' door, and the dungeon's entrance shows on its map. A route to the Deadmines from outside takes you to the Hideout's way in, and its map shows the way down from there.
 
 **The map**
 

@@ -3756,6 +3756,42 @@ function G.InstanceStopEntrance(lvl, x, y, pcont, px, py)
   return best and { cont = best[1], x = best[2], y = best[3], name = info.name .. (best[7] and (": " .. best[7]) or "") } or nil
 end
 
+-- Dungeons reached through a cave of their own on the continent (asked 2026-10-01: the Deadmines, through the
+-- Defias Hideout): a stop at the dungeon's way in, made from outside that cave, is the cave's way in instead
+-- (Data/Caves.lua's key; its opening nearest the player), and the cave's map takes it from there. From down
+-- in the cave, the dungeon's door.
+G.ENTRANCE_VIA = { [20036] = "cave35530" }
+G.ENTRANCE_NEAR_YD = 15 -- a stop this near a dungeon's way in is one at it
+function G.ApproachEntrance(stopCont, x, y, pcont, px, py)
+  local base = Geo.Base(stopCont or 0)
+  for lvl, key in pairs(G.ENTRANCE_VIA) do
+    local info = ns.Instances and ns.Instances[lvl]
+    for _, e in ipairs(info and info.entrances or {}) do
+      if e[1] == base and (e[2] - x) ^ 2 + (e[3] - y) ^ 2 <= G.ENTRANCE_NEAR_YD ^ 2 then
+        -- (the player down in that cave already: the door)
+        local P = ns.Passability
+        if px and pcont and Geo.Base(pcont) == base and P and P.OverlayRaw then
+          local v, o = P.OverlayRaw(base, px, py)
+          if o and o == (ns.Terrain and ns.Terrain[key]) and (v == 0 or (v == 3 and ns.Nav.Indoors and ns.Nav.Indoors())) then
+            return nil
+          end
+        end
+        for _, c in ipairs(ns.Caves and ns.Caves[base] or {}) do
+          if c[2] == key and type(c[5]) == "table" and c[5][1] then
+            local w, best, bd = c[5], nil, nil
+            for k = 1, #w - 1, 2 do
+              local d = px and Geo.Base(pcont or base) == base and ((w[k] - px) ^ 2 + (w[k + 1] - py) ^ 2) or k
+              if not bd or d < bd then best, bd = k, d end
+            end
+            return { cont = base, x = w[best], y = w[best + 1], name = c[1] .. " (way to " .. info.name .. ")" }
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
 -- A dungeon's extent: x0, x1, y0, y1 (its floor grid, else its map's minimap tiles: WoW
 -- Forever's own dungeons, their map only), or nil.
 function G.InstanceBounds(lvl)
@@ -4328,6 +4364,12 @@ function G.AddStopAt(x, y, name, stopCont, tex, z, exact)
     end
     x, y, name, tex, z = e.x, e.y, e.name, INSTANCE_ICON, nil
     sc = ns.Nav.StopLevel and ns.Nav.StopLevel(e.cont, x, y) or e.cont
+  end
+  -- (a dungeon reached through a cave of its own, from outside it: the cave's way in, G.ENTRANCE_VIA)
+  local via = G.ApproachEntrance(sc, x, y, cont, px, py)
+  if via then
+    x, y, name, z = via.x, via.y, via.name, nil
+    sc = ns.Nav.StopLevel and ns.Nav.StopLevel(via.cont, x, y) or via.cont
   end
   -- (`z`: its height, the game's, when known: a city place's, its floor where floors lie over each other)
   local stop = { x = x, y = y, cont = sc, name = name, icon = ns.Nav.NextMarker(ns.Nav.stops, pending), tex = tex, z = z }
