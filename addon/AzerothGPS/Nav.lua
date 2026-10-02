@@ -1451,6 +1451,18 @@ function N.BossKilled(lvl, npc, encounter, name)
   return n
 end
 
+-- A boss of instance level `lvl` (its key, N.BossKey) marked defeated or not by hand (right-click its icon on the
+-- dungeon's map): the game may not tell addons who died (asked 2026-10-01: Rhahk'Zor dead, looted, still "Next").
+function N.SetBossDead(lvl, key, dead)
+  local k = Kills()
+  local now = time and time() or 0
+  if k.level ~= lvl or (k.at and now - k.at > N.BOSS_KILL_HOURS * 3600) then
+    k.level, k.npcs = lvl, {}
+  end
+  k.at = now
+  k.npcs[key] = dead and true or nil
+end
+
 -- Whether boss stop `d` ({ cont = its level, boss = its NPC entry }) is dead.
 function N.BossDead(d)
   local k = Kills()

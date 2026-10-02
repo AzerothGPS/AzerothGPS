@@ -293,10 +293,22 @@ function ns.CheckDeadUnit(unit)
   local okD, dead = pcall(UnitIsDead, unit)
   if not (okE and okD) or ns.IsSecret(exists) or ns.IsSecret(dead) or not (exists and dead) then return 0 end
   local okG, guid = pcall(UnitGUID, unit)
-  if not okG or ns.IsSecret(guid) then return 0 end
   local okN, name = pcall(UnitName, unit)
-  if not okN or ns.IsSecret(name) then name = nil end
-  local n = N.BossKilled(lvl, N.NpcOf(guid), nil, name)
+  local gs, nsec = not okG or ns.IsSecret(guid), not okN or ns.IsSecret(name)
+  local npc = not gs and N.NpcOf(guid) or nil
+  local n = (npc or not nsec) and N.BossKilled(lvl, npc, nil, not nsec and name or nil) or 0
+  -- (what the game gave, the last 20, saved: /reload, then the saved file says why a kill didn't count)
+  local log = ns.db and ns.db.killLog
+  if ns.db and not log then log = {} ns.db.killLog = log end
+  if log then
+    log[#log + 1] = string.format("%s %s in %s: guid %s, name %s -> %d", date and date("%H:%M:%S") or "?", unit, tostring(lvl),
+      gs and "hidden" or tostring(npc), nsec and "hidden" or tostring(name), n)
+    while #log > 20 do table.remove(log, 1) end
+  end
+  if gs and nsec and not ns.killHint then -- (once a session: how to mark it by hand)
+    ns.killHint = true
+    if ns.Print then ns.Print("the game hides who died here, so a boss's kill may not count by itself: right-click it on the dungeon's map to mark it defeated.") end
+  end
   if n > 0 and ns.GPS and ns.GPS.Redraw then ns.GPS.Redraw() end
   return n
 end

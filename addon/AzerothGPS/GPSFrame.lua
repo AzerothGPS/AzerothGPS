@@ -1918,8 +1918,12 @@ local function PoiButton(i)
   end)
   b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   b:SetScript("OnClick", function(self, button)
-    if button == "RightButton" then -- (a pin: "Remove?")
+    if button == "RightButton" then -- (a pin: "Remove?"; a boss: defeated or not, by hand)
       if self.pin then G.AskRemove(self) end
+      if self.bossKey and self.level then
+        ns.Nav.SetBossDead(self.level, self.bossKey, not self.dead)
+        G.Redraw()
+      end
       return
     end
     if self.cityMap then G.ShowCity(self.cityMap) end -- (a capital on a continent's map)
@@ -2026,7 +2030,7 @@ local function DrawPois(pois, zoom)
       b.level = p.level -- (a flight master down in a city: its stop is on the city's level)
       b.z = p.z -- (a city place's height: its floor, where floors lie over each other)
       b.preview, b.cityMap, b.instance, b.exit, b.wing = nil, nil, nil, nil, nil
-      b.dock, b.pin = nil, nil
+      b.dock, b.pin, b.bossKey, b.dead = nil, nil, nil, nil
       if b.timer then b.timer:Hide() end
       if p[1] == 10 then -- a zeppelin's or boat's dock: its next arrival under it
         ns.SetIcon(b.icon, DOCK_ICON[p.kind])
@@ -2059,7 +2063,9 @@ local function DrawPois(pois, zoom)
       elseif p[1] == 7 then -- a boss, in a dungeon's map
         ns.SetIcon(b.icon, BOSS_ICON)
         b.stopTex, b.questID = BOSS_ICON, nil
-        b.note = p.dead and "|cff40ff40Defeated|r" or p.next and "|cffffd100Next|r" or p.optional and "Optional" or nil
+        b.note = (p.dead and "|cff40ff40Defeated|r" or p.next and "|cffffd100Next|r" or p.optional and "Optional" or "")
+          .. (p.dead and "\nRight-click: not defeated after all" or "\nRight-click: mark defeated")
+        b.bossKey, b.dead = p.bossKey, p.dead -- (right-click: its kill marked by hand, Nav.SetBossDead)
         b:SetSize(p.next and 22 or 18, p.next and 22 or 18)
       elseif p[1] == 9 then -- stairs to another floor (a dungeon's), up or down
         ns.SetIcon(b.icon, p.up and "atlas:poi-door-up" or "atlas:poi-door-down",
@@ -2833,7 +2839,7 @@ function G.Update()
       local off = instBand and b[5] and (b[5] < instBand[1] - G.FLOOR_HEAD or b[5] > instBand[2] + G.FLOOR_HEAD)
       local dead = ns.Nav.BossDead({ cont = inst, boss = ns.Nav.BossKey(b) })
       add({ 7, 0, 0, (b.order and (b.order .. ". ") or "") .. b[1], b[3], b[4], level = inst, optional = b.optional,
-        dim = off or dead, dead = dead, next = nextBoss == b })
+        dim = off or dead, dead = dead, next = nextBoss == b, bossKey = ns.Nav.BossKey(b) })
       end
     end
     AddPins(pois, inst)

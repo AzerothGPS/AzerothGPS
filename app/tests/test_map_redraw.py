@@ -1772,3 +1772,46 @@ def test_a_stop_at_the_deadmines_from_outside_goes_to_the_defias_hideouts_way_in
         assert len(added) == 1 and (added[0].x, added[0].y) in mouths
     finally:
         N.Clear()
+
+
+def test_a_boss_is_marked_defeated_by_hand_with_a_right_click(game):
+    # (reported 2026-10-01: Rhahk'Zor dead and looted, still "Next") the game may hide who died from addons:
+    # a right-click on a boss's icon in the dungeon's map marks it defeated, and again, not; and a kill check
+    # that only gets hidden values says so in the saved log (and counts nothing)
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    DM = 20036
+    try:
+        G.ShowInstance(DM)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        (b,) = _shown(lua, lambda w: w.bossKey == 644)
+        assert not N.BossDead(lua.table(cont=DM, boss=644)) and "mark defeated" in b.note
+        b._scripts.OnClick(b, "RightButton")
+        assert N.BossDead(lua.table(cont=DM, boss=644))
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        (b,) = _shown(lua, lambda w: w.bossKey == 644)
+        assert b.dead and "not defeated" in b.note
+        b._scripts.OnClick(b, "RightButton")
+        assert not N.BossDead(lua.table(cont=DM, boss=644))
+        # hidden values: nothing counted, and the log says why
+        lua.execute("""
+          AGPS_OLD_U = { GetInstanceInfo, UnitExists, UnitIsDead, UnitGUID, UnitName, issecretvalue }
+          GetInstanceInfo = function() return "Deadmines", "party", 1, "Normal", 5, 0, false, 36 end
+          UnitExists = function() return true end
+          UnitIsDead = function() return true end
+          AGPS_SECRET = {}
+          UnitGUID = function() return AGPS_SECRET end
+          UnitName = function() return AGPS_SECRET end
+          issecretvalue = function(v) return v == AGPS_SECRET end
+        """)
+        try:
+            assert ns.CheckDeadUnit("target") == 0
+            log = ns.db.killLog
+            assert "guid hidden, name hidden -> 0" in log[len(log)]
+        finally:
+            lua.execute("GetInstanceInfo, UnitExists, UnitIsDead, UnitGUID, UnitName, issecretvalue = unpack(AGPS_OLD_U, 1, 6)")
+    finally:
+        ns.CharDB().bossKills = lua.table()
+        G.Follow()
