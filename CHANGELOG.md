@@ -43,6 +43,7 @@ For WoW Forever client 1.60.1 (interface 16001). This one brings new data files,
 - **Your group on the map,** as round class icons in their class color (Options → Map, Party members). They don't need AzerothGPS themselves.
 - **Heading-up:** with "Turn the map with me" on, your arrow sits low on the map, so more of the road ahead shows.
 - **Right-click inside a building** shows the outside first; the next right-click, the continent's map.
+- **Right-click in Undercity or Ironforge** shows the terrain around the city, zoomed out, and you can drag and zoom it anywhere (it used to jump to the continent's map, and the land past the city stayed black). Recenter for the city's map again.
 - **The capitals' districts** are named on the map when zoomed in, like Undercity's: Stormwind's Trade District and Old Town, Orgrimmar's Valleys and The Drag, Ironforge's Wards, Thunder Bluff's Rises, Darnassus's Terraces.
 - **Zephras Isle on the world map,** as a framed picture at the top; click it to open the island. On a continent's map, the zone under your pointer lights up.
 

@@ -2556,8 +2556,11 @@ function G.Update()
   -- city's map again as it comes back to the player; it zoomed out over the city's map into the black,
   -- asked 2026-10-01)
   local touringOut = tour and zoom > G.CITY_MAX_ZOOM
+  -- (right-clicked out of the city's map, G.LandView: the land, dragged and zoomed anywhere, until
+  -- following the player again; a video 2026-10-02: down in Undercity, the land around was black)
+  local landView = free and free.land
   if st.interiors and not inst and not G.IsMapStyle(G.Style()) and not browse and here and (onMe or downCity or overCity)
-      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) and not touringOut then
+      and (zoom <= G.INTERIOR_MAX_ZOOM or indoors or inCity) and not touringOut and not landView then
     local lvl = ns.Nav.PlayerLevel(cont)
     local city = ns.CityLevels and ns.CityLevels[lvl]
     local cityZ = city and ns.Nav.CityHeight(lvl, px, py)
@@ -3642,7 +3645,25 @@ function G.KeepOutside(outside, building)
   return outside
 end
 
+-- Out of a city's map (Undercity down below, Ironforge's halls, a capital's), right-click: the land's
+-- terrain around it, zoomed out (asked 2026-10-02, a video: it went to the continent's map art, and the
+-- land past the city stayed black). Dragged or zoomed, still the land (`free.land`), until following again.
+function G.LandView()
+  local c = Geo.Base(view.cont or select(3, Geo.PlayerWorld()))
+  free = { x = view.x, y = view.y, rot = 0, cross = true, cont = c, land = true }
+  G.shownInside = nil
+  S().zoom = math.max(MIN_ZOOM, math.min(G.MaxZoom(), G.LAND_ZOOM * G.ZoomScale()))
+  if recenter then recenter:Show() end
+  elapsed = 1
+end
+G.LAND_ZOOM = 2000 -- yards from the middle to the edge (at the default map size)
+
 function G.TerrainZoomOut()
+  -- a city's map shown: the land around it (the continent's map next)
+  if not browse and G.cityMap and not (free and (free.instance or free.city)) then
+    G.LandView()
+    return
+  end
   -- in a building, its inside map shown: first the outside view there (the continent's map next)
   if not browse and G.shownInside then
     G.outsideOf, G.shownInside = G.shownInside, nil
@@ -5198,7 +5219,8 @@ function G.Init()
         local mx, my = GetCursorPosition()
         tour = nil
         lastActivity = GetTime()
-        drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false, pan = true }
+        drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false, pan = true,
+          land = (free ~= nil and not free.city and not free.instance and not G.cityMap) or nil }
       end
       return
     end
@@ -5230,7 +5252,8 @@ function G.Init()
     local mx, my = GetCursorPosition()
     tour = nil
     lastActivity = GetTime()
-    drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false }
+    drag = { cx = mx, cy = my, x = view.x, y = view.y, rot = view.rot, s = view.s, moved = false,
+      land = (free ~= nil and not free.city and not free.instance and not G.cityMap) or nil } -- (looking at the land: dragged, still the land)
   end)
   frame:SetScript("OnMouseUp", function(f, button)
     if button == "LeftButton" and G.pinClick then -- (Shift + left-click: "Create Pin", unless it was a drag)
@@ -6387,7 +6410,9 @@ function G.Init()
       if drag.moved or dx * dx + dy * dy > 9 then -- ignore clicks and tiny jitters
         drag.moved = true
         local x, y = G.PanCenter(drag.x, drag.y, dx, dy, drag.rot, drag.s)
-        free = { x = x, y = y, rot = drag.rot, cross = true, cont = view.cont, interior = free and free.interior, pan = true }
+        -- (a drag from the land keeps showing the land, G.LandView: only one from the city's map keeps the city's)
+        free = { x = x, y = y, rot = drag.rot, cross = true, cont = view.cont, interior = free and free.interior, pan = true,
+          land = (free and free.land) or drag.land or nil }
         recenter:Show()
         elapsed = 1 -- redraw this frame
       end
@@ -6607,7 +6632,7 @@ end
 function G.SaveView()
   if not free then return nil end
   local from = openedFrom
-  return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont, city = free.city,
+  return { x = free.x, y = free.y, rot = free.rot, cross = free.cross, cont = free.cont, city = free.city, land = free.land,
     instance = free.instance, wing = free.wing, zoom = ns.settings and S().zoom or nil, -- (a dungeon's map, a wing's, and its floor stepped to)
     floor = free.instance and floorInst == free.instance and floorSel or nil,
     browse = browse, browseZoom = browseZoom, browseCont = browseCont, fromTerrain = fromTerrain,
@@ -6636,7 +6661,7 @@ function G.ApplyView(v)
   else
     browse, browseZoom, browseCont, browseBounds = nil, nil, nil, nil
   end
-  free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont, city = v.city,
+  free = { x = v.x, y = v.y, rot = v.rot or 0, cross = v.cross, cont = v.cont, city = v.city, land = v.land,
     interior = v.city and G.CityInterior(v.city) or nil, instance = v.instance, wing = v.instance and v.wing or nil }
   if v.zoom and ns.settings then S().zoom = v.zoom end
   if v.instance then floorInst, floorSel = v.instance, v.floor end

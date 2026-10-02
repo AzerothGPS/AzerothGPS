@@ -1451,6 +1451,71 @@ def test_dragging_in_a_city_keeps_its_map_until_right_click(game):
         G.Follow()
 
 
+def test_right_click_in_a_city_shows_the_land_to_look_around(game):
+    # (asked 2026-10-02, a video: down in Undercity, right-click went to the continent's map art, and the land
+    # past the city stayed black when dragged or zoomed; Ironforge the same) in a city's map with the terrain
+    # style, right-click: the land's terrain around it, zoomed out; dragged and zoomed in anywhere, the land
+    # (not the city's map over a black land); following again, the city's map
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    zoom = st.zoom
+    frame = lua.globals().AzerothGPSFrame
+    lua.execute("AGPS_MAP_REAL = AGPS_MAP AGPS_OLD_CURSOR = GetCursorPosition AGPS_CX, AGPS_CY = 300, 300 "
+                "GetCursorPosition = function() return AGPS_CX, AGPS_CY end "
+                "AGPS_ZONE_REAL = GetMinimapZoneText AGPS_T = AGPS_T + 1000")  # (past the player level's cache time)
+
+    def tick():
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+
+    def drag(dx):
+        frame._scripts.OnMouseDown(frame, "LeftButton")
+        lua.execute(f"AGPS_CX = 300 + {dx}")
+        frame._scripts.OnUpdate(frame, 1)
+        frame._scripts.OnMouseUp(frame, "LeftButton")
+        lua.execute("AGPS_CX = 300")
+        tick()
+
+    cities = (  # (down in Undercity: its level; Ironforge's Great Forge: a capital in a mountain)
+        ("AGPS_MAP = 1458 AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 1593.5, 157.3, 0, nil", (1593.5, 157.3)),
+        ("AGPS_MAP = AGPS_MAP_REAL AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = -4840.0, -1100.0, 0, 501.7 "
+         "GetMinimapZoneText = function() return 'The Great Forge' end", (-4840.0, -1100.0)),
+    )
+    try:
+        for setup, (px, py) in cities:
+            lua.execute(setup)
+            G.Follow()
+            tick()
+            assert G.inside is not None and G.cityMap, setup
+            frame._scripts.OnMouseDown(frame, "RightButton")
+            tick()
+            assert G.inside is None and G.IsFree() and not G.cityMap, setup  # (the land)
+            assert G.SaveView().browse is None and G.SaveView().land  # (the terrain, not the continent's map art)
+            assert st.zoom > G.CITY_MAX_ZOOM and st.zoom >= min(G.MaxZoom(), G.LAND_ZOOM) - 1
+            assert G.ViewState()[2] == 0  # (the continent's land, not the city's level)
+            drag(-150)  # (looked around: still the land)
+            assert G.inside is None and G.SaveView().land, setup
+            for _ in range(8):  # (zoomed in: the land, not the city's map over black)
+                G.WheelZoom(0.6)
+                tick()
+            assert st.zoom <= G.INTERIOR_MAX_ZOOM and G.inside is None, setup
+            G.Follow()  # (following again: the city's map)
+            tick()
+            assert G.inside is not None and G.cityMap, setup
+            frame._scripts.OnMouseDown(frame, "RightButton")  # (and once more from the land: the continent's map)
+            tick()
+            frame._scripts.OnMouseDown(frame, "RightButton")
+            tick()
+            assert G.SaveView().browse is not None, setup
+            G.Follow()
+            tick()
+    finally:
+        st.zoom = zoom
+        lua.execute("AGPS_MAP = AGPS_MAP_REAL GetCursorPosition = AGPS_OLD_CURSOR GetMinimapZoneText = AGPS_ZONE_REAL "
+                    "AGPS_POS[1], AGPS_POS[2], AGPS_POS[3], AGPS_POS[4] = 2254.0, 293.0, 0, nil AGPS_T = AGPS_T + 1")
+        G.Follow()
+
+
 def test_a_stop_picked_in_a_dungeons_map_goes_to_its_entrance(game):
     # (asked: a stop picked in a dungeon's map kept "Working out the route..." going) a spot, a boss or a pin
     # in a dungeon's or raid's map: a stop at its entrance's icon on the continent instead; of a dungeon's

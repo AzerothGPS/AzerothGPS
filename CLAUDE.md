@@ -99,7 +99,9 @@ The addon is going public, so every change must keep it policy-safe:
     capital's own cells, down in an underground city) its inside map shows at any zoom, and the wheel
     zooms out no further than `CITY_MAX_ZOOM` (`G.cityMap`; zoomed further out on the way in, zoomed
     in to it): right-click for the land around. The view dragged anywhere keeps it (the drag's `free.pan`: dragged off
-    the city it flipped to the land); only right-click shows the land. The title (the coordinates line's place) names the
+    the city it flipped to the land); only right-click shows the land: `G.LandView`, the land's terrain zoomed out to
+    `LAND_ZOOM` (`free.land`: dragged and zoomed anywhere, still the land, never the city's map over a black land; until
+    following again; a drag starting on the land keeps `land`). Right-click again: the continent's map. The title (the coordinates line's place) names the
     city there (`G.CityMapAt`: the ground's zone is the land's, Dun Morogh over Ironforge).
   - `Layers.lua`: quests, quest areas, herbs and ore (gathered, hovered on the minimap,
     right-clicked without the profession, imported; unconfirmed until gathered), and city
