@@ -1898,3 +1898,30 @@ def test_in_a_dungeon_a_double_click_marks_where_you_are(game):
         lua.execute("UnitPosition, GetInstanceInfo, UnitClass, CLASS_ICON_TCOORDS = unpack(AGPS_OLD_D, 1, 4)")
         ns.CharDB().youHere = None
         G.Follow()
+
+
+def test_a_flights_clock_starts_without_the_control_events(game):
+    # (reported 2026-10-01, a video: "lands in 3m 00s" for a whole minute) this client doesn't fire
+    # PLAYER_CONTROL_LOST/GAINED for flights, so the flight's start was "now" at every redraw: the clock starts
+    # the first time the flight is seen, and ends the first time the player's seen off it
+    lua, ns = game
+    T = ns.Taxi
+    lua.execute("""
+      AGPS_OLD_T = { UnitOnTaxi, GetTime }
+      AGPS_TAXI, AGPS_NOW = true, 1000
+      UnitOnTaxi = function() return AGPS_TAXI end
+      GetTime = function() return AGPS_NOW end
+    """)
+    try:
+        f = T.Current()
+        assert f.start == 1000
+        lua.execute("AGPS_NOW = 1060")
+        assert T.Current().start == 1000  # (60 s into the flight: still from take-off)
+        lua.execute("AGPS_TAXI = false")
+        assert T.Current() is None  # (landed)
+        lua.execute("AGPS_TAXI, AGPS_NOW = true, 2000")
+        assert T.Current().start == 2000  # (the next flight: its own clock)
+    finally:
+        lua.execute("AGPS_TAXI = false")
+        T.Current()
+        lua.execute("UnitOnTaxi, GetTime = unpack(AGPS_OLD_T, 1, 2)")

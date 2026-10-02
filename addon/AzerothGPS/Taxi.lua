@@ -72,12 +72,21 @@ end
 -- The flight the player is on: { from, to (flight master names, as the flight map shows
 -- them), start (GetTime) }, or nil when not flying. `to` is unknown when the flight was
 -- picked before this session (e.g. a /reload in the air).
+local OnTaxiChanged
 function T.Current()
-  if not (UnitOnTaxi and UnitOnTaxi("player")) then return nil end
-  return { from = pending and pending.from, to = pending and pending.to, start = flightStart or GetTime() }
+  local on = UnitOnTaxi and UnitOnTaxi("player")
+  if not on then
+    if flightStart and OnTaxiChanged then pcall(OnTaxiChanged) end -- (landed: its time recorded)
+    return nil
+  end
+  -- (taken off: the clock starts now if the control events didn't start it. This client doesn't fire
+  -- them for flights, so the start was "now" at every redraw and the countdown sat at the whole flight's
+  -- time, reported 2026-10-01; and no flight's time was ever learned)
+  if not flightStart then flightStart = GetTime() end
+  return { from = pending and pending.from, to = pending and pending.to, start = flightStart }
 end
 
-local function OnTaxiChanged()
+OnTaxiChanged = function()
   local onTaxi = UnitOnTaxi("player")
   if onTaxi and not flightStart then
     flightStart = GetTime()
