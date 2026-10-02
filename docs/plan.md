@@ -90,6 +90,22 @@ counts as arriving at that stop.
    Blackfathom Deeps, the Stockade).
 3. Addon side, then the rest of the dungeons and the raids.
 
+## 1.1.1: Less memory
+
+Seen 2026-10-02 (the game menu's AddOn Memory): AzerothGPS at 193 MB, most of the addon memory in use. Mostly
+its data (roads, terrain, caves, capitals, cities, instances, buildings, terrain blocks), loaded whole at
+login for every continent.
+
+1. **Measure first.** Each data file's share (`collectgarbage("count")` before and after each one loads, in
+   the harness and in game with `/agps debug`), and what's built at runtime (road graphs per continent,
+   walk grids, the caches: `SegCost`, `NodeLinks`, interior and tile lookups). A table of the biggest.
+2. **Then cut, biggest first.** Likely candidates: keep only the continent the player is on built (drop
+   the others' graphs and caches when they leave it); pack big arrays as strings decoded per row on use
+   (the way `Data/Zones.lua` already runs rows) instead of tables of tables; share repeated strings;
+   cap or expire the caches; build dungeons' data only when their map opens or the player's inside.
+3. **Guard it.** A test with a memory budget per data file and for a session's caches after a long
+   route sweep, so it can't creep back up; the Performance page shows the addon's memory.
+
 ## 1.0.8: More dungeons and raids
 
 Done so far: Blackwing Lair (in through Blackrock Spire); WoW Forever's Karazhan Crypts, Demon
