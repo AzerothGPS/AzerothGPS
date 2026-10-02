@@ -1167,14 +1167,11 @@ function N.FlightLeft(from, to, px, py, L)
   return left, path
 end
 
-function N.FlyingRoute(px, py, cont, walk, offroad, f)
-  local L = MasterNamed(f.to)
-  -- (a city's level counts as its continent: the bat out of Undercity flies through the city and its
-  -- sewers on Undercity's map, and the route went back to the flight master there, a video 2026-10-02)
-  cont = Geo.Base(cont)
-  if not L or L[1] ~= cont then return nil end
+-- The route while riding (a flight, a zeppelin, a boat): its leg from the player to where it lands L ({ cont, x, y }),
+-- `secs` left, drawn along `path` (on `cont`), as `row`; then on from there to the stop and the stops after it, as
+-- usual (worked out once per ride: `key`). `info`: the route's `flying` ({ to, seconds, verb, when }).
+local function RideOn(px, py, cont, walk, offroad, L, key, path, secs, row, info)
   local d = N.dest
-  local key = version .. ":" .. f.to .. ":" .. tostring(offroad)
   if not flyingRest or flyingRest.key ~= key then
     local fixed = { offroad = offroad }
     local rest = Stretch(L[1], L[2], L[3], d, walk, { offroad = offroad, fixed = fixed })
@@ -1188,14 +1185,6 @@ function N.FlyingRoute(px, py, cont, walk, offroad, f)
   end
   local rest = flyingRest.st
   if not rest then return nil end
-  -- time left in the air: the planned flight time counting down, at least the distance left
-  -- along the flight's path at flight speed (N.FlightLeft: through its stops on the way; a
-  -- straight line to the landing held a flight with stops up, reported 2026-10-01)
-  local left, path = N.FlightLeft(f.from, f.to, px, py, L)
-  local secs = left / N.FLIGHT_SPEED
-  local total = FlightSeconds(f.from, f.to)
-  if total then secs = math.max(secs, total - (GetTime() - f.start)) end
-  local row = { cont, px, py, L[1], L[2], L[3], secs, "flight", f.from or "?", f.to, "flight master", flying = true }
   local flight = { cont = cont, pts = path, kinds = {}, stop = 1 }
   for k = 1, #path / 2 - 1 do flight.kinds[k] = N.KIND_TRANSPORT end
   local parts = { flight }
@@ -1219,12 +1208,49 @@ function N.FlyingRoute(px, py, cont, walk, offroad, f)
       yards, ride = yards + st.walk, ride + st.ride
     end
   end
+  info.seconds = secs
   return {
     pts = flight.pts, kinds = flight.kinds, road = rest.road, length = 0,
     walkYards = rest.walk, rideSeconds = secs + rest.ride, extraSeconds = secs + rest.ride,
     totalYards = yards, totalRide = ride, parts = parts, legs = legs, stretches = stretches,
-    flying = { to = f.to, seconds = secs }, version = version, offroad = offroad, cont = cont,
+    flying = info, version = version, offroad = offroad, cont = cont,
   }
+end
+
+function N.FlyingRoute(px, py, cont, walk, offroad, f)
+  local L = MasterNamed(f.to)
+  -- (a city's level counts as its continent: the bat out of Undercity flies through the city and its
+  -- sewers on Undercity's map, and the route went back to the flight master there, a video 2026-10-02)
+  cont = Geo.Base(cont)
+  if not L or L[1] ~= cont then return nil end
+  -- time left in the air: the planned flight time counting down, at least the distance left
+  -- along the flight's path at flight speed (N.FlightLeft: through its stops on the way; a
+  -- straight line to the landing held a flight with stops up, reported 2026-10-01)
+  local left, path = N.FlightLeft(f.from, f.to, px, py, L)
+  local secs = left / N.FLIGHT_SPEED
+  local total = FlightSeconds(f.from, f.to)
+  if total then secs = math.max(secs, total - (GetTime() - f.start)) end
+  local row = { cont, px, py, L[1], L[2], L[3], secs, "flight", f.from or "?", f.to, "flight master", flying = true }
+  return RideOn(px, py, cont, walk, offroad, L, version .. ":" .. f.to .. ":" .. tostring(offroad), path, secs, row,
+    { to = f.to, verb = "Flying to", when = "lands in" })
+end
+
+-- On a zeppelin or a boat (Taxi.CurrentRide, asked 2026-10-02: as on a flight): the ride to its other dock, the time
+-- left by its timetable ("arrives in"), then on from the dock; the route isn't worked out again until off it. Across
+-- continents (the zeppelin to Durotar) the line to the dock isn't drawn: the dock is on the other map.
+function N.RidingRoute(px, py, cont, walk, offroad, ride)
+  local L = ride.dock
+  if not (L and L[1]) then return nil end
+  cont = Geo.Base(cont)
+  local here = L[1] == cont
+  local path = here and { px, py, L[2], L[3] } or { L[2], L[3], L[2], L[3] }
+  local secs = math.max(0, ride.left or 0)
+  local row = { here and cont or L[1], here and px or L[2], here and py or L[3], L[1], L[2], L[3], secs, ride.kind,
+    ride.from or "?", ride.to, ride.kind, flying = true }
+  local kind = ride.kind == "boat" and "the boat" or "the zeppelin"
+  return RideOn(px, py, here and cont or L[1], walk, offroad, L,
+    version .. ":ride:" .. tostring(ride.to) .. ":" .. tostring(offroad), path, secs, row,
+    { to = ride.to, verb = "Riding " .. kind .. " to", when = "arrives in" })
 end
 
 -- The stretches between stops are worked out a few per call (N.LATER_PER_CALL), the rest on
@@ -1654,7 +1680,18 @@ function N.Route(px, py, cont)
   end
   -- in the Deeprun Tram (its own map): the route kept as it is until out at the other end
   if cont == N.TRAM_MAP then return r end
-  -- on a boat or a zeppelin (Taxi.Riding): the route as it is, not worked out again until off it
+  -- on a boat or a zeppelin, its departure seen (Taxi.CurrentRide): the ride, then on from its other dock
+  local ride = ns.Taxi and ns.Taxi.CurrentRide and ns.Taxi.CurrentRide()
+  if ride then
+    local _, walkSpeed = N.Speeds()
+    local rr = N.RidingRoute(px, py, cont, walkSpeed, offroad, ride)
+    if rr then
+      N.route, kept = rr, rr
+      N.routeX, N.routeY, N.routeTime, N.routeOffroad, N.routeCont = px, py, now, offroad, cont
+      return rr
+    end
+  end
+  -- (on one whose departure wasn't seen, Taxi.Riding: the route as it is, not worked out again until off it)
   if ns.Taxi and ns.Taxi.Riding and ns.Taxi.Riding() then return r or kept end
   if r and r.flying then r, kept = nil, nil end -- just landed: work the route out afresh
   -- the continent's road data is still being built in the background (a moment)
@@ -2328,7 +2365,7 @@ function N.Steps()
       for k, leg in ipairs(legs) do
         if leg.ride then
           local t, from = leg.ride, leg.from
-          steps[#steps + 1] = t.flying and string.format("Flying to %s", t[10])
+          steps[#steps + 1] = t.flying and string.format("%s %s", r.flying and r.flying.verb or "Flying to", t[10])
             or t.use and string.format("Use %s (to %s)", t[8], t[10])
             or t.learn and string.format("Learn the flight path, then take the flight to %s", t[10])
             or string.format("Take the %s to %s", t[8], from == 1 and t[10] or t[9])
@@ -2698,7 +2735,8 @@ function N.Status(px, py, cont)
   if multi then head = string.format("|T%s:14|t 1/%d  %s", N.StopIcon(d), #N.stops, head) end
   local t, from, atDock = NextRide(r, px, py)
   if r.flying then
-    head = string.format("|cffffd100Flying to %s|r  lands in %s", r.flying.to, N.FormatTime(r.flying.seconds))
+    head = string.format("|cffffd100%s %s|r  %s %s", r.flying.verb or "Flying to", r.flying.to, r.flying.when or "lands in",
+      N.FormatTime(r.flying.seconds))
   elseif t then
     local to = from == 1 and t[10] or t[9]
     if t.use then

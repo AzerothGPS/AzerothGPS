@@ -201,6 +201,34 @@ local streak, streakAt = 0, nil -- (checks in a row carried: one alone may be th
 -- worked out again meanwhile (Nav.Route), as on a flight: at a ride's speed every check was off it.
 local rideStreak = 0
 function T.Riding() return rideStreak >= 2 end
+
+-- The zeppelin or boat the player is on, its departure seen (asked 2026-10-02: an "arrives in" as a flight's
+-- "lands in"): { i, side (the dock it left), at (server time) }. Through a loading screen on the way too; done at
+-- its other dock (not carried there, ARRIVED_CHECKS in a row) or RIDE_GRACE seconds past its timetable's ride.
+T.RIDE_GRACE = 90
+T.ARRIVED_CHECKS = 2
+local ride, stillAtDock = nil, 0
+
+function T.StartRide(i, side, at)
+  local t = ns.Transports and ns.Transports[i]
+  if not (t and (t[8] == "zeppelin" or t[8] == "boat") and t.ride1 and t.ride2) then return end
+  ride, stillAtDock = { i = i, side = side, at = at }, 0
+end
+
+-- The ride now: { kind, from, to (dock names), dock = { cont, x, y } (where it lands), left (seconds) }, or nil.
+function T.CurrentRide(serverNow)
+  if not ride then return nil end
+  local t = ns.Transports and ns.Transports[ride.i]
+  serverNow = serverNow or (GetServerTime and GetServerTime()) or time()
+  local secs = t and (ride.side == 1 and t.ride1 or t.ride2)
+  if not secs or serverNow - ride.at > secs + T.RIDE_GRACE then
+    ride = nil
+    return nil
+  end
+  local to = 3 - ride.side
+  return { kind = t[8], from = ride.side == 1 and t[9] or t[10], to = to == 1 and t[9] or t[10],
+    dock = to == 1 and { t[1], t[2], t[3] } or { t[4], t[5], t[6] }, left = ride.at + secs - serverNow }
+end
 function T.TransportTick(now, serverNow, px, py, cont, speed)
   if not px then
     last = nil
@@ -240,10 +268,18 @@ function T.TransportTick(now, serverNow, px, py, cont, speed)
     local d = math.sqrt((px - near.x) ^ 2 + (py - near.y) ^ 2)
     if d >= T.RIDE_YD then
       T.Departed(near.i, near.side, carried)
+      T.StartRide(near.i, near.side, carried)
       near, carried = nil, nil
     end
   end
   if near and not i and now - near.since > 600 then near = nil end
+  -- (at the ride's other dock and no longer carried: off it)
+  if ride and i == ride.i and side == 3 - ride.side and not carriedNow then
+    stillAtDock = stillAtDock + 1
+    if stillAtDock >= T.ARRIVED_CHECKS then ride = nil end
+  else
+    stillAtDock = 0
+  end
   last = { x = px, y = py, cont = cont }
 end
 

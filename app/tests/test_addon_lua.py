@@ -5268,6 +5268,79 @@ def test_zeppelin_timetable_learned_from_a_ride(env):
     assert T.Sightings()[f"{t[9]} | {t[10]}"] is None
 
 
+def test_a_zeppelin_ride_is_followed_like_a_flight(env):
+    # (asked 2026-10-02, a video: on the Grom'gol zeppelin the panel stayed on "18 yd to the zeppelin" the whole way)
+    # its departure seen: the ride, its other dock and the time left by its timetable; through a loading screen
+    # (no position) too; done once at the other dock and no longer carried, or long past its ride
+    lua, ns = env
+    lua.execute("GetRealmName = function() return 'Test' end")
+    lua.execute("CreateFrame = function() return { RegisterEvent = function() end, SetScript = function() end } end")
+    ns.db = lua.eval("{}")
+    load(lua, ns, "Data/Transports.lua", "Taxi.lua")
+    T = ns.Taxi
+    i = next(k for k in range(1, len(ns.Transports) + 1)
+             if ns.Transports[k][9] == "Grom'gol Base Camp, Stranglethorn Vale" and ns.Transports[k][10] == "Brill, Tirisfal Glades")
+    t = ns.Transports[i]
+    gx, gy = t[2], t[3]  # (Grom'gol: side 1)
+    assert T.CurrentRide(5000) is None
+    T.TransportTick(0, 5000, gx + 10, gy, 0, 0.0)  # (aboard at the dock)
+    x = gx + 10
+    for k in range(1, 20):  # (carried off)
+        x += 5
+        T.TransportTick(k * 0.5, 5000 + k // 2, x, gy, 0, 0.0)
+    r = T.CurrentRide(5010)
+    assert r and r.to == "Brill, Tirisfal Glades" and r.kind == "zeppelin"
+    assert (r.dock[1], r.dock[2], r.dock[3]) == (t[4], t[5], t[6])
+    assert r.left == pytest.approx(t.ride1 - 10, abs=1.01)
+    T.TransportTick(20, 5030, None, None, None, 0.0)  # (the loading screen on the way)
+    assert T.CurrentRide(5040).left == pytest.approx(t.ride1 - 40, abs=1.01)
+    # at Brill's dock, docked (not carried): off it after two checks
+    bx, by = t[5], t[6]
+    T.TransportTick(30, 5100, bx + 5, by, 0, 0.0)
+    assert T.CurrentRide(5100) is not None
+    T.TransportTick(30.5, 5100, bx + 5, by, 0, 0.0)
+    T.TransportTick(31, 5101, bx + 5, by, 0, 0.0)
+    assert T.CurrentRide(5101) is None
+    # a ride never seen arriving ends a while past its timetable's ride
+    T.StartRide(i, 1, 6000)
+    assert T.CurrentRide(6000 + t.ride1 + T.RIDE_GRACE - 1) is not None
+    assert T.CurrentRide(6000 + t.ride1 + T.RIDE_GRACE + 1) is None
+
+
+def test_the_route_on_a_zeppelin_counts_down_to_its_dock(nav_env):
+    # (asked 2026-10-02) on the zeppelin: "Riding the zeppelin to Brill, arrives in ..." in the panel, the steps
+    # and the arrow's line, the ride's line to the dock, then the walk on from there; across continents too
+    lua, ns = nav_env
+    load(lua, ns, "Turns.lua")
+    t = next(ns.Transports[k] for k in range(1, len(ns.Transports) + 1)
+             if ns.Transports[k][9] == "Grom'gol Base Camp, Stranglethorn Vale" and ns.Transports[k][10] == "Brill, Tirisfal Glades")
+    lua.execute(f"""
+      AGPS_RIDE = {{ kind = "zeppelin", from = "Grom'gol Base Camp, Stranglethorn Vale", to = "Brill, Tirisfal Glades",
+        dock = {{ 0, {t[5]}, {t[6]} }}, left = 75 }}
+      AGPS_TAXI_RIDE = {{ CurrentRide = function() return AGPS_RIDE end, Current = function() return nil end,
+        Riding = function() return true end }}
+    """)
+    ns.Taxi = lua.eval("AGPS_TAXI_RIDE")
+    N = ns.Nav
+    N.SetDestination(2254.0, 293.0, 0, "Brill")
+    r = N.Route(-2000.0, 100.0, 0)  # (over Arathi, on the way north)
+    assert r.flying and r.flying.to == "Brill, Tirisfal Glades" and r.flying.seconds == 75
+    assert (r.pts[1], r.pts[2]) == (-2000.0, 100.0) and (r.pts[3], r.pts[4]) == (t[5], t[6])
+    status = N.Status(-2000.0, 100.0, 0)
+    assert "Riding the zeppelin to Brill, Tirisfal Glades" in status and "arrives in 1m 15s" in status
+    steps = N.StepsText(3)
+    assert "Riding the zeppelin to Brill, Tirisfal Glades" in steps and "Walk" in steps
+    assert r.walkYards > 50  # (on from the dock to Brill)
+    # across continents (Durotar's zeppelin, the player still on Kalimdor's map): the ride, no line drawn over the sea
+    lua.execute("AGPS_RIDE.dock = { 0, 2062.4, 293.0 } AGPS_RIDE.to = 'Brill, Tirisfal Glades' AGPS_RIDE.left = 40")
+    r = N.Route(1200.0, -4500.0, 1)
+    assert r.flying and r.flying.seconds == 40 and r.pts[1] == r.pts[3] == 2062.4
+    # off it: an ordinary route again
+    lua.execute("AGPS_RIDE = nil AGPS_TAXI_RIDE.Riding = function() return false end")
+    r = N.Route(2062.0, 293.0, 0)
+    assert not r.flying
+
+
 def test_a_ride_after_a_server_restart_resets_the_timetable(env):
     # (reported 2026-10-02: after a server restart the zeppelin's timer was off, and riding it didn't fix it) a
     # departure seen after a restart replaces the old one, and the restart's shift in the timetable doesn't bend

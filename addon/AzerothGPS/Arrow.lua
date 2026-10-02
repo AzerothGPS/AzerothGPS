@@ -206,8 +206,8 @@ local function UpdateText(px, py, cont)
     return RenderLines(lines)
   end
   if r.flying then
-    line1:SetText(string.format("Flying to %s", r.flying.to))
-    line2:SetText("lands in " .. N.FormatTime(r.flying.seconds))
+    line1:SetText(string.format("%s %s", r.flying.verb or "Flying to", r.flying.to))
+    line2:SetText((r.flying.when or "lands in") .. " " .. N.FormatTime(r.flying.seconds))
     arrow:SetRotation(0)
     arrow:SetVertexColor(0.6, 0.8, 1)
   elseif use then
