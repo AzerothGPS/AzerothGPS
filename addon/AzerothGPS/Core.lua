@@ -6,7 +6,8 @@ ns.DEFAULTS = {
     -- map window
     shown = true,
     size = 450, -- frame edge in UI units (asked, 2026-10-01: 450 by default)
-    lockSize = true, -- the size only by the slider; off: drag the map's bottom-right corner (GPS.MakeSizeGrip)
+    lockSize = false, -- off (the default since 1.1.1): drag the map's bottom-right corner (GPS.MakeSizeGrip), unless
+    -- the map's position is locked (`locked`); on: the size only by the slider
     alpha = 1, -- whole-frame opacity
     stepsCollapsed = true, -- the map's top panel: only the whole trip's times (the -/+ button)
     stepsAll = false, -- the map's top panel: all the steps, not just the next few (its + button)
@@ -261,6 +262,10 @@ local function InitDB()
   -- (the offroad option, gone in 1.0.8: the roads are joined where they're heading instead)
   if gps then gps.offroad = nil end
   db.offroadOff108, db.offroadNote = nil, nil
+  -- (1.1.1: resizing from the corner on by default, asked 2026-10-03. 1.1.0 saved "Lock map size" on for everyone,
+  -- its default then: put back to the new default once)
+  if gps and not db.resizeDefault111 then gps.lockSize = nil end
+  db.resizeDefault111 = true
   Merge(db.settings, ns.DEFAULTS)
   db.chars = db.chars or {}
   -- (stand-ins saved before the character's name was known, by older versions: whose can't be told)

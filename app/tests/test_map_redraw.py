@@ -1946,6 +1946,24 @@ def test_the_route_stays_shown_while_a_finished_search_works_it_out_again(game):
         N.Clear()
 
 
+def test_resizing_from_the_corner_turns_on_once_for_1_1_0_saves(game):
+    # (asked 2026-10-03) 1.1.0 saved "Lock map size" on for everyone (its default): logging in with 1.1.1 turns
+    # resizing from the corner on once; a later choice to turn it off is kept
+    lua, ns = game
+    db = ns.db
+    try:
+        lua.execute("AzerothGPSDB = { settings = { gps = { lockSize = true } } }")  # (a 1.1.0 save)
+        lua.eval("AGPS_FIRE")("ADDON_LOADED", "AzerothGPS")
+        saved = lua.eval("AzerothGPSDB")
+        assert saved.settings.gps.lockSize is False and saved.resizeDefault111
+        saved.settings.gps.lockSize = True  # (turned off by the player since)
+        lua.eval("AGPS_FIRE")("ADDON_LOADED", "AzerothGPS")
+        assert lua.eval("AzerothGPSDB").settings.gps.lockSize is True
+    finally:
+        lua.globals().AzerothGPSDB = db
+        lua.eval("AGPS_FIRE")("ADDON_LOADED", "AzerothGPS")
+
+
 def test_a_character_whose_name_isnt_known_yet_isnt_saved_as_unknown(game):
     # (seen 2026-10-01 on the private server: right after logging in UnitName said "Unknown", and the
     # character's flight paths and faction were saved under "<realm>-Unknown") until the name is known a
@@ -2250,18 +2268,27 @@ def test_a_flights_clock_starts_without_the_control_events(game):
 
 
 def test_the_map_is_resized_by_its_corner_when_the_size_isnt_locked(game):
-    # (asked 2026-10-02) "Lock map size" (on by default) next to the size slider; off, a grip in the map window's
-    # bottom-right corner, and a left-drag on it sizes the window (square, its top-left staying put), within the
-    # slider's range
+    # (asked 2026-10-02) a grip in the map window's bottom-right corner; a left-drag on it sizes the window (square,
+    # its top-left staying put), within the slider's range. (asked 2026-10-03) on by default ("Resize from the
+    # corner"); off while the map's position is locked, and back when it's unlocked, the option itself unchanged
     lua, ns = game
     G, st = ns.GPS, ns.settings.gps
     size, point = st.size, st.point
     lua.execute("AGPS_OLD_CUR = GetCursorPosition\nGetCursorPosition = function() return AGPS_CX, AGPS_CY end")
     try:
-        assert st.lockSize is True
+        assert st.lockSize is False and not st.locked  # (on by default)
         G.ApplySettings()
         grip = G.sizeGrip
-        assert grip and not grip._shown
+        assert grip and grip._shown
+        st.locked = True  # (the map's position locked: no resizing either)
+        G.ApplySettings()
+        assert not grip._shown and st.lockSize is False
+        st.locked = False  # (unlocked: back)
+        G.ApplySettings()
+        assert grip._shown
+        st.lockSize = True  # (the option off)
+        G.ApplySettings()
+        assert not grip._shown
         st.lockSize = False
         G.ApplySettings()
         assert grip._shown
@@ -2278,6 +2305,6 @@ def test_the_map_is_resized_by_its_corner_when_the_size_isnt_locked(game):
         grip._scripts.OnUpdate(grip, 0.02)
         assert st.size == 800  # (let go: no more sizing)
     finally:
-        st.lockSize, st.size, st.point = True, size, point
+        st.lockSize, st.locked, st.size, st.point = False, False, size, point
         lua.execute("GetCursorPosition = AGPS_OLD_CUR")
         G.ApplySettings()

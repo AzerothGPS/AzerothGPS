@@ -3333,6 +3333,12 @@ end
 -- default), a grip there; a left-drag sizes the window (square: the map is), its top-left staying put, within
 -- the size slider's range (G.SIZE_MIN_MAX, and room for the quick buttons, G.ClampSize).
 G.SIZE_MIN_MAX = { 120, 800 }
+-- Whether the corner resizes the map (asked 2026-10-03): the option on (`lockSize` off, the default) and the map's
+-- position not locked. Locking the position doesn't change the option: unlocking brings the corner back.
+function G.Resizable()
+  local st = S()
+  return st.lockSize == false and not st.locked
+end
 function G.SizeFromCursor()
   local sc = frame:GetEffectiveScale()
   local cx, cy = GetCursorPosition()
@@ -3417,7 +3423,7 @@ function G.ApplySettings()
   end
   G.sizeShown = st.size
   frame:SetSize(st.size, st.size)
-  if G.sizeGrip then G.sizeGrip:SetShown(st.lockSize == false and not G.clickThrough) end
+  if G.sizeGrip then G.sizeGrip:SetShown(G.Resizable() and not G.clickThrough) end
   local hidden = ns.inCombat and st.combatHideMap
   frame:SetAlpha(ns.inCombat and (st.combatAlpha or st.alpha) or st.alpha)
   if G.RefreshHearthButton then G.RefreshHearthButton() end -- the option may have changed

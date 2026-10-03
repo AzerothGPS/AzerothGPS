@@ -12,6 +12,10 @@ For WoW Forever client 1.60.1 (interface 16001).
 - **Search by several words:** "Inn Ir" finds Ironforge's inn, "auction iron" your Ironforge auction house pin. Each word just has to start a word of the place's name or where it is.
 - **Turn off a zeppelin, boat or the tram for good.** Right-click its dock on the map, **Don't Use**, and routes never take it until you turn it back on (right-click again, **Use It**). It stays on the map, faded. Options → Routing has a **Zeppelins, boats and the tram** section listing each one your faction can take, by kind, all on by default. The Deeprun Tram's two ends have dock icons now too.
 
+### Changed
+
+- **Resize the map from its corner, on by default.** Drag the map window's bottom-right corner to make it bigger or smaller. The option is now **Resize from the corner** (Options → General, under the Size slider), on for everyone, including if you had 1.1.0's "Lock map size" on. While **Lock map position** is on, the corner doesn't resize either; unlock the map and it does again.
+
 ### Fixed
 
 - **Route links in a raid or dungeon:** when several people clicked your route link at once inside an instance, the game's limit on addon messages could cut the end off their routes. AzerothGPS now paces what it sends to stay under that limit and resends anything the game refuses, so everyone gets the whole route.

@@ -31,6 +31,7 @@ local function Checkbox(parent, label, tooltip, get, set)
   local text = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
   text:SetText(label)
+  cb.label = text
   cb:SetScript("OnClick", function(self)
     set(self:GetChecked() and true or false)
     Apply()
@@ -568,8 +569,15 @@ local function BuildWindow()
   sizeWarn:SetWidth(PAGE_W - 60)
   sizeWarn:SetJustifyH("LEFT")
   place(sizeWarn, 26, 4)
-  check("Lock map size", "On: the map's size only changes with the slider above. Off: a grip shows in the map window's bottom-right corner; left-drag it to resize the window.",
-    function() return GPS().lockSize ~= false end, function(v) GPS().lockSize = v end)
+  -- (on by default, asked 2026-10-03; off while the map's position is locked, back on when it's unlocked)
+  local resize = Checkbox(page, "Resize from the corner", "Drag the map window's bottom-right corner to resize it (on by default). While Lock map position is on, the corner doesn't resize; unlock the map and it does again. Off: the size only changes with the slider above.",
+    function() return GPS().lockSize == false end, function(v) GPS().lockSize = not v end)
+  place(resize)
+  controls[#controls + 1] = function()
+    local on = not GPS().locked
+    resize:SetEnabled(on)
+    if resize.label then resize.label:SetTextColor(on and 1 or 0.5, on and 1 or 0.5, on and 1 or 0.5) end
+  end
   place(KeyBind(page, "Show/hide key"))
   note("Click the button, then press the key you want (with Shift, Ctrl or Alt if you like). Pressing it shows the map, and pressing it again hides it. Escape cancels, right-click the button to clear the key. It's also in the game's Key Bindings, under AddOns: \"Show/Hide AzerothGPS\". Keys can't be changed in combat.")
   header("Minimap")
