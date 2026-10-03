@@ -69,6 +69,7 @@ local function FilterOK(filter)
   end
 end
 M.SetSize = function(s, w, h) s._w, s._h = w, h end -- (recorded; GetSize stays the stand-in's)
+M.SetWidth = function(s, w) s._w = w end -- (recorded)
 M.SetPoint = function(s, ...) s._pt = { ... } end -- (the last one)
 M.SetTexture = function(s, t, _, _, filter) FilterOK(filter) s._tex, s._filter = t, filter end
 M.SetAtlas = function(s, a, _, filter) FilterOK(filter) s._atlas, s._filter = a, filter end

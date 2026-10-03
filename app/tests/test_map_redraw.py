@@ -786,6 +786,16 @@ def test_the_options_window_builds_with_its_performance_page(game):
     assert texts.count("Stops routed and drawn ahead") == 1
 
 
+def test_section_notes_in_the_options_wrap_to_the_page(game):
+    # (seen 2026-10-03: "Unticked ones are never used in routes. Right-clicking a dock on the map does the" ran off the
+    # page) every section's note is as wide as the page and wraps
+    lua, ns = game
+    ns.Options.Show()
+    notes = [w for w in lua.eval("AGPS_WIDGETS").values()
+             if w._kind == "FontString" and str(w._text).startswith("Unticked ones are never used in routes")]
+    assert notes and notes[0]._w and notes[0]._w > 300
+
+
 def test_the_options_pages_in_order(game):
     # (asked) the options' pages in this order; Help improve says a /reload saves every edit before copying
     lua, ns = game
