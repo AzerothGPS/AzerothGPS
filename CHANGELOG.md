@@ -2,6 +2,10 @@
 
 Each version's section is its release notes (GitHub and CurseForge).
 
+## 1.1.1
+
+For WoW Forever client 1.60.1 (interface 16001).
+
 ## 1.1.0
 
 For WoW Forever client 1.60.1 (interface 16001). This one brings new data files, so restart the game fully after updating instead of just doing a /reload.
