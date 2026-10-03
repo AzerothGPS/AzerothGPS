@@ -519,10 +519,12 @@ local function BuildWindow()
     line:SetHeight(1)
     line:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -2)
     line:SetWidth(PAGE_W - 40)
-    if note then
+    if note then -- (wrapped to the page: a long one ran off it, seen 2026-10-03)
       local nt = page:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+      nt:SetWidth(PAGE_W - 48)
+      nt:SetJustifyH("LEFT")
       nt:SetText(note)
-      place(nt, 16, 4)
+      place(nt, math.max(16, (nt:GetStringHeight() or 0) + 4), 4)
     end
     col.y = col.y - 2
   end
