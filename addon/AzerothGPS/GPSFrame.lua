@@ -4347,18 +4347,56 @@ local function SearchIndex()
   return list
 end
 
+-- Whether every word of `words` starts a word of `hay` (lower case): "inn ir" in "inn ironforge".
+local function AllWordsStart(words, hay)
+  for _, w in ipairs(words) do
+    local found = false
+    for h in hay:gmatch("[^%s%-%(%)',]+") do
+      if h:sub(1, #w) == w then found = true break end
+    end
+    if not found then return false end
+  end
+  return true
+end
+
 -- Places matching `text` (any case, 2+ letters): names starting with it first, then names
--- containing it, shorter first. At most `max` (default 8).
+-- containing it, shorter first. Several words (asked 2026-10-03: "Inn Ir" for Ironforge's inn): every word starts a
+-- word of the name or its place, those whose name starts with the first word first. At most `max` (default 8).
 function G.SearchPlaces(text, max)
-  local q = (text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  local q = (text or ""):lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
   if #q < 2 then return {} end
+  local words = {}
+  for w in q:gmatch("%S+") do words[#words + 1] = w end
   local starts, contains = {}, {}
-  for _, e in ipairs(SearchIndex()) do
+  local all = {}
+  for _, e in ipairs(SearchIndex()) do all[#all + 1] = e end
+  -- (the city places the player knows, their faction's capitals: "Inn" in white, "Ironforge" in grey, its icon;
+  -- picked, a stop at it as a double-click on it)
+  if ns.Layers and ns.Layers.KnownPlaces and ns.db then
+    for _, p in ipairs(ns.Layers.KnownPlaces()) do
+      all[#all + 1] = { name = p.name, lower = p.name:lower(), sub = p.city or "City location", cont = p.cont,
+        x = p.x, y = p.y, z = p.z, tex = p.icon, place = p.full }
+    end
+  end
+  -- (the pins too, asked 2026-10-03: "Auction House" in white, "Stormwind City" in grey, the pin's icon; picked,
+  -- a stop on the pin's level and floor, as double-clicking it. Each search: pins come and go)
+  if ns.Pins and ns.db then
+    for _, pin in ipairs(ns.Pins.All()) do
+      if pin.name and pin.x and pin.level then
+        all[#all + 1] = { name = pin.name, lower = pin.name:lower(), sub = ns.Pins.PlaceName(pin) or "Pin",
+          cont = pin.level, x = pin.x, y = pin.y, z = pin.z, tex = ns.Pins.IconTexture(pin.icon), pin = true }
+      end
+    end
+  end
+  for _, e in ipairs(all) do
     local i = e.lower:find(q, 1, true)
     if i == 1 then
       starts[#starts + 1] = e
     elseif i then
       contains[#contains + 1] = e
+    elseif #words > 1 and AllWordsStart(words, e.lower .. " " .. (e.sub or ""):lower()) then
+      local first = e.lower:sub(1, #words[1]) == words[1]
+      if first then starts[#starts + 1] = e else contains[#contains + 1] = e end
     end
   end
   local function order(a, b)
@@ -5669,11 +5707,19 @@ function G.Init()
     if not e then return end
     panel:Hide()
     local _, _, cont = Geo.PlayerWorld()
-    if e.cont == ViewCont(cont) then -- show it: the view moves there
-      free = { x = e.x, y = e.y, rot = view.rot, cross = true, cont = e.cont }
+    local vc = ViewCont(cont)
+    local mine = e.pin or e.place -- (a pin or a city place: maybe on a city's or dungeon's level)
+    if e.cont == vc or (mine and e.cont < 20000 and vc and Geo.Base(e.cont) == Geo.Base(vc)) then -- show it there
+      free = { x = e.x, y = e.y, rot = view.rot, cross = true, cont = mine and Geo.Base(e.cont) or e.cont }
       recenter:Show()
     end
-    G.AddStopAt(e.x, e.y, e.name, e.cont)
+    if e.pin then -- (on the pin's level, at its height: as a double-click on it)
+      G.AddStopAt(e.x, e.y, e.name, e.cont, e.tex, e.z, true)
+    elseif e.place then -- (a city place: its full name, icon and floor, as a double-click on it)
+      G.AddStopAt(e.x, e.y, e.place, e.cont, e.tex, e.z)
+    else
+      G.AddStopAt(e.x, e.y, e.name, e.cont)
+    end
     ns.Print(string.format("stop: %s (%s)", e.name, e.sub))
   end
   local function Refresh()
@@ -5696,7 +5742,7 @@ function G.Init()
         rows[i] = r
       end
       r.entry = e
-      r.text:SetText(string.format("%s  |cff9d9d9d%s|r", e.name, e.sub))
+      r.text:SetText(string.format("%s%s  |cff9d9d9d%s|r", e.tex and ("|T" .. e.tex .. ":14:14|t ") or "", e.name, e.sub))
       r:Show()
     end
     for i = #results + 1, #rows do rows[i]:Hide() end

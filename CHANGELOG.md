@@ -8,6 +8,8 @@ For WoW Forever client 1.60.1 (interface 16001).
 
 ### New
 
+- **Search finds your pins and city places.** Your pins show up with where they are ("Auction House  Stormwind City"), and so do the city places you know from the guards, for your faction's capitals ("Inn  Ironforge"). Pick one and it's a stop there, on the right floor. Older pins work too: where they are is worked out the first time you search.
+- **Search by several words:** "Inn Ir" finds Ironforge's inn, "auction iron" your Ironforge auction house pin. Each word just has to start a word of the place's name or where it is.
 - **Turn off a zeppelin, boat or the tram for good.** Right-click its dock on the map, **Don't Use**, and routes never take it until you turn it back on (right-click again, **Use It**). It stays on the map, faded. Options → Routing has a **Zeppelins, boats and the tram** section listing each one your faction can take, by kind, all on by default. The Deeprun Tram's two ends have dock icons now too.
 
 ### Fixed

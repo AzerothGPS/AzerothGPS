@@ -1250,6 +1250,85 @@ def test_right_click_a_dock_to_keep_it_out_of_routes(game):
         lua.execute("AGPS_T = AGPS_T + 1")
 
 
+def test_pins_are_found_by_the_search_with_where_they_are(game):
+    # (asked 2026-10-03) an "Auction House" pin in Stormwind and one in Ironforge: the search finds both, each with
+    # its city in grey (kept on the pin when it's made) and its icon; picking one is a stop at that pin
+    lua, ns = game
+    G, P, N = ns.GPS, ns.Pins, ns.Nav
+    own = P.Own()
+    before = len(own)
+    try:
+        sw = P.Add(lua.eval("{ level = 0, x = -8811.0, y = 660.0, name = 'Auction House' }"))
+        iff = P.Add(lua.eval("{ level = 0, x = -4957.0, y = -911.0, name = 'Auction House' }"))
+        assert sw.place == "Stormwind City" and iff.place == "Ironforge"  # (kept when made)
+        res = G.SearchPlaces("auction", 8)
+        found = sorted((str(res[i].name), str(res[i].sub)) for i in range(1, len(res) + 1) if res[i].pin)
+        assert found == [("Auction House", "Ironforge"), ("Auction House", "Stormwind City")]
+        e = next(res[i] for i in range(1, len(res) + 1) if res[i].pin and str(res[i].sub) == "Stormwind City")
+        assert e.tex and e.cont == 0
+        # an older pin without its place: worked out when searched, then kept
+        sw.place = None
+        res = G.SearchPlaces("auction house", 8)
+        assert any(res[i].pin and str(res[i].sub) == "Stormwind City" for i in range(1, len(res) + 1))
+        assert sw.place == "Stormwind City"
+        # the search box: the row shows the icon, the name and the place; clicking it makes a stop there
+        N.Clear()
+        panel = G.searchPanel
+        same = lua.eval("rawequal")
+        assert panel is not None
+        box = next(w for w in lua.eval("AGPS_WIDGETS").values() if w._kind == "EditBox" and same(w._parent, panel))
+        box._text = "auction"
+        box._scripts.OnTextChanged(box)
+        rows = [w for w in lua.eval("AGPS_WIDGETS").values()
+                if same(w._parent, panel) and w.entry is not None and w._shown and w.entry.pin]
+        assert rows and "|T" in str(rows[0].text._text) and "Auction House" in str(rows[0].text._text)
+        assert "|cff9d9d9d" in str(rows[0].text._text)  # (the place in grey)
+        rows[0]._scripts.OnClick(rows[0])
+        G.ConfirmRoute()
+        assert len(N.stops) == 1 and str(N.stops[1].name) == "Auction House"
+    finally:
+        while len(own) > before:
+            own[len(own)] = None
+        N.Clear()
+        G.Follow()
+
+
+def test_known_city_places_are_found_by_several_words(game):
+    # (asked 2026-10-03) "Inn Ir": Ironforge's inn ("Inn" in white, "Ironforge" in grey), once a guard there was talked
+    # to; only the player's faction's capitals; picked, a stop named "Ironforge Inn"
+    lua, ns = game
+    G, N = ns.GPS, ns.Nav
+    db = ns.db
+    was = db.cityRevealed
+    lua.execute("AGPS_OLD_FACTION = UnitFactionGroup")
+    try:
+        db.cityRevealed = lua.eval("{ [1455] = true, [1454] = true }")  # (Ironforge, Orgrimmar)
+        lua.execute("UnitFactionGroup = function() return 'Alliance' end")
+        res = G.SearchPlaces("Inn Ir", 8)
+        assert len(res) >= 1 and (str(res[1].name), str(res[1].sub)) == ("Inn", "Ironforge"), \
+            [(str(res[i].name), str(res[i].sub)) for i in range(1, len(res) + 1)]
+        assert str(res[1].place) == "Ironforge Inn" and res[1].tex
+        found = [(str(r.name), str(r.sub)) for r in G.SearchPlaces("inn", 8).values()]
+        assert ("Inn", "Ironforge") in found and ("Inn", "Orgrimmar") not in found  # (not the other faction's)
+        N.Clear()
+        e = res[1]
+        G.AddStopAt(e.x, e.y, e.place, e.cont, e.tex, e.z)
+        G.ConfirmRoute()
+        assert str(N.stops[1].name) == "Ironforge Inn"
+        # a Horde character: Orgrimmar's inn, not Ironforge's
+        lua.execute("UnitFactionGroup = function() return 'Horde' end")
+        found = [(str(r.name), str(r.sub)) for r in G.SearchPlaces("inn", 8).values()]
+        assert ("Inn", "Orgrimmar") in found and ("Inn", "Ironforge") not in found
+        # not known yet (no guard talked to): not found
+        db.cityRevealed = lua.eval("{}")
+        assert not any(str(r.sub) == "Orgrimmar" for r in G.SearchPlaces("inn or", 8).values())
+    finally:
+        db.cityRevealed = was
+        lua.execute("UnitFactionGroup = AGPS_OLD_FACTION")
+        N.Clear()
+        G.Follow()
+
+
 def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     # (asked: the logo in the round portrait looked soft, one 128-pixel picture shrunk by the graphics card)
     # the pre-scaled size nearest the pixels the 62-unit portrait covers, shown 1:1

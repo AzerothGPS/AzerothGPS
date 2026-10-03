@@ -1118,6 +1118,48 @@ function L.RevealedPlaces(cont)
   return out
 end
 
+-- The capitals' factions (Data/CityPlaces.lua's uiMaps), for the search: only the player's own (asked 2026-10-03).
+L.CITY_FACTION = { [1454] = "Horde", [1456] = "Horde", [1458] = "Horde",
+  [1453] = "Alliance", [1455] = "Alliance", [1457] = "Alliance" }
+
+-- The city places the player knows, for the search (asked 2026-10-03: "Inn Ir" finds Ironforge's inn): every place of
+-- a city a guard there was talked to (L.RevealedPlaces), and the spots guards pointed out (L.CityDB), in the
+-- player's faction's capitals. Each: { name ("Inn"), full ("Ironforge Inn", the stop's name), city, x, y, cont, z, icon }.
+function L.KnownPlaces()
+  local side = UnitFactionGroup and UnitFactionGroup("player")
+  local out, seen = {}, {}
+  local function add(full, city, x, y, cont, z, icon, ui)
+    local f = ui and L.CITY_FACTION[ui]
+    if f and side and f ~= side then return end
+    local key = full:lower() .. ":" .. math.floor(x / 30) .. ":" .. math.floor(y / 30)
+    if seen[key] then return end
+    seen[key] = true
+    local short = city and full:sub(1, #city + 1):lower() == (city .. " "):lower() and full:sub(#city + 2) or full
+    out[#out + 1] = { name = short, full = full, city = city, x = x, y = y, cont = cont, z = z,
+      icon = icon or L.CityIcon(full) or L.CITY_DEFAULT_ICON }
+  end
+  local db = ns.db
+  for ui in pairs(db and db.cityRevealed or {}) do
+    local c = ns.CityPlaces and ns.CityPlaces[ui]
+    for _, p in ipairs(c or {}) do
+      local x, y, pc = L.MapToWorld(ui, p[1] / 100, p[2] / 100)
+      if x then add(p[3], c.city, x, y, L.CityLevelAt(pc, x, y) or pc, p[4], nil, ui) end
+    end
+  end
+  for lc, list in pairs(L.CityDB()) do
+    for _, c in ipairs(list) do
+      local ui, city
+      if ns.GPS and ns.GPS.CityMapAt then
+        ui = ns.GPS.CityMapAt(Geo.Base(lc), c[1], c[2])
+        local cp = ui and ns.CityPlaces and ns.CityPlaces[ui]
+        city = cp and cp.city or (ui and ns.Maps and ns.Maps[ui] and ns.Maps[ui].name)
+      end
+      add(c[3], city, c[1], c[2], lc, nil, c[4], ui)
+    end
+  end
+  return out
+end
+
 -- The city (Data/CityPlaces.lua uiMap) the player is in: their map or one it's inside.
 function L.CityHere()
   local id = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")

@@ -57,6 +57,27 @@ function P.All()
   return out
 end
 
+-- Where a pin is, for the search (asked 2026-10-03: "Auction House  Stormwind City"): its dungeon's or raid's name,
+-- else the city or zone at it. Kept on the player's own pins (`place`, set when made; older ones get it the first time
+-- it's asked), worked out each time for the shared ones (the shipped data isn't changed).
+function P.PlaceName(pin)
+  if pin.place then return pin.place end
+  local name
+  local lvl = pin.level
+  if lvl and lvl >= 20000 and ns.Instances and ns.Instances[lvl] then
+    name = ns.Instances[lvl].name
+  elseif lvl and ns.GPS and ns.GPS.LocateWorld then
+    local _, n = ns.GPS.LocateWorld(ns.Geo.Base(lvl), pin.x, pin.y)
+    name = n
+  end
+  if name then
+    for _, own in ipairs(P.Own()) do
+      if own == pin then pin.place = name break end
+    end
+  end
+  return name
+end
+
 -- A new pin { level, x, y, z, down, icon, name }: kept, and returned. Its time is its id (one no other
 -- pin has, the shared ones' included).
 function P.Add(pin)
@@ -71,6 +92,7 @@ function P.Add(pin)
     name = P.CleanName(pin.name), time = t }
   local own = P.Own()
   own[#own + 1] = p
+  P.PlaceName(p) -- (where it was made: the search shows it)
   P.Changed()
   return p
 end
