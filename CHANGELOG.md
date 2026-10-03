@@ -4,7 +4,7 @@ Each version's section is its release notes (GitHub and CurseForge).
 
 ## 1.1.1
 
-For WoW Forever client 1.60.1 (interface 16001).
+For WoW Forever client 1.60.1 (interface 16001), build 70205: the map data (caves, dungeons and raids, building interiors, points of interest, terrain) is updated for it.
 
 ### New
 
@@ -18,6 +18,7 @@ For WoW Forever client 1.60.1 (interface 16001).
 
 ### Fixed
 
+- A road drawn in game on the Eastern Kingdoms.
 - **Route links in a raid or dungeon:** when several people clicked your route link at once inside an instance, the game's limit on addon messages could cut the end off their routes. AzerothGPS now paces what it sends to stay under that limit and resends anything the game refuses, so everyone gets the whole route.
 
 ## 1.1.0
