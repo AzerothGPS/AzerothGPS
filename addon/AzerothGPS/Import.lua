@@ -387,6 +387,53 @@ function I.io.send(prefix, msg, channel, target)
   return send(prefix, msg, channel, target)
 end
 
+-- The game throttles addon messages per prefix: 10 in a burst, then 1 a second (whispers outside instances
+-- excepted), and drops what's over it (result 3; 8 is the server's throttle, 11 an encounter's lockdown). Several
+-- raid members clicking a route link at once in an instance lost their routes' ends (from StreetView's own
+-- findings, 2026-10-02). So every message goes through this queue: whispers outside instances at once, the rest
+-- SEND_BURST at once and then SEND_PER_SECOND, in order; a refused one is tried again a moment later.
+I.SEND_BURST, I.SEND_PER_SECOND = 8, 1
+I.RETRY_RESULTS = { [3] = true, [8] = true, [11] = true }
+local sendQueue, sendTokens, sendAt, pumping = {}, I.SEND_BURST, nil, false
+
+local function Paced(channel)
+  if channel ~= "WHISPER" then return true end
+  local inside = IsInInstance and IsInInstance()
+  return inside and true or false
+end
+
+-- Send what the throttle allows now; the rest after a moment. How many are left waiting.
+function I.Pump()
+  local now = GetTime()
+  sendTokens = math.min(I.SEND_BURST, sendTokens + (now - (sendAt or now)) * I.SEND_PER_SECOND)
+  sendAt = now
+  while sendQueue[1] do
+    local q = sendQueue[1]
+    local paced = Paced(q[3])
+    if paced and sendTokens < 1 then break end
+    local result = I.io.send(q[1], q[2], q[3], q[4])
+    if I.RETRY_RESULTS[result] then -- (the game's own count is full: wait, then the same one again)
+      sendTokens = 0
+      break
+    end
+    table.remove(sendQueue, 1)
+    if paced then sendTokens = sendTokens - 1 end
+  end
+  if sendQueue[1] and not pumping and C_Timer and C_Timer.After then
+    pumping = true
+    C_Timer.After(1 / I.SEND_PER_SECOND, function()
+      pumping = false
+      I.Pump()
+    end)
+  end
+  return #sendQueue
+end
+
+function I.Queue(prefix, msg, channel, target)
+  sendQueue[#sendQueue + 1] = { prefix, msg, channel, target }
+  return I.Pump()
+end
+
 -- The chat box opened with `text` for `channel` ("WHISPER" to `target`, "PARTY", "RAID"; nil: the chat box
 -- being typed in, else a new one), for the player to send. Nothing is sent here. Whether a box took it.
 local function InsertInChat(text)
@@ -481,7 +528,7 @@ function I.Answer(sender, id, now)
   local key = Who(sender) .. "\t" .. id
   if answered[key] and now - answered[key] < I.ANSWER_GAP then return 0 end
   answered[key] = now
-  for _, m in ipairs(p.msgs) do I.io.send(I.PREFIX, m, "WHISPER", sender) end
+  for _, m in ipairs(p.msgs) do I.Queue(I.PREFIX, m, "WHISPER", sender) end
   return #p.msgs
 end
 
@@ -494,7 +541,7 @@ end
 
 function I.Request(sender, id)
   I.Expect(sender, id)
-  I.io.send(I.PREFIX, "?\t" .. id, "WHISPER", sender)
+  I.Queue(I.PREFIX, "?\t" .. id, "WHISPER", sender)
   local name = Ambiguate and Ambiguate(sender, "none") or sender
   if C_Timer and C_Timer.After then
     C_Timer.After(I.ASK_TIMEOUT, function()

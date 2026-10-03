@@ -6,6 +6,10 @@ Each version's section is its release notes (GitHub and CurseForge).
 
 For WoW Forever client 1.60.1 (interface 16001).
 
+### Fixed
+
+- **Route links in a raid or dungeon:** when several people clicked your route link at once inside an instance, the game's limit on addon messages could cut the end off their routes. AzerothGPS now paces what it sends to stay under that limit and resends anything the game refuses, so everyone gets the whole route.
+
 ## 1.1.0
 
 For WoW Forever client 1.60.1 (interface 16001). This one brings new data files, so restart the game fully after updating instead of just doing a /reload.

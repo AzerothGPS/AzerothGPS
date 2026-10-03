@@ -3068,6 +3068,67 @@ def test_routes_are_shared_as_chat_links(importer):
         ns.Print = real_print
         lua.execute("ChatFrame_OpenChat, ChatEdit_GetActiveWindow, UnitName = AGPS_OLD_CHAT[1], AGPS_OLD_CHAT[2], AGPS_OLD_CHAT[3]")
 
+def test_route_messages_keep_under_the_games_throttle(importer):
+    # (StreetView's finding, 2026-10-02: the game drops addon messages past 10 in a burst per prefix, then 1 a
+    # second, whispers outside instances excepted, result 3) in an instance, three raid members asking for an
+    # 8-stop route at once: every message arrives, in order, none dropped; outside, whispers go at once
+    lua, ns = importer
+    I = ns.Import
+    lua.execute("""
+      AGPS_OLD_Q = { GetTime, IsInInstance, UnitName, C_Timer }
+      AGPS_T = 1000 GetTime = function() return AGPS_T end
+      AGPS_INSIDE = true IsInInstance = function() return AGPS_INSIDE, AGPS_INSIDE and "raid" or "none" end
+      UnitName = function() return "Tester" end
+      C_Timer = { After = function() end }
+      -- the game: 10 in a burst per prefix, then 1 a second, past it refused (3) and dropped
+      AGPS_GOT, AGPS_REFUSED, AGPS_BUDGET, AGPS_AT = {}, 0, 10, AGPS_T
+      AGPS_GAME = function(prefix, msg, channel, target)
+        if channel ~= "WHISPER" or AGPS_INSIDE then
+          AGPS_BUDGET = math.min(10, AGPS_BUDGET + (AGPS_T - AGPS_AT)) AGPS_AT = AGPS_T
+          if AGPS_BUDGET < 1 then AGPS_REFUSED = AGPS_REFUSED + 1 return 3 end
+          AGPS_BUDGET = AGPS_BUDGET - 1
+        end
+        table.insert(AGPS_GOT, (target or "") .. "|" .. msg)
+        return 0
+      end
+    """)
+    real_send = I.io.send
+    try:
+        I.io.send = lua.eval("AGPS_GAME")
+        stops = lua.eval("{}")
+        for k in range(8):
+            stops[k + 1] = lua.eval(f"{{ x = 2250 + {k} * 10, y = 250, cont = 0, name = 'S{k + 1}' }}")
+        msgs = I.ShareMessages(stops, "abc123")
+        I.Post("abc123", msgs)
+        for who in ("Ann", "Bob", "Cat"):
+            I.OnAddonMessage("AzerothGPS", "?\tabc123", "WHISPER", who)
+        got = list(lua.eval("AGPS_GOT").values())
+        assert 0 < len(got) <= 10 and lua.eval("AGPS_REFUSED") == 0  # (a burst within the game's)
+        for _ in range(40):  # (a second at a time: the queue goes on as the throttle allows)
+            lua.execute("AGPS_T = AGPS_T + 1")
+            I.Pump()
+        got = list(lua.eval("AGPS_GOT").values())
+        assert len(got) == 24  # (all of them, none dropped)
+        for who in ("Ann", "Bob", "Cat"):
+            mine = [g.split("|", 1)[1] for g in got if g.startswith(who + "|")]
+            assert mine == [msgs[i] for i in range(1, 9)], who  # (in order)
+        # a refusal the queue didn't foresee (the server's own throttle, 8): tried again, not lost
+        lua.execute("AGPS_GOT = {} AGPS_BUDGET = 0 AGPS_AT = AGPS_T")
+        I.Queue("AzerothGPS", "one", "RAID", None)
+        assert len(lua.eval("AGPS_GOT")) == 0
+        lua.execute("AGPS_T = AGPS_T + 2")
+        I.Pump()
+        assert list(lua.eval("AGPS_GOT").values()) == ["|one"]
+        # outside instances whispers aren't throttled: all at once
+        lua.execute("AGPS_INSIDE = false AGPS_GOT = {}")
+        for who in ("Dan", "Eve", "Fay"):
+            I.OnAddonMessage("AzerothGPS", "?\tabc123", "WHISPER", who)
+        assert len(lua.eval("AGPS_GOT")) == 24
+    finally:
+        I.io.send = real_send
+        lua.execute("GetTime, IsInInstance, UnitName, C_Timer = AGPS_OLD_Q[1], AGPS_OLD_Q[2], AGPS_OLD_Q[3], AGPS_OLD_Q[4]")
+
+
 def test_route_across_pieces_of_the_road_network_uses_roads(nav_env):
     # Durotar's roads and the ones near this Kalimdor spot aren't connected in the data;
     # the route still follows roads, joining the pieces across the gaps
