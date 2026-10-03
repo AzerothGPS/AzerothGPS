@@ -129,3 +129,20 @@ def test_the_and_or_check_catches_the_detour_bug(tmp_path):
                  "local p, q = x or 1, y or 2\n"
                  "  n, n == 1 and '' or 's'))\n", encoding="utf-8")
     assert [n for n, _ in truncated_and_or(f)] == [1]
+
+
+# Characters the game's fonts (Friz Quadrata, Arial Narrow) don't have: shown as a box in game (seen 2026-10-03:
+# "Options → Routing" in the "Don't use this zeppelin" question). Use "->", "-", "'", '"' instead.
+MISSING_GLYPHS = "→←↑↓⇒•…–—“”‘’✓✗"
+
+
+def test_no_text_shown_in_game_has_characters_the_fonts_lack():
+    found = []
+    for path in sorted(ADDON.rglob("*.lua")):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("--", 1)[0] if '"' not in line.split("--", 1)[0] else line
+            for m in re.finditer(r'"(\\.|[^"\\])*"', code):
+                bad = [c for c in m.group(0) if c in MISSING_GLYPHS]
+                if bad:
+                    found.append(f"{path.name}:{n} {''.join(bad)}")
+    assert not found, found

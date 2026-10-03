@@ -2044,7 +2044,7 @@ function G.AskRideOff(dock)
   local on = ns.Nav.RideAllowed(t)
   local what = string.format("the %s between %s and %s", t[8] == "tram" and "Deeprun Tram" or t[8],
     (t[9] or "?"):match("^[^,]+"), (t[10] or "?"):match("^[^,]+"))
-  local text = on and string.format("Don't use %s in routes?\n\nOptions → Routing turns it back on.", what)
+  local text = on and string.format("Don't use %s in routes?\n\nOptions -> Routing turns it back on.", what)
     or string.format("Use %s in routes again?", what)
   ns.Ask("AzerothGPSRideOff", text, on and "Don't Use" or "Use It", "Cancel", function()
     ns.Nav.SetRideAllowed(t, not on)
