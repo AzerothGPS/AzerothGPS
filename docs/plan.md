@@ -90,7 +90,28 @@ counts as arriving at that stop.
    Blackfathom Deeps, the Stockade).
 3. Addon side, then the rest of the dungeons and the raids.
 
-## 1.1.1: Less memory
+## 1.1.2: Zeppelin and boat timers that stay right
+
+Reported 2026-10-03: the dock timers keep needing to be put right. The ride log (`ns.db.rideLog`) shows why:
+
+- 10-02 16:02:20 departed Grom'gol | Brill **side 2 (Brill)**, then 16:04:56 "departed" **side 1 (Grom'gol)**, 80 s
+  later: that was the ride itself arriving at Grom'gol, not a departure.
+- 10-03 09:57:58 departed Durotar | Brill **side 2 (Brill)**, then 10:00:42 "departed" **side 1 (Durotar)**, 91 s later:
+  the same.
+
+So `Taxi.TransportTick` takes the approach to the far dock (into `DOCK_YD` while carried, then on past `RIDE_YD`
+as it docks) for that dock's departure, and every ride resets the timetable to its arrival: off by the wait there.
+And the rides took 80-91 s against the data's `ride1`/`ride2` of 99-106 s.
+
+1. A departure only from the dock the player boarded at (waited there, not carried in), never from the dock the
+   ride is heading for (`Taxi.CurrentRide`'s other side); an arrival there instead sets the timetable by arrival
+   (arrival time + wait = its next departure).
+2. Learn each transport's real ride time from the rides seen (departure to arrival), as the cycle is sharpened, and use
+   it over the data's.
+3. Tests from the log above: a ride Brill to Grom'gol taken through `TransportTick` (boarding, departure, approach,
+   docking) records one departure from Brill and one arrival at Grom'gol, and the timer after it is right.
+
+## After 1.1.2: Less memory (planned for 1.1.1, moved out)
 
 Seen 2026-10-02 (the game menu's AddOn Memory): AzerothGPS at 193 MB, most of the addon memory in use. Mostly
 its data (roads, terrain, caves, capitals, cities, instances, buildings, terrain blocks), loaded whole at
