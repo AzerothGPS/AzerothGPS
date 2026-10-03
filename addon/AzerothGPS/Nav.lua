@@ -518,6 +518,25 @@ N.Faction = Faction
 -- faction can take: not with either end among the other faction's guards (Data/Hostile.lua:
 -- within DOCK_GUARDS_YD of them; the ship waits off the quay). Worked out once per faction.
 N.DOCK_GUARDS_YD = 100
+-- Zeppelins, boats and the tram turned off (asked 2026-10-03: right-click a dock, or Options → Routing): never in a
+-- route until turned on again, unlike a ride left out of one route (N.SkipRide). Account-wide (gps.ridesOff), by the
+-- ride's kind and its two ends, so regenerated data keeps them.
+N.RIDE_KINDS = { zeppelin = true, boat = true, tram = true }
+function N.RideId(t)
+  return string.format("%s:%s|%s", tostring(t[8]), tostring(t[9]), tostring(t[10]))
+end
+function N.RideAllowed(t)
+  local off = ns.settings and ns.settings.gps and ns.settings.gps.ridesOff
+  return not (off and N.RIDE_KINDS[t[8]] and off[N.RideId(t)])
+end
+function N.SetRideAllowed(t, on)
+  local st = ns.settings and ns.settings.gps
+  if not st then return end
+  st.ridesOff = st.ridesOff or {}
+  st.ridesOff[N.RideId(t)] = (not on) or nil
+  N.OptionsChanged()
+end
+
 local usable = {}
 function N.TransportUsable(t)
   local side = Faction()
@@ -694,7 +713,7 @@ function N.Plan(cont, px, py, speed, d, teleports, direct)
     end
   end
   for i, t in ipairs(ns.Transports or {}) do
-    if (t[8] ~= "portal" or inside[t[4]]) and N.TransportUsable(t) then
+    if (t[8] ~= "portal" or inside[t[4]]) and N.TransportUsable(t) and N.RideAllowed(t) then
       nodes[#nodes + 1] = { t[1], t[2], t[3], t = i, side = 1 }
       nodes[#nodes + 1] = { t[4], t[5], t[6], t = i, side = 2 }
     end

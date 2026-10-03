@@ -6,6 +6,10 @@ Each version's section is its release notes (GitHub and CurseForge).
 
 For WoW Forever client 1.60.1 (interface 16001).
 
+### New
+
+- **Turn off a zeppelin, boat or the tram for good.** Right-click its dock on the map, **Don't Use**, and routes never take it until you turn it back on (right-click again, **Use It**). It stays on the map, faded. Options → Routing has a **Zeppelins, boats and the tram** section listing each one your faction can take, by kind, all on by default. The Deeprun Tram's two ends have dock icons now too.
+
 ### Fixed
 
 - **Route links in a raid or dungeon:** when several people clicked your route link at once inside an instance, the game's limit on addon messages could cut the end off their routes. AzerothGPS now paces what it sends to stay under that limit and resends anything the game refuses, so everyone gets the whole route.

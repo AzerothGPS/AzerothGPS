@@ -683,6 +683,28 @@ local function BuildWindow()
     function() return GPS().cityKeepOrder ~= false end, function(v) GPS().cityKeepOrder = v end), 26, 20)
   check("X on the route panel cancels the route", "The X at the top right of the map's route panel (the steps) cancels the whole route. Off: it only closes the panel until the route changes, and the route goes on.",
     function() return GPS().navCloseClears end, function(v) GPS().navCloseClears = v end)
+  -- (asked 2026-10-03) each zeppelin, boat and the tram, on by default: unticked, never in a route (also: right-click
+  -- its dock on the map). Only your faction's (Nav.TransportUsable).
+  header("Zeppelins, boats and the tram", "Unticked ones are never used in routes. Right-clicking a dock on the map does the same.")
+  local function Town(name) return ((name or "?"):match("^[^,]+")) end
+  for _, kind in ipairs({ { "zeppelin", "Zeppelins" }, { "boat", "Boats" }, { "tram", "The Deeprun Tram" } }) do
+    local rows = {}
+    for _, t in ipairs(ns.Transports or {}) do
+      if t[8] == kind[1] and ns.Nav.TransportUsable(t) then rows[#rows + 1] = t end
+    end
+    if #rows > 0 then
+      local sub = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+      sub:SetText(kind[2])
+      place(sub, 20, 4)
+      table.sort(rows, function(a, b) return Town(a[9]) .. Town(a[10]) < Town(b[9]) .. Town(b[10]) end)
+      for _, t in ipairs(rows) do
+        local label = Town(t[9]) .. " - " .. Town(t[10])
+        place(Checkbox(page, label, string.format("Routes may take the %s between %s and %s. Unticked: never.",
+          t[8] == "tram" and "Deeprun Tram" or t[8], t[9] or "?", t[10] or "?"),
+          function() return ns.Nav.RideAllowed(t) end, function(v) ns.Nav.SetRideAllowed(t, v) end), 26, 20)
+      end
+    end
+  end
   header("Waypoints and sharing")
   check("Accept TomTom /way commands", "/way lines typed or pasted in chat add stops to the route (several pasted lines at once become several stops). With TomTom installed, its waypoint is set too.",
     function() return GPS().acceptWay ~= false end, function(v) GPS().acceptWay = v end)

@@ -3774,6 +3774,30 @@ def test_brill_to_gromgol_takes_the_direct_zeppelin(nav_env):
     assert rides == [("Grom'gol Base Camp, Stranglethorn Vale", "Brill, Tirisfal Glades")], rides
 
 
+def test_a_zeppelin_turned_off_is_never_in_a_route(nav_env):
+    # (asked 2026-10-03) a zeppelin, boat or the tram turned off (right-click its dock, or Options → Routing) isn't
+    # used in any route until it's turned on again; kept by its kind and ends (account-wide settings)
+    lua, ns = nav_env
+    ns.settings = lua.eval("{ gps = {} }")
+    N = ns.Nav
+    gromgol = next(ns.Transports[k] for k in range(1, len(ns.Transports) + 1)
+                   if ns.Transports[k][9] == "Grom'gol Base Camp, Stranglethorn Vale" and ns.Transports[k][10] == "Brill, Tirisfal Glades")
+
+    def rides():
+        legs, _ = N.Plan(0, 2254.0, 293.0, 7.0, lua.eval("{ x = -12420.0, y = 200.0, cont = 0 }"))
+        return [(legs[i].ride[9], legs[i].ride[10]) for i in range(1, len(legs) + 1) if legs[i].ride]
+
+    assert rides() == [("Grom'gol Base Camp, Stranglethorn Vale", "Brill, Tirisfal Glades")]
+    assert N.RideAllowed(gromgol)
+    N.SetRideAllowed(gromgol, False)
+    assert not N.RideAllowed(gromgol)
+    assert ns.settings.gps.ridesOff["zeppelin:Grom'gol Base Camp, Stranglethorn Vale|Brill, Tirisfal Glades"]
+    assert ("Grom'gol Base Camp, Stranglethorn Vale", "Brill, Tirisfal Glades") not in rides()  # (by way of Durotar)
+    N.SetRideAllowed(gromgol, True)
+    assert N.RideAllowed(gromgol) and len(ns.settings.gps.ridesOff) == 0
+    assert rides() == [("Grom'gol Base Camp, Stranglethorn Vale", "Brill, Tirisfal Glades")]
+
+
 def test_a_flight_out_through_undercity_is_flown_not_rerouted(nav_env):
     # (reported 2026-10-02, a video: the bat from Undercity flies through the city and its sewers, where the game
     # puts the player on Undercity's map, and the route kept going back to the flight master, "151 yd... 328 yd to

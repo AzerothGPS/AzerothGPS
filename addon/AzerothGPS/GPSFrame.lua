@@ -1923,6 +1923,9 @@ local function PoiButton(i)
     end
     if self.note then GameTooltip:AddLine(self.note, 0.7, 0.7, 0.7) end
     GameTooltip:AddLine("Double-click: add as a stop", 0.4, 0.8, 1)
+    if self.dock and ns.Nav.RideAllowed(ns.Transports[self.dock[1]]) then
+      GameTooltip:AddLine("Right-click: don't use it in routes", 0.4, 0.8, 1)
+    end
     if self.dock and G.DockShareText(self.dock[1], self.dock[2]) then
       GameTooltip:AddLine("Shift-click: paste its times in chat", 0.4, 0.8, 1)
     end
@@ -1960,8 +1963,9 @@ local function PoiButton(i)
         cont = self.level or view.cont }) then
       return
     end
-    if button == "RightButton" then -- (a pin: "Remove?"; a boss: defeated or not, by hand)
+    if button == "RightButton" then -- (a pin: "Remove?"; a boss: defeated or not, by hand; a dock: in routes or not)
       if self.pin then G.AskRemove(self) end
+      if self.dock then G.AskRideOff(self.dock) end
       if self.bossKey and self.level then
         ns.Nav.SetBossDead(self.level, self.bossKey, not self.dead)
         G.Redraw()
@@ -1987,7 +1991,9 @@ local CAVE_ICON = "Interface\\Icons\\INV_Pick_02"
 local SUGGESTED_COLOR = { 1, 0.78, 0.15 } -- a dungeon's usual way through, on its map
 local SUGGESTED_NEXT = { 1, 0.95, 0.45 } -- ... its stretch to the next boss still up
 local DOCK_ICON = { zeppelin = "Interface\\AddOns\\AzerothGPS\\Media\\Zeppelin",
-  boat = "Interface\\AddOns\\AzerothGPS\\Media\\Ship" } -- (our own art, Media/)
+  boat = "Interface\\AddOns\\AzerothGPS\\Media\\Ship", -- (our own art, Media/)
+  tram = "Interface\\Icons\\INV_Misc_Gear_01" } -- (the Deeprun Tram's ends: no timetable)
+local DOCK_NAME = { zeppelin = "Zeppelin to ", boat = "Boat to ", tram = "Deeprun Tram to " }
 
 -- A zeppelin's or boat's dock: its timer ("in 2:10" to its next arrival, "leaves 0:45" while
 -- it's docked) and the tooltip's lines, from Taxi's learned timetable.
@@ -1997,7 +2003,7 @@ local function Clock(sec)
 end
 function G.DockTimes(i, side)
   local T, t = ns.Taxi, ns.Transports and ns.Transports[i]
-  if not (T and T.TransportTimes and t) then return nil end
+  if not (T and T.TransportTimes and t and t.cycle) then return nil end -- (the tram: no timetable)
   local now = GetServerTime and GetServerTime() or (time and time()) or 0
   local arr, dep, age = T.TransportTimes(i, side, now)
   if not arr then return nil, { "Timetable: ride it once and the addon learns it" } end
@@ -2030,9 +2036,27 @@ function G.DockShareText(i, side)
   return string.format("%s from %s to %s: %s", kind, here, there, when)
 end
 
+-- Right-click on a dock (asked 2026-10-03): don't use that zeppelin, boat or tram in routes from now on, or use it
+-- again (Nav.SetRideAllowed; Options → Routing lists them all).
+function G.AskRideOff(dock)
+  local t = dock and ns.Transports and ns.Transports[dock[1]]
+  if not (t and ns.Nav.RIDE_KINDS[t[8]]) then return end
+  local on = ns.Nav.RideAllowed(t)
+  local what = string.format("the %s between %s and %s", t[8] == "tram" and "Deeprun Tram" or t[8],
+    (t[9] or "?"):match("^[^,]+"), (t[10] or "?"):match("^[^,]+"))
+  local text = on and string.format("Don't use %s in routes?\n\nOptions → Routing turns it back on.", what)
+    or string.format("Use %s in routes again?", what)
+  ns.Ask("AzerothGPSRideOff", text, on and "Don't Use" or "Use It", "Cancel", function()
+    ns.Nav.SetRideAllowed(t, not on)
+    G.Redraw()
+  end, nil, { timeout = 30 })
+end
+
 -- Shift-click on a dock (its map icon, or the route's ride icon there): its times pasted in chat.
 function G.ShareDock(dock)
   local text = dock and G.DockShareText(dock[1], dock[2])
+  local t = dock and ns.Transports and ns.Transports[dock[1]]
+  if not text and t and not t.cycle then return false end -- (the tram: no timetable to share)
   if not text then
     ns.Print("No timetable for this one yet: ride it once and AzerothGPS learns it.")
     return false
@@ -2108,7 +2132,9 @@ local function DrawPois(pois, zoom)
         b.stopTex, b.questID = DOCK_ICON[p.kind], nil
         b.dock = p.dock
         local short, lines, docked = G.DockTimes(p.dock[1], p.dock[2])
-        b.note = lines and table.concat(lines, "\n") or nil
+        lines = lines or {}
+        if p.rideOff then table.insert(lines, 1, "|cffff6060Not used in routes|r (right-click: use it again)") end
+        b.note = #lines > 0 and table.concat(lines, "\n") or nil
         if short then
           if not b.timer then
             b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -3054,8 +3080,9 @@ function G.Update()
               dx, dy = Geo.Rotate(dx * s, dy * s, rot)
               if math.abs(dx) <= half and math.abs(dy) <= half then
                 local to = side == 1 and t[10] or t[9]
-                pois[#pois + 1] = { 10, dx, dy, (t[8] == "zeppelin" and "Zeppelin to " or "Boat to ") .. (to or "?"), x, y,
-                  dock = { i, side }, kind = t[8], level = c }
+                local off = not ns.Nav.RideAllowed(t) -- (turned off: still shown, faded; right-click turns it back on)
+                pois[#pois + 1] = { 10, dx, dy, (DOCK_NAME[t[8]] or "") .. (to or "?"), x, y,
+                  dock = { i, side }, kind = t[8], level = c, dim = off or nil, rideOff = off }
               end
             end
           end

@@ -1188,6 +1188,68 @@ def test_shift_click_on_a_dock_pastes_its_times_in_chat(game):
           AGPS_T = AGPS_T + 1""")
 
 
+def test_right_click_a_dock_to_keep_it_out_of_routes(game):
+    # (asked 2026-10-03) right-click a zeppelin's dock: "Don't use ... in routes?"; yes: never in a route, the dock
+    # still shown, faded, saying so; right-click again to use it again. Options → Routing lists every zeppelin, boat
+    # and the tram by kind, all on, a checkbox each
+    import math
+    lua, ns = game
+    G, st = ns.GPS, ns.settings.gps
+    brill = (2254.0, 293.0)
+    docks = [(math.hypot(t[2 + 3 * k] - brill[0], t[3 + 3 * k] - brill[1]), t[2 + 3 * k], t[3 + 3 * k], i)
+             for i, t in ns.Transports.items() for k in (0, 1) if t[8] == "zeppelin" and t[1 + 3 * k] == 0]
+    _, x, y, i = min(docks)
+    t = ns.Transports[i]
+    zoom = st.zoom
+
+    def button():
+        b = [w for w in lua.eval("AGPS_WIDGETS").values() if w.dock and w._shown and w.wx == x and w.wy == y]
+        return b[0] if b else None
+
+    try:
+        st.zoom = 900.0
+        ns.Nav.Clear()
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        b = button()
+        assert b is not None and not (b.note and "Not used in routes" in str(b.note))
+        b._scripts.OnClick(b, "RightButton")
+        ask = lua.globals().AzerothGPSRideOff
+        assert ask._shown and "Don't use the zeppelin between" in str(ask.text._text)
+        assert (ask.yes._text, ask.no._text) == ("Don't Use", "Cancel")
+        ask.yes._scripts.OnClick(ask.yes)
+        assert not ns.Nav.RideAllowed(t)
+        lua.execute("AGPS_T = AGPS_T + 1")
+        G.Update()
+        b = button()
+        assert b is not None and "Not used in routes" in str(b.note)  # (still shown, saying so)
+        b._scripts.OnClick(b, "RightButton")
+        assert "Use the zeppelin between" in str(ask.text._text) and ask.yes._text == "Use It"
+        ask.yes._scripts.OnClick(ask.yes)
+        assert ns.Nav.RideAllowed(t)
+        # Options → Routing: the sections and a checkbox per ride, ticked; unticking turns the ride off
+        ns.Options.Show()
+        texts = _texts(lua)
+        for label in ("Zeppelins, boats and the tram", "Zeppelins", "Boats"):
+            assert label in texts, label
+        assert "The Deeprun Tram" not in texts  # (a Horde character: only its faction's rides are listed)
+        town = lambda n: str(n).split(",")[0]  # noqa: E731
+        label = f"{town(t[9])} - {town(t[10])}"
+        fs = [w for w in lua.eval("AGPS_WIDGETS").values() if w._kind == "FontString" and str(w._text) == label]
+        assert fs, label
+        cb = fs[0]._parent
+        cb._checked = False
+        cb._scripts.OnClick(cb)
+        assert not ns.Nav.RideAllowed(t)
+        cb._checked = True
+        cb._scripts.OnClick(cb)
+        assert ns.Nav.RideAllowed(t)
+    finally:
+        st.zoom = zoom
+        st.ridesOff = None
+        lua.execute("AGPS_T = AGPS_T + 1")
+
+
 def test_the_portrait_logo_is_shown_one_to_one_from_its_sizes(game):
     # (asked: the logo in the round portrait looked soft, one 128-pixel picture shrunk by the graphics card)
     # the pre-scaled size nearest the pixels the 62-unit portrait covers, shown 1:1
