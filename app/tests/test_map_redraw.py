@@ -1293,6 +1293,29 @@ def test_pins_are_found_by_the_search_with_where_they_are(game):
         G.Follow()
 
 
+def test_a_pin_made_where_you_stand_keeps_what_the_game_says_of_there(game):
+    # (asked 2026-10-03) a pin made where the player stands keeps whether they were indoors, the subzone and their
+    # height when the game gives one (WoW Forever: never, its height is 0); one made elsewhere on the map doesn't
+    lua, ns = game
+    P = ns.Pins
+    own = P.Own()
+    before = len(own)
+    lua.execute("AGPS_OLD_HERE = { IsIndoors, GetMinimapZoneText } IsIndoors = function() return true end "
+                """GetMinimapZoneText = function() return "Gallows' End Tavern" end""")
+    try:
+        here = P.Add(lua.eval("{ level = 0, x = 2260.0, y = 290.0, name = 'Upstairs' }"))  # (Brill, by the player)
+        assert here.indoors is True and str(here.subzone) == "Gallows' End Tavern" and here.playerZ is None
+        far = P.Add(lua.eval("{ level = 0, x = 1600.0, y = 240.0, name = 'Far' }"))
+        assert far.indoors is None and far.subzone is None
+        lua.execute("AGPS_POS[4] = 41.5")  # (a client that gives the height)
+        high = P.Add(lua.eval("{ level = 0, x = 2254.0, y = 293.0, name = 'High' }"))
+        assert high.playerZ == 41.5
+    finally:
+        while len(own) > before:
+            own[len(own)] = None
+        lua.execute("IsIndoors, GetMinimapZoneText = AGPS_OLD_HERE[1], AGPS_OLD_HERE[2] AGPS_POS[4] = nil")
+
+
 def test_known_city_places_are_found_by_several_words(game):
     # (asked 2026-10-03) "Inn Ir": Ironforge's inn ("Inn" in white, "Ironforge" in grey), once a guard there was talked
     # to; only the player's faction's capitals; picked, a stop named "Ironforge Inn"

@@ -78,6 +78,23 @@ function P.PlaceName(pin)
   return name
 end
 
+-- A pin made where the player stands (within HERE_YD): what the game tells of where they are, kept on the pin (asked
+-- 2026-10-03: track the floor as well as we can). Whether they were indoors, the subzone ("The Great Forge"), and
+-- their height when the game gives it (WoW Forever doesn't: UnitPosition's height is always 0, so the floor itself
+-- is the Create Pin dialog's, `z`/`down`). Not in a dungeon: the game hides the position there.
+P.HERE_YD = 30
+function P.NoteHere(p)
+  local Geo = ns.Geo
+  local px, py, pc = Geo.PlayerWorld()
+  if not (px and p.level and p.x) or Geo.Base(pc) ~= Geo.Base(p.level) then return end
+  if (px - p.x) ^ 2 + (py - p.y) ^ 2 > P.HERE_YD ^ 2 then return end
+  p.indoors = IsIndoors and IsIndoors() and true or nil
+  local sub = GetMinimapZoneText and GetMinimapZoneText()
+  p.subzone = sub and sub ~= "" and sub or nil
+  local z = ns.Nav and ns.Nav.PlayerZ and ns.Nav.PlayerZ()
+  p.playerZ = z or nil
+end
+
 -- A new pin { level, x, y, z, down, icon, name }: kept, and returned. Its time is its id (one no other
 -- pin has, the shared ones' included).
 function P.Add(pin)
@@ -93,6 +110,7 @@ function P.Add(pin)
   local own = P.Own()
   own[#own + 1] = p
   P.PlaceName(p) -- (where it was made: the search shows it)
+  P.NoteHere(p) -- (and, made where the player stands: indoors, the subzone, their height if given)
   P.Changed()
   return p
 end
