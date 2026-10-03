@@ -3329,7 +3329,7 @@ local function SavePosition()
   S().point = { p, rel and rel:GetName() or "UIParent", rp, x, y }
 end
 
--- The map's size by its bottom-right corner (asked 2026-10-02): with "Lock map size" off (`lockSize`, on by
+-- The map's size by its bottom-right corner (asked 2026-10-02): with "Resize from the corner" on (`lockSize` off, the
 -- default), a grip there; a left-drag sizes the window (square: the map is), its top-left staying put, within
 -- the size slider's range (G.SIZE_MIN_MAX, and room for the quick buttons, G.ClampSize).
 G.SIZE_MIN_MAX = { 120, 800 }
@@ -3378,7 +3378,7 @@ function G.MakeSizeGrip()
   grip:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText("Drag to resize the map", 1, 1, 1)
-    GameTooltip:AddLine("Turn on \"Lock map size\" (Options, General) to hide this.", 0.8, 0.8, 0.8, true)
+    GameTooltip:AddLine("Turn off \"Resize from the corner\" (Options, General), or lock the map's position, to hide this.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
   end)
   grip:SetScript("OnLeave", GameTooltip_Hide)
@@ -5462,7 +5462,7 @@ function G.Init()
   end)
   tab:SetScript("OnLeave", GameTooltip_Hide)
   G.moveTab = tab
-  G.MakeSizeGrip() -- (the corner grip: "Lock map size" off)
+  G.MakeSizeGrip() -- (the corner grip: G.Resizable)
 
   -- While unlocked: the game's own window frame (metal border, title bar, portrait, close
   -- button) around the map, from the client's PortraitFrameTemplate. A child of the map, so
